@@ -1,0 +1,21 @@
+<svg width="167" height="160" viewBox="0 0 167 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group 5978">
+<path id="Rectangle 3599" d="M0 112L83.5 64L167 112L83.5 160L0 112Z" fill="url(#paint0_linear_228_2804)"/>
+<path id="Rectangle 3598" d="M0 80L83.5 32L167 80L83.5 128L0 80Z" fill="url(#paint1_linear_228_2804)"/>
+<path id="Rectangle 3597" d="M0 48L83.5 0L167 48L83.5 96L0 48Z" fill="url(#paint2_linear_228_2804)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_228_2804" x1="83.5" y1="64" x2="83.5" y2="160" gradientUnits="userSpaceOnUse">
+<stop stop-color="#282A2F"/>
+<stop offset="1" stop-color="#2C2E35"/>
+</linearGradient>
+<linearGradient id="paint1_linear_228_2804" x1="83.5" y1="32" x2="83.5" y2="128" gradientUnits="userSpaceOnUse">
+<stop stop-color="#303238"/>
+<stop offset="1" stop-color="#43464D"/>
+</linearGradient>
+<linearGradient id="paint2_linear_228_2804" x1="83.5" y1="-23.3979" x2="83.5" y2="96" gradientUnits="userSpaceOnUse">
+<stop stop-color="#464646"/>
+<stop offset="1" stop-color="#D9D9D9"/>
+</linearGradient>
+</defs>
+</svg>

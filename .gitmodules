@@ -1,0 +1,4 @@
+[submodule "obs-studio-clone"]
+	path = obs-studio-clone
+	url = https://github.com/obsproject/obs-studio
+	branch = release/30.0

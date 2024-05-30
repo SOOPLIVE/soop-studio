@@ -1,0 +1,51 @@
+<RCC>
+    <qresource prefix="/image">
+        <file>resource/MainView/topmenu.png</file>
+        <file>resource/MainView/close.png</file>
+        <file>resource/MainView/lockblock.png</file>
+        <file>resource/MainView/maximize.png</file>
+        <file>resource/MainView/minimize.png</file>
+        <file>resource/MainView/ellipse.png</file>
+        <file>resource/MainView/bt_three_dot.svg</file>
+        <file>resource/MainView/bt_add.svg</file>
+        <file>resource/Platform/active/afreecatv.png</file>
+        <file>resource/Platform/active/soop.png</file>
+        <file>resource/Platform/active/twitch.png</file>
+        <file>resource/Platform/default/afreecatv.png</file>
+        <file>resource/Platform/default/soop.png</file>
+        <file>resource/Platform/default/twitch.png</file>
+        <file>resource/Platform/disable/afreecatv.png</file>
+        <file>resource/Platform/disable/soop.png</file>
+        <file>resource/Platform/disable/twitch.png</file>
+        <file>resource/Platform/mousehover/afreecatv.png</file>
+        <file>resource/Platform/mousehover/soop.png</file>
+        <file>resource/Platform/mousehover/twitch.png</file>
+        <file>resource/MainView/red-ellipse.png</file>
+        <file>resource/MainView/verticalthreedot.svg</file>
+        <file>resource/Settings/Component/checkedcheckbox.svg</file>
+        <file>resource/Settings/Component/comboboxdropdown.svg</file>
+        <file>resource/Settings/Component/uncheckedcheckbox.svg</file>
+        <file>resource/Settings/Component/spinboxdown.svg</file>
+        <file>resource/Settings/Component/spinboxup.svg</file>
+        <file>resource/Settings/Component/spinboxdownclicked.svg</file>
+        <file>resource/Settings/Component/spinboxupclicked.svg</file>
+        <file>resource/Settings/Component/FoldTriangle.svg</file>
+        <file>resource/Settings/Component/SpreadTriangle.svg</file>
+        <file>resource/Settings/Component/greencircle.svg</file>
+        <file>resource/MainView/whiteellipse.svg</file>
+        <file>resource/Settings/Component/buttonundo.svg</file>
+        <file>resource/SourceContext/bt_play.svg</file>
+        <file>resource/SourceContext/bt_pause.svg</file>
+        <file>resource/SourceContext/bt_restart.svg</file>
+        <file>resource/SourceContext/bt_stop.svg</file>
+        <file>resource/SourceContext/bt_prev.svg</file>
+        <file>resource/SourceContext/bt_next.svg</file>
+        <file>resource/min.svg</file>
+        <file>resource/max.svg</file>
+        <file>resource/close.svg</file>
+        <file>resource/maxed.svg</file>
+        <file>resource/MainView/raise-popup.svg</file>
+        <file>resource/DockTitle/bt_scene_control_dock.svg</file>
+    </qresource>
+    <qresource prefix="/qss"/>
+</RCC>
