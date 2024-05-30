@@ -1,0 +1,26 @@
+IDI_ICON1 ICON DISCARDABLE "../assets/soopicon.ico"
+
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "Soop"
+      VALUE "FileDescription", "Soop Studio"
+      VALUE "FileVersion", "${UI_VERSION}"
+      VALUE "InternalName", "soopstudio"
+      VALUE "OriginalFilename", "soopstudio"
+      VALUE "ProductName", "Soop Studio"
+      VALUE "ProductVersion", "${UI_VERSION}"
+      VALUE "Comments", "Free and open source software for video recording and live streaming"
+      VALUE "LegalCopyright", ""
+    END
+  END
+
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 0x04B0
+  END
+END

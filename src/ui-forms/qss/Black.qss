@@ -1,0 +1,4247 @@
+
+/* Common RoundedDialog Style */
+AFQRoundedDialogBase {
+	background-color: #24272D;
+	border: 1px solid #111;
+    border-radius: 10px;
+}
+
+AFQPropertiesView {
+	background-color: #24272D;
+}
+
+/* Common MessageBox */
+QMessageBox {
+	background: #24272D;
+}
+
+/* Common QToolTip Style*/
+QToolTip {
+	padding:2px;
+    background-color: rgb(36,39,45);
+    color: rgba(255, 255, 255, 90%);
+	border: 1px solid #3a3d42;
+}
+
+/* Common QMenu Style */
+QMenu {
+    background-color: rgb(36,39,45);
+	border: 1px solid #111;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-bottom: 10px;
+    padding-top: 10px;
+}
+
+QMenu::separator {
+    background: #16171b;
+    height: 1px;
+}
+
+QMenu::item:disabled {
+    color: rgb(153,153,153);
+    background: transparent;
+}
+
+QMenu::right-arrow {
+    image: url(../assets/menu-spread.svg);
+}
+
+QMenu::item {
+    padding-left: 10px;
+    padding-right: 20px;
+    padding-bottom: 6px;
+    padding-top: 6px;
+	color: rgba(255, 255, 255, 80%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+	border-radius: 4px;
+}
+
+QMenu::item:selected {
+	background-color: rgba(255, 255, 255, 10%);
+}
+
+QMenu::item:hover,
+QMenu::item:selected:hover {
+	background-color: rgba(255, 255, 255, 10%);
+}
+
+QMenu::item:disabled{
+	color: #474a4f;
+}
+
+QMenu::indicator
+{
+	width: 14px;
+	height: 14px;
+    margin : 0px 0px 0px 4px;
+    padding : -4px -4px -4px -4px;
+}
+
+QMenu::indicator:non-exclusive:unchecked {
+    image: url("");
+}
+
+QMenu::indicator:non-exclusive:checked {
+    image: url(../assets/mainview/menu-checked.svg);
+}
+
+/* Common QLineEdit Style */
+QLineEdit {
+    border-radius: 4px;
+	selection-background-color: #008DA3;
+    background-color: rgba(255, 255, 255, 0.06);
+    color:rgba(255, 255, 255, 0.60);
+    font-size:15px;
+    font-style: normal;
+    font-weight: 400;
+    padding-left:12px;
+}
+
+QLineEdit::disabled {
+	background: rgba(255, 255, 255, 1.8%);
+	color: rgba(255, 255, 255, 18%);
+	padding-left:12px;
+}
+
+QLineEdit:hover,
+QLineEdit:focus{
+    border: 2px solid #00E0FF;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.06);
+    color:rgba(255, 255, 255, 0.60);
+    font-size:15px;
+    font-style: normal;
+    font-weight: 400;
+	padding-left:10px;
+}
+
+/* Common QScrollBar Style */
+QScrollBar:vertical {
+    border: 2px solid grey;
+    background-color:transparent;
+	border:0px solid transparent;
+    width: 6px;	
+}
+
+QScrollBar::handle:vertical {
+    background-color: rgba(255,255,255,30%);
+	border-radius:3px;
+}
+
+QScrollBar::handle:vertical:hover,
+QScrollBar::handle:vertical:pressed  {
+    background-color: rgba(255,255,255,50%);
+	border-radius:3px;
+}
+
+QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
+	background: none;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+	background: none;
+}
+
+QScrollBar::add-line:vertical {
+	border: none;
+	width: 0px;
+	subcontrol-position: right;
+	subcontrol-origin: margin;
+}
+
+QScrollBar::sub-line:vertical  {
+	border: none;
+	width: 0px;
+	subcontrol-position: left;
+	subcontrol-origin: margin;
+}
+
+
+QScrollBar:horizontal {
+    border: 2px solid grey;
+    background-color:transparent;
+	border:0px solid transparent;
+    height: 6px;	
+}
+
+QScrollBar::handle:horizontal {
+    background-color: rgba(255,255,255,30%);
+	border-radius:3px;
+}
+
+QScrollBar::handle:horizontal:hover,
+QScrollBar::handle:horizontal:pressed  {
+    background-color: rgba(255,255,255,50%);
+	border-radius:3px;
+}
+
+QScrollBar::up-arrow:horizontal, QScrollBar::down-arrow:horizontal {
+	background: none;
+}
+
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+	background: none;
+}
+
+QScrollBar::add-line:horizontal {
+	border: none;
+	width: 0px;
+	subcontrol-position: right;
+	subcontrol-origin: margin;
+}
+
+QScrollBar::sub-line:horizontal  {
+	border: none;
+	width: 0px;
+	subcontrol-position: left;
+	subcontrol-origin: margin;
+}
+
+
+/* Common QSlider  */
+QSlider::groove:horizontal {
+	background-color: #1D1F24;
+	height: 4px;
+	border: 1px;
+	border-radius: 1px;
+}
+
+QSlider::handle:horizontal {
+	background-color: #FFF;
+	height: 10px;
+	width: 10px;
+	image: url(../assets/common-component/common-slider/slider_handle.svg);
+	background: none;
+	margin: -8px 0px;
+}
+
+QSlider::handle:horizontal:pressed {
+	image: url(../assets/common-component/common-slider/slider_handle.svg);
+}
+
+QSlider::handle:horizontal:hover {
+	image: url(../assets/common-component/common-slider/slider_handle.svg);
+}
+
+QSlider::sub-page:horizontal { 
+	background-color: #00E0FF; 
+	border-radius: 2px;
+}
+
+
+/* Common QCheckBox Style */
+QCheckBox {
+	color: rgba(255, 255, 255, 60%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+QCheckBox::disabled {
+	color: rgba(255, 255, 255, 18%);
+}
+
+QCheckBox::indicator:unchecked:enabled {
+	image: url(":/image/resource/Settings/Component/uncheckedcheckbox.svg");
+}
+
+QCheckBox::indicator:unchecked:hover {
+	image: url(../assets/common-component/mousehover/uncheckedcheckbox.svg);
+}
+
+QCheckBox::indicator:unchecked:disabled {
+	image: url(../assets/common-component/disabled/uncheckedcheckbox.svg);
+}
+
+QCheckBox::indicator:checked:enabled {
+	image: url(":/image/resource/Settings/Component/checkedcheckbox.svg");
+}
+
+QCheckBox::indicator:checked:hover {
+	image: url(../assets/common-component/mousehover/checkedcheckbox.svg);
+}
+
+QCheckBox::indicator:checked:disabled {
+	image: url(../assets/common-component/disabled/checkedcheckbox.svg);
+}
+
+/* Common QDoubleSpinBox Style */
+QDoubleSpinBox {
+    padding-left:12px;
+    padding-right:30px;
+	border-radius: 4px;
+	selection-background-color: #008DA3;
+	background: rgba(0, 0, 0, 20%);
+	color: rgba(255, 255, 255, 60%);
+	font-size: 15px;
+	font-weight: 400;
+}
+
+QDoubleSpinBox::disabled {
+	color: rgba(255, 255, 255, 24%);
+}
+
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {
+    width: 16px;
+	height: 16px;
+    border-width: 1px;
+	right: 12px;
+}
+
+QDoubleSpinBox::down-button {
+	bottom: 4px;
+}
+
+QDoubleSpinBox::up-button {
+	top: 4px;
+}
+
+QDoubleSpinBox::up-button:hover,
+QDoubleSpinBox::down-button:hover {
+	background-color:rgba(255,255,255,20%);
+	border-radius:4px;
+}
+
+QDoubleSpinBox::up-button:pressed,
+QDoubleSpinBox::down-button:pressed {
+	background: rgba(255, 255, 255, 0%);
+}
+
+QDoubleSpinBox::up-arrow,
+QDoubleSpinBox::down-arrow {
+	width: 12px;
+}
+
+QDoubleSpinBox::up-arrow:enabled {
+    image: url(":/image/resource/Settings/Component/spinboxup.svg");
+}
+
+QDoubleSpinBox::up-arrow:disabled {
+	image: url(../assets/common-component/disabled/spinboxup.svg);
+}
+
+QDoubleSpinBox::down-arrow:enabled {
+    image: url(":/image/resource/Settings/Component/spinboxdown.svg");
+}
+
+QDoubleSpinBox::down-arrow:disabled {
+	image: url(../assets/common-component/disabled/spinboxdown.svg);
+}
+
+/* Common QSpinBox Style */
+QSpinBox {
+	padding-left: 12px;
+	padding-right:30px;
+	border-radius: 4px;
+	selection-background-color: #008DA3;
+	background: rgba(0, 0, 0, 20%);
+	color: rgba(255, 255, 255, 60%);
+	font-size: 15px;
+	font-weight: 400;
+}
+
+QSpinBox::disabled {
+	color: rgba(255, 255, 255, 24%);
+}
+
+QSpinBox::up-button, 
+QSpinBox::down-button {
+    width: 16px;
+	height: 16px;
+    border-width: 1px;
+	right: 12px;
+}
+
+QSpinBox::down-button {
+	bottom: 4px;
+}
+
+QSpinBox::up-button {
+	top: 4px;
+}
+
+QSpinBox::up-button:hover,
+QSpinBox::down-button:hover {
+	background-color:rgba(255,255,255,20%);
+	border-radius:4px;
+}
+
+QSpinBox::down-button:pressed,
+QSpinBox::up-button:pressed {
+	background: rgba(255, 255, 255, 0%);
+}
+
+QSpinBox::up-arrow,
+QSpinBox::down-arrow {
+	width: 12px;
+}
+
+QSpinBox::up-arrow:enabled {
+    image: url(":/image/resource/Settings/Component/spinboxup.svg");
+}
+
+QSpinBox::up-arrow:disabled {
+	image: url(../assets/common-component/disabled/spinboxup.svg);
+}
+
+QSpinBox::down-arrow:enabled {
+    image: url(":/image/resource/Settings/Component/spinboxdown.svg");
+}
+
+QSpinBox::down-arrow:disabled {
+	image: url(../assets/common-component/disabled/spinboxdown.svg);
+}
+
+/* Common QComboBox Style */
+QComboBox,
+QDateTimeEdit {
+	padding-left: 12px;
+	border-radius: 4px;
+	selection-background-color: #008DA3;
+	background: rgba(255, 255, 255, 4%);
+	color: rgba(255, 255, 255, 70%);
+	font: 400 15px;
+}
+
+QComboBox::hover,
+QDateTimeEdit::hover {
+	background-color: rgba(255, 255, 255, 11%);
+	color: rgba(255, 255, 255, 70%);
+}
+
+QComboBox::disabled,
+QDateTimeEdit::disabled {
+	background: rgba(255, 255, 255, 1.8%);
+	color: rgba(255, 255, 255, 18%);
+}
+
+QComboBox::on,
+QDateTimeEdit::on {
+	border:1px solid #191919;
+	background: rgba(255, 255, 255, 6%);
+	border-bottom-left-radius: 0px;
+	border-bottom-right-radius: 0px;
+	color: rgba(255, 255, 255, 40%);
+}
+
+/* ComboBox Drop-down Arrow */
+QComboBox::drop-down,
+QDateTimeEdit::drop-down {
+	width: 40px;
+	height: 40px;
+	background: transparent;
+}
+
+QComboBox::down-arrow,
+QDateTimeEdit::down-arrow {
+	width: 16px;
+	height: 16px;
+	padding: 12px;
+}
+
+QComboBox::down-arrow:enabled,
+QDateTimeEdit::down-arrow:enabled {
+	image: url(":/image/resource/Settings/Component/comboboxdropdown.svg");
+}
+
+QComboBox::down-arrow:disabled,
+QDateTimeEdit::down-arrow:disabled {
+	image: url(../assets/common-component/disabled/comboboxdropdown.svg);
+}
+
+
+QComboBox QAbstractItemView {
+    border:none;
+    border:1px solid #191919;
+    outline: 0px;
+    background: #24272D;
+}
+QComboBox QAbstractItemView::item {
+	padding-left: 12px;
+	height: 40px;
+	background: rgba(255, 255, 255, 6%);
+	color: rgba(255, 255, 255, 60%);
+}
+QComboBox QAbstractItemView::item:selected {
+	background: rgba(255, 255, 255, 12%);
+	color: #00E0FF;
+}
+
+/* Common QPushButton */
+QPushButton {
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 6%);
+    color:rgba(255, 255, 255, 70%);
+    font-size:15px;
+}
+
+QPushButton:hover {
+    background-color: rgba(255, 255, 255, 20%);
+}
+
+QPushButton:pressed {
+    background-color: #26292F;
+	color:rgba(255, 255, 255, 14%);
+}
+
+QPushButton:disabled {
+    background-color: #2B2E33;
+}
+
+QPushButton:checked {
+    background-color: rgba(255, 255, 255, 20%);
+}
+
+
+/* Popup Title Bar Button */
+QPushButton[buttonType="popupTitleBarButton"],
+QPushButton[buttonType="popupTitleBarButton"]:pressed {
+	background-color: rgba(255, 255, 255, 0%);
+}
+
+QPushButton[buttonType="popupTitleBarButton"]:hover {
+	background-color: rgba(255, 255, 255, 10%);
+}
+
+/* Three Dots Button */
+QPushButton[buttonType="threeDots"] {
+	image: url("../assets/mainview/default/three-dots.svg");
+	border-radius:4px;
+	background-color: transparent;
+}
+QPushButton[buttonType="threeDots"]:hover {
+	image: url("../assets/mainview/mousehover/three-dots.svg");
+}
+
+QPushButton[buttonType="hthreeDots"] {
+	image: url("../assets/mainview/default/horizontalthreedots.svg");
+	border-radius:4px;
+	background-color: transparent;
+}
+QPushButton[buttonType="hthreeDots"]:hover {
+	image: url("../assets/mainview/mousehover/horizontalthreedots.svg");
+}
+
+/* Close Button */
+QPushButton[buttonType="closeButton"] {
+	image: url("../assets/mainview/default/close.svg");
+	border-radius:4px;
+	background-color: transparent;
+}
+QPushButton[buttonType="closeButton"]:hover{
+	image: url("../assets/mainview/mousehover/close.svg");
+}
+
+/* Source List Button */
+QPushButton[buttonType="sourceListToolbar"],
+QPushButton[buttonType="sourceListToolbar"]:pressed {
+    background-color: rgba(255, 255, 255, 0%);
+}
+
+QPushButton[buttonType="sourceListToolbar"]:hover {
+	background-color: rgba(255, 255, 255, 10%);
+}
+
+/* Bottom Scene 3Dot Button */
+QPushButton#bottomSceneDotButton {
+	background: transparent;
+	border:1px solid #3a3d42;
+	border-radius:5px;
+}
+
+QPushButton#bottomSceneDotButton:hover {
+    background-color: rgba(255, 255, 255, 20%);
+}
+QPushButton#bottomSceneDotButton:pressed {
+    background-color: #26292F;
+}
+
+/* Filter Popup */
+QPushButton[buttonType="filterListToolbar"],
+QPushButton[buttonType="filterListToolbar"]:pressed {
+	background-color: #24272D;
+}
+
+QPushButton[buttonType="filterListToolbar"]:hover {
+	background-color: rgba(255, 255, 255, 10%);
+}
+
+* [themeID="addFilterIcon"] {
+    qproperty-icon: url(../assets/scene-source-block/source-control/bt_add_source.svg);
+}
+
+* [themeID="removeFilterIcon"] {
+    qproperty-icon: url(../assets/scene-source-block/source-control/bt_remove_source.svg);
+}
+
+* [themeID="upFilterArrowIcon"] {
+    qproperty-icon: url(../assets/scene-source-block/source-control/bt_move_up_source.svg);
+}
+
+* [themeID="downFilterArrowIcon"] {
+    qproperty-icon: url(../assets/scene-source-block/source-control/bt_move_down_source.svg);
+}
+
+VisibilityCheckBox::indicator:unchecked:enabled {
+	image: url("../assets/Popup/basicFilter/btn_filter_hide.svg");
+}
+
+VisibilityCheckBox::indicator:unchecked:disabled {
+	image: url("../assets/Popup/basicFilter/btn_filter_hide.svg");
+}
+
+VisibilityCheckBox::indicator:checked:enabled {
+	image: url("../assets/Popup/basicFilter/btn_filter_show.svg");
+}
+
+VisibilityCheckBox::indicator:checked:disabled {
+	image: url("../assets/Popup/basicFilter/btn_filter_show.svg");
+}
+
+/* Custom Icon QPushButton */
+* [themeID="addIconSmall"] {
+    qproperty-icon: url(../assets/source-props/editlist/bt_add.svg);
+}
+
+* [themeID="removeIconSmall"] {
+    qproperty-icon: url(../assets/source-props/editlist/bt_remove.svg);
+}
+
+* [themeID="configIconSmall"] {
+    qproperty-icon: url(../assets/source-props/editlist/bt_config.svg);
+}
+
+* [themeID="upArrowIconSmall"] {
+    qproperty-icon: url(../assets/source-props/editlist/bt_up_arrow.svg);
+}
+
+* [themeID="downArrowIconSmall"] {
+    qproperty-icon: url(../assets/source-props/editlist/bt_down_arrow.svg);
+}
+
+/* Common QRadioButton */
+QRadioButton {
+	color:rgba(255, 255, 255, 70%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+QRadioButton::indicator {
+	width:18px;
+	height:18px;
+}
+QRadioButton::indicator::checked {
+	image: url("../assets/common-component/radiobutton/bt-indicator-checked.svg");
+}
+QRadioButton::indicator::unchecked {
+	image: url("../assets/common-component/radiobutton/bt-indicator-unchecked.svg");
+}
+
+/* Common QDialogButtonBox */
+QDialogButtonBox QPushButton {
+	width : 128px;
+	height : 40px;
+}
+
+/* Common QLabel */
+QLabel {
+	color:rgba(255, 255, 255, 60%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+QLabel:disabled {
+	color:rgba(255, 255, 255, 18%);
+}
+
+/* Common Popup or Dock Title QLabel */
+QLabel[labelType="labelTitle"] { 
+	color: rgba(255, 255, 255, 90%);
+	font-size: 15px;
+	font-weight: 400;
+}
+
+QLabel[labelType="labelAddSourceComposit"] {
+	color: rgba(255, 255, 255, 0.90);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+/* Common QListWidget */
+QListWidget {
+    border-radius: 4px;
+    padding: 3px;
+    color: palette(text);
+    background-color: rgb(29,31,36);
+}
+
+QListWidget::item {
+    padding: 6px;	
+    border-radius: 4px;
+	border: 0px solid transparent;
+    color: rgba(255, 255, 255, 60%);
+    background-color: rgb(29,31,36);
+}
+
+QListWidget::item:selected{
+    color: rgba(255, 255, 255, 90%);
+    background-color: rgb(40,42,47);
+}
+
+QListWidget::item:hover,
+QListWidget::item:selected:hover {
+    color: rgba(255, 255, 255, 90%);
+    background-color: #505257;
+}
+
+QListWidget::item:disabled,
+QListWidget::item:disabled:hover {
+    color: rgba(255, 0, 0, 60%);
+    background-color: rgb(29,31,36);
+}
+
+#dialog_MessageBox #label_MessageBoxText
+{
+	color: rgba(255, 255, 255, 80%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: normal;
+	line-height: normal;
+}
+
+#dialog_MessageBox #label_MessageBoxTitle
+{	
+	color: rgba(255, 255, 255, 90%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: normal;
+	line-height: normal;
+}
+
+#dialog_MessageBox QDialogButtonBox QPushButton
+{
+	color: rgba(255,255,255,70%); 
+	border-radius: 4px; 
+	background: rgba(255, 255, 255, 10%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: medium;
+	line-height: normal;
+}
+
+#dialog_MessageBox QDialogButtonBox QPushButton:hover
+{
+	background: rgba(255, 255, 255, 20%);
+}
+
+#dialog_MessageBox #pushButton_CloseMessageBox,
+#dialog_NamedDialog #closeNamedDialogButton
+{	
+	background: url(":/image/resource/close.svg") no-repeat center center fixed;
+	/*background: url("../assets/close.svg") no-repeat center center fixed;*/
+	background-color: transparent;
+}
+
+#dialog_MessageBox #pushButton_CloseMessageBox:hover,
+#dialog_NamedDialog #closeNamedDialogButton:hover
+{	
+	background-color: rgba(255, 255, 255, 10%);
+}
+
+AFMainFrame {
+	border-radius: 10px;
+	/*background: #24272D;*/
+	background: #191b20;
+}
+
+AFMainFrame[frame_maximized="true"] {
+	border-radius: 0px;
+}
+
+AFMainFrame[frame_maximized="false"] {
+	border-radius: 10px;
+}
+
+AFMainFrame #widget_ContentsLevel{
+	border-radius:4px;
+	background-color:#32343A;
+}
+
+AFMainFrame #frame_Bottom {
+	border-bottom-left-radius: 10px;
+	border-bottom-right-radius: 10px;
+	background: #24272D;
+	border-right: 1px solid #111;
+	border-bottom: 1px solid #111;
+	border-left: 1px solid #111;
+}
+
+AFMainFrame[frame_maximized="true"] #frame_Bottom {
+	border-bottom-left-radius: 0px;
+    border-bottom-right-radius: 0px;
+}
+
+AFMainFrame[frame_maximized="false"] #frame_Bottom {
+	border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+}
+
+
+AFMainFrame #frame_Top {
+	border-top-left-radius: 10px;
+	border-top-right-radius: 10px;
+	background: #24272D;
+	border-top: 1px solid #111;
+	border-right: 1px solid #111;
+	border-left: 1px solid #111;
+}
+
+AFMainFrame[frame_maximized="true"] #frame_Top { 
+	border-top-left-radius: 0px; 
+	border-top-right-radius: 0px
+}
+
+AFMainFrame[frame_maximized="false"] #frame_Top { 
+	border-top-left-radius: 10px; 
+	border-top-right-radius: 10px
+}
+
+AFMainFrame #label_SoopStudio{
+	image: url("../assets/mainview/soop-studio.svg");
+}
+
+AFMainFrame #label_Studio{
+	color: rgba(255, 255, 255, 0.90);
+	text-align: center;
+	font-size: 17px;
+	font-style: normal;
+	font-weight: 600;
+	ine-height: normal;
+}
+
+AFMainFrame #pushButton_MenuSoopGlobal
+{
+	image: url("../assets/platform/soopglobal.png");
+	background-color:transparent;
+	border-radius:6px;
+}
+
+AFMainFrame #pushButton_MenuSoopGlobal:hover
+{
+	image: url("../assets/platform/soopglobal.png");
+	background-color:rgba(255,255,255,10%);
+	border-radius:6px;
+}
+
+AFMainFrame #pushButton_MenuSoop
+{
+	image: url("../assets/platform/soop.png");
+	background-color:transparent;
+	border-radius:6px;
+}
+
+AFMainFrame #pushButton_MenuSoop:hover
+{
+	image: url("../assets/platform/soop.png");
+	background-color:rgba(255,255,255,10%);
+	border-radius:6px;
+}
+
+AFMainFrame #pushButton_MenuTwitch
+{
+	image: url("../assets/platform/twitch.png");
+	background-color:transparent;
+	border-radius:6px;
+}
+
+AFMainFrame #pushButton_MenuTwitch:hover
+{
+	image: url("../assets/platform/twitch.png");
+	background-color:rgba(255,255,255,10%);
+	border-radius:6px;
+}
+
+AFMainFrame #pushButton_MenuYoutube
+{
+	image: url("../assets/platform/youtube.png");
+	background-color:transparent;
+	border-radius:6px;
+}
+
+AFMainFrame #pushButton_MenuYoutube:hover
+{
+	image: url("../assets/platform/youtube.png");
+	background-color:rgba(255,255,255,10%);
+	border-radius:6px;
+}
+
+
+AFMainFrame #pushButton_MenuRtmp
+{
+	color: #DDD;
+	text-align: center;
+	font-family: Arial;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: bold;
+	line-height: normal;
+	background-color:transparent;
+	border-radius:6px;
+}
+
+AFMainFrame #pushButton_MenuRtmp:hover
+{
+	color: #DDD;
+	text-align: center;
+	font-family: Arial;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: bold;
+	line-height: normal;
+	background-color:rgba(255,255,255,10%);
+	border-radius:6px;
+}
+
+AFMainFrame #line_TopControl,
+AFMainFrame #line_Time{
+	background-color: rgba(255,255,255,10%)
+}
+
+AFMainFrame #pushButton_Broad {
+	border-radius: 15px;
+	background: qlineargradient( x1:0 y1:0, x2:1 y2:0, stop:0 #0EE3F1 , stop:1 #D1FF00 );
+	color: #000;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+	padding-bottom: 3px;
+	padding-left: 1px;
+}
+
+AFMainFrame #pushButton_Broad:checked{
+	background-color: #FF2424;
+	color: rgba(255, 255, 255, 1);
+}
+
+AFMainFrame #pushButton_Broad:disabled{
+	border-radius: 15px;
+	background: qlineargradient( x1:0 y1:0, x2:1 y2:0, stop:0 rgba(56,147,255,10%), stop:1 rgba(14,227,241,10%));
+	color: rgba(255,255,255,10%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+AFMainFrame #pushButton_Record {
+	border-radius: 15px;
+	background-color: rgba(255,255,255,10%);
+	color: rgba(255,255,255, 70%);
+	font-size: 14px;
+	font-weight: 400;
+	padding-bottom: 3px;
+	padding-left: 1px;
+}
+
+AFMainFrame #pushButton_Record:hover {
+	color: rgb(255,255,255);
+}
+
+AFMainFrame #pushButton_Record:checked{
+	border: 1px solid #614d28;
+	background: transparent;
+	color: #EEA61B;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+AFMainFrame #pushButton_Record:unchecked{
+	border-radius: 15px;
+	background-color: rgba(255,255,255,10%);
+	color: rgba(255,255,255,80%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+AFMainFrame #pushButton_Record:disabled{
+	border-radius: 15px;
+	background: qlineargradient( x1:0 y1:0, x2:1 y2:0, stop:0 rgba(56,147,255,10%), stop:1 rgba(14,227,241,10%));
+	color: rgba(255,255,255,10%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+AFMainFrame #widget_BroadCountDown {
+	border-radius: 10px;
+	background: rgba(136, 136, 136, 30%);
+}
+
+AFMainFrame #label_Countdown {
+	color: #FFF;
+	font-size: 220px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+AFMainFrame #pushButton_Login {
+	border-radius: 15px;
+	border: 1px solid #3a3d42;
+	color: rgba(255, 255, 255, 0.70);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: normal;
+	line-height: normal;
+	text-align: center;
+	padding-bottom: 2px;
+	padding-left: 1px;
+	background:transparent;
+}
+
+AFMainFrame #pushButton_Login:hover {
+	color: rgb(255, 255, 255);
+}
+
+AFMainFrame #widget_PlatformLine {
+	background-color: rgba(255,255,255,20%)
+}
+
+AFMainFrame #pushButton_AuthSettings{
+	background-color:transparent; 
+	image: url("../assets/mainview/default/horizontalthreedots.svg");
+}
+AFMainFrame #pushButton_AuthSettings:hover{
+	image: url("../assets/mainview/mousehover/horizontalthreedots.svg");
+}
+AFMainFrame #pushButton_AuthSettings:checked{
+	background:transparent;
+	border-radius:15px;
+	border: 1px solid black
+}
+AFMainFrame #pushButton_AuthSettings:unchecked{
+	border-image: url("../assets/block-icon/lock/default/chat.svg");
+}
+AFMainFrame #pushButton_AuthSettings:disabled{
+	border-image: url("../assets/block-icon/lock/disable/chat.svg");
+}
+
+AFMainFrame #label_BroadTime,
+AFMainFrame #label_RecordTime{
+	color: rgba(255, 255, 255, 70%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+AFMainFrame #label_BroadTimeTitle,
+AFMainFrame #label_RecordTimeTitle{
+	color: rgba(255, 255, 255, 1);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+AFMainFrame #label_NetworkIcon{
+	image: url("../assets/mainview/normal-ellipse.svg");
+}
+
+AFQSliderFrame QPushButton
+{
+	background-color:transparent;
+}
+
+AFMainFrame #pushButton_ShortcutSettings
+{
+	image: url("../assets/mainview/default/shortcutsettings.svg");
+	border-radius:4px;
+	background-color: transparent;
+}
+
+AFMainFrame #pushButton_ShortcutSettings:hover{
+	image: url("../assets/mainview/mousehover/shortcutsettings.svg");
+}
+
+AFMainFrame #pushButton_ShortcutSettings:disabled{
+	background-color: rgba(255,255,255,0.6%);
+}
+
+AFMainFrame #pushButton_AudioMixerShortcut{
+	background: url("../assets/mainview/default/audiomixersettings.svg") no-repeat center center fixed;
+	border-radius:4px;
+	background-color: rgba(255,255,255, 0%);
+}
+AFMainFrame #pushButton_AudioMixerShortcut:hover{
+	border-radius:4px;
+	background-color: rgba(255,255,255,10%);
+}
+AFMainFrame #pushButton_AudioMixerShortcut:disabled{
+	background: url("../assets/mainview/disable/audiomixersettings.svg") no-repeat center center fixed;
+	background-color: rgba(255,255,255,0.6%);
+}
+
+AFMainFrame #widget_Volume{
+	image: url("../assets/mainview/default/soundvolume.svg") 0 0 0 0 stretch stretch;
+	background:transparent
+}
+
+AFMainFrame #widget_Mic{
+	image: url("../assets/mainview/default/micvolume.svg") 0 0 0 0 stretch ;
+	background:transparent
+}
+
+AFMainFrame #pushButton_SceneSettings{
+	background-color:transparent; 
+	border-radius:4; 
+	border-image: url("../assets/verticalthreedots.svg") 0 0 0 0 stretch stretch;
+}
+AFMainFrame #pushButton_SceneSettings:hover{
+	background-color: rgba(255,255,255,0.1%);
+}
+AFMainFrame #pushButton_SceneSettings:checked{
+	background:transparent;
+	border-radius:15px;
+	border: 1px solid black
+}
+
+AFMainFrame #label_Cpu{
+	color: rgba(255, 255, 255, 50%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+AFMainFrame #pushButton_TopMenu {
+	background:transparent;
+}
+
+AFMainFrame #label_Aneta{
+	color: #FFF;
+	text-align: center;
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+AFMainFrame #label_Studio{
+	opacity: 0.9;
+	color: #FFF;
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+AFMainFrame #pushButton_TopMenu{
+	image: url("../assets/mainview/default/studiomenu.svg");	
+	border-radius:4px;
+	background-color: transparent;
+}
+
+AFMainFrame #pushButton_RaisePopup{
+	image: url("../assets/mainview/default/raise-block.svg");
+	border-radius:4px;
+	background-color: transparent;
+}
+
+#pushButton_MinimumWindow{
+	image: url("../assets/mainview/default/min.svg");	
+	border-radius:4px;
+	background-color: transparent;
+}
+
+#pushButton_MaximumWindow{
+	image: url("../assets/mainview/default/max.svg");	
+	border-radius:4px;
+	background-color: transparent;
+}
+
+#pushButton_MaxedWindow{
+	image: url("../assets/mainview/default/maxed.svg");	
+	border-radius:4px;
+	background-color: transparent;
+}
+
+AFMainFrame #pushButton_TopMenu:hover{
+	image: url("../assets/mainview/mousehover/studiomenu.svg");	
+}
+
+AFMainFrame #pushButton_RaisePopup:hover{
+	image: url("../assets/mainview/mousehover/raise-block.svg");	
+}
+
+#pushButton_MinimumWindow:hover{
+	image: url("../assets/mainview/mousehover/min.svg");
+}
+
+#pushButton_MaximumWindow:hover{
+	image: url("../assets/mainview/mousehover/max.svg");	
+}
+
+#pushButton_MaxedWindow:hover{
+	image: url("../assets/mainview/mousehover/maxed.svg");	
+}
+
+AFMainFrame #widget_Middle{
+	background-color: #111;
+	border-right: 1px solid #111;
+	border-left: 1px solid #111;
+}
+
+AFMainFrame #widget_PreviewBottomColor{
+	background-color : #24272D;
+}
+
+AFMainFrame #widget_GuideBlockArea{
+	image: url("../assets/mainview/block-toggle-area.svg");
+}
+
+AFMainFrame #pushButton_BlockToggle{
+	background: transparent;
+	border-radius: 10px
+}
+
+AFMainFrame #pushButton_BlockToggle:hover{
+	background: rgba(255,255,255,10%);
+}
+
+AFMainFrame #pushButton_BlockToggle:pressed{
+	background: transparent;
+}
+
+AFMainFrame QWidget[resourceExtend="false"] {
+	image: url("../assets/mainview/default/resource-triangle.svg");
+	background-position: center bottom;
+}
+AFMainFrame QWidget[resourceExtend="true"] {
+	image: url("../assets/mainview/default/resource-triangle-extend.svg");
+}
+AFMainFrame QWidget[resourceExtend="false"]:hover {
+	image: url("../assets/mainview/mousehover/resource-triangle.svg");
+}
+AFMainFrame QWidget[resourceExtend="true"]:hover {
+	image: url("../assets/mainview/mousehover/resource-triangle-extend.svg");
+}
+
+#pushButton_AuthMenuDashboard,
+#pushButton_AuthSetting
+{
+	background-color:transparent;
+	text-align: left;
+	padding-left: 10px;
+	color: #DDD;
+	font-size: 13px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#label_AuthMenuNick,
+#label_AuthMenuChannel
+{
+	background-color:transparent;
+	text-align: left;
+	color: #DDD;
+	font-size: 13px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#pushButton_AuthMenuDashboard:hover,
+#pushButton_AuthSetting:hover
+{
+	background-color:rgba(255,255,255,7%);
+}
+
+#label_AuthMenuThumbnail
+{
+	image: url("../assets/setting-dialog/Program/profile.png");
+	background-color: transparent;
+}
+
+#AFBlockButtonWidget QPushButton{
+	background: transparent;
+}
+
+#AFBlockButtonWidget #label_Toggle{
+	background-color: white;
+	border-radius: 2px;
+}
+
+/* AFMainDynamicComposit */
+
+#AFMainDynamicComposit #centralwidget {
+	background-color: #111111;
+}
+
+#AFMainDynamicComposit #widget_HoverSpace {
+	background-color : #191b20;
+}
+
+QMainWindow::separator {
+	width: 8px;
+	background-color: transparent;
+}
+
+#label_SceneName 
+{
+	color: rgba(255, 255, 255, 70%);
+	font-size: 14px;
+}
+
+#AFResourceExtension #line_ExtensionTopLine{
+	background: #191b20
+}
+
+AFResourceExtension #line_ExtensionDivider1,
+AFResourceExtension #line_ExtensionDivider2,
+AFResourceExtension #line_ExtensionDivider3 {
+	background: rgba(255, 255, 255, 0.10);
+}
+
+#AFResourceExtension #label_Cpu,
+#AFResourceExtension #label_Memory,
+#AFResourceExtension #label_Disk,
+#AFMainFrame #label_Network,
+#AFResourceExtension #label_Network
+{
+    color: rgba(255, 255, 255, 80%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFResourceExtension #label_CpuValue,
+#AFResourceExtension #label_MemoryValue,
+#AFResourceExtension #label_DiskValue,
+#AFMainFrame #label_NetworkValue,
+#AFResourceExtension #label_NetworkValue
+{
+    color: rgba(255, 255, 255, 60%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFResourceExtension #pushButton_Stat
+{
+	image: url("../assets/mainview/default/horizontalthreedots.svg");
+	background-color:transparent;
+}
+#AFResourceExtension #pushButton_Stat:hover {
+	image: url("../assets/mainview/mousehover/horizontalthreedots.svg");
+}
+
+/* AFQProgramView */
+
+#AFQProgramView,
+#AFQProgramView #horizontalLayout,
+#AFQProgramView #widget_ContainerDisplays,
+#AFQProgramView #widget_HoverSpace,
+#AFQProgramView #widget_HoverSpaceStudio {
+	background-color: #0A0A0A;
+}
+
+#AFQProgramView #label_TransitionProgram {
+	color:#00E0FF;
+	font-size: 11px;
+	background-color: transparent;
+}
+
+#AFQProgramView #pushButton_MenuTransition {
+	image: url("../assets/mainview/preview/menu-transition.svg") 0 0 0 0 stretch stretch;
+	background-color: transparent;
+}
+
+#AFQProgramView #label_TransitionImg {
+	image: url("../assets/right-arrow-blue.svg") 0 0 0 0 stretch stretch;
+	background: transparent;
+}
+
+#AFQProgramView #label_EditDisplay ,
+#AFQProgramView #label_LiveDisplay {
+	color : rgba(255, 255, 255, 100%);
+}
+
+/* AFQVerticalProgramView */
+
+#AFQVerticalProgramView,
+#AFQVerticalProgramView #horizontalLayout,
+#AFQVerticalProgramView #widget_ContainerDisplays,
+#AFQVerticalProgramView #widget_HoverSpace,
+#AFQVerticalProgramView #widget_HoverSpaceStudio {
+	background-color: #0A0A0A;
+}
+
+#AFQVerticalProgramView #label_TransitionProgram {
+	color:#00E0FF;
+	font-size: 11px;
+	background-color: transparent;
+}
+
+#AFQVerticalProgramView #pushButton_MenuTransition {
+	image: url("../assets/mainview/preview/menu-transition.svg") 0 0 0 0 stretch stretch;
+	background: transparent;
+}
+
+#AFQVerticalProgramView #label_TransitionImg {
+	image: url("../assets/down-arrow-blue.svg") 0 0 0 0 stretch stretch;
+	background: transparent;
+}
+
+#AFQVerticalProgramView #label_EditDisplay ,
+#AFQVerticalProgramView #label_LiveDisplay {
+	color : rgba(255, 255, 255, 100%);
+}
+
+#AFQProgramView #label_EditDisplay,
+#AFQProgramView #label_LiveDisplay,
+#AFQVerticalProgramView #label_EditDisplay,
+#AFQVerticalProgramView #label_LiveDisplay {
+	border-radius: 13px;
+	border: 1px solid #333333;
+	padding-left: 9px;
+    padding-right: 9px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+#AFQProgramView #widget_Transition,
+#AFQVerticalProgramView #widget_Transition {
+	border-radius: 5px;
+	border: 1px solid #007080;
+	background-color: transparent;
+}
+
+#AFQProgramView #widget_Transition[hover=true],
+#AFQVerticalProgramView #widget_Transition[hover=true] {
+	background: #333333;
+}
+
+#AFQProgramView #pushButton_MenuTransition:hover,
+#AFQVerticalProgramView #pushButton_MenuTransition:hover {
+	background: #333333;
+}
+
+/* Settings */
+
+#AFQStudioSettingDialog {
+	background-color: #24272D;
+	border-radius: 10px;
+}
+
+AFQStudioSettingDialog QLabel,
+AFQStudioSettingDialog QLabel:disabled {
+	color:rgba(255, 255, 255, 60%);
+	font-size: 15px;
+	font-weight: 400;
+}
+
+#AFQStudioSettingDialog #widget_SettingTop {
+	border-bottom: 1px solid #111;
+}
+
+AFQStudioSettingDialog #widget_SettingBottom {
+	border-top: 1px solid #111;
+}
+
+#AFQStudioSettingDialog #widget_Icon {
+	background:transparent;
+}
+
+#AFQStudioSettingDialog #pushButton_Title {
+	background:transparent;
+	color: rgba(255, 255, 255, 40%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQStudioSettingDialog #pushButton_Title[hover=false]:checked,
+#AFQStudioSettingDialog #pushButton_Title[hover=true]:checked {
+	color: #00E0FF;
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+#AFQStudioSettingDialog #pushButton_Title[hover=true] {
+	color: rgba(255, 255, 255, 80%);
+}
+
+#AFQStudioSettingDialog #tabButtonProgram {
+	background-color: #1D1F24;
+	border-radius: 0px;
+	border-left: none;
+	border-right: none;
+	border-bottom: 1px solid black;
+}
+
+#AFQStudioSettingDialog #tabButtonProgram:checked {
+	background-color: #24272D;
+	border-radius: 0px;
+	border-left: none;
+	border-right: 1px solid black;
+	border-bottom: none;
+}
+
+#AFQStudioSettingDialog #tabButtonStream, 
+#AFQStudioSettingDialog #tabButtonOutput, 
+#AFQStudioSettingDialog #tabButtonAudio, 
+#AFQStudioSettingDialog #tabButtonVideo, 
+#AFQStudioSettingDialog #tabButtonHotkeys, 
+#AFQStudioSettingDialog #tabButtonAccessibilty
+{
+	background-color: #1D1F24;
+	border-radius: 0px;
+	border-left: none;
+	border-right: none;
+	border-bottom: 1px solid black;
+}
+
+#AFQStudioSettingDialog #tabButtonStream:checked, 
+#AFQStudioSettingDialog #tabButtonOutput:checked, 
+#AFQStudioSettingDialog #tabButtonAudio:checked, 
+#AFQStudioSettingDialog #tabButtonVideo:checked, 
+#AFQStudioSettingDialog #tabButtonHotkeys:checked, 
+#AFQStudioSettingDialog #tabButtonAccessibilty:checked
+{
+	background-color: #24272D;
+	border-radius: 0px;
+	border-left: 1px solid black;
+	border-right: 1px solid black;
+	border-bottom: none;
+}
+
+#AFQStudioSettingDialog #tabButtonAdvanced
+{
+	background-color: #1D1F24;
+	border-radius: 0px;
+	border-left: none;
+	border-right: none;
+	border-bottom: 1px solid black;
+}
+
+#AFQStudioSettingDialog #tabButtonAdvanced:checked
+{
+	background-color: #24272D;
+	border-radius: 0px;
+	border-left: 1px solid black;
+	border-right: none;
+	border-bottom: none;
+}
+
+/* Program Settings */
+#AFQProgramSettingAreaWidget QScrollArea
+{
+	background: #24272D;
+}
+
+#AFQProgramSettingAreaWidget #scrollAreaWidgetContents {
+	background: #24272D;
+	border: none;
+}
+
+
+#AFQProgramSettingAreaWidget #widget_SpreadAdvanceSettings
+{
+	border-top: 1px solid rgba(255, 255, 255, 6%);
+}
+
+
+#AFQProgramSettingAreaWidget #label_Account, 
+#AFQProgramSettingAreaWidget #label_General,
+#AFQProgramSettingAreaWidget #label_Output, 
+#AFQProgramSettingAreaWidget #label_Snapping, 
+#AFQProgramSettingAreaWidget #label_SysTray, 
+#AFQProgramSettingAreaWidget #label_Preview, 
+#AFQProgramSettingAreaWidget #label_Importers, 
+#AFQProgramSettingAreaWidget #label_TogglePreviewProgramMode, 
+#AFQProgramSettingAreaWidget #label_Multiview
+{
+	color: rgba(255, 255, 255, 80%);
+	font-size: 18px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+#AFQProgramSettingAreaWidget #label_Language, 
+#AFQProgramSettingAreaWidget #label_Theme
+{
+	color: rgba(255, 255, 255, 60%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQProgramSettingAreaWidget #label_Platform
+{
+	image: url("../assets/setting-dialog/Program/platform-logo-soop.png") 0 0 0 0 stretch stretch;
+	background: none;
+}
+#AFQProgramSettingAreaWidget #label_ProfilePicture
+{
+	border-image: url("../assets/setting-dialog/Program/profile.png") 0 0 0 0 stretch stretch;
+}
+#AFQProgramSettingAreaWidget #label_ChangeSettings
+{
+	color: rgba(255, 255, 255,40%);
+	text-align: center;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+#AFQProgramSettingAreaWidget #label_Nickname
+{
+	color: rgba(255, 255, 255, 0.90);
+	font-size: 18px;
+	font-weight: 700;
+}
+
+#AFQProgramSettingAreaWidget #label_IdNumber
+{
+	color: rgba(255, 255, 255, 0.60);
+	font-size: 14px;
+	font-weight: 400;
+}
+
+#AFQProgramSettingAreaWidget #label_Triangle[spread="false"][hover="false"] {
+	background: url(":/image/resource/Settings/Component/SpreadTriangle.svg") no-repeat center center fixed;
+	background-color: rgba(255,255,255,0%);
+}
+#AFQProgramSettingAreaWidget #label_Triangle[spread="false"][hover="true"] {
+	background:url(../assets/setting-dialog/Program/mousehover/SpreadTriangle.svg) no-repeat center center fixed;
+	background-color: rgba(255,255,255,0%);
+}
+#AFQProgramSettingAreaWidget #label_Triangle[spread="true"][hover="false"] {
+	background:url(:/image/resource/Settings/Component/FoldTriangle.svg) no-repeat center center fixed;
+	background-color: rgba(255,255,255,0%);
+}
+#AFQProgramSettingAreaWidget #label_Triangle[spread="true"][hover="true"] {
+	background:url(../assets/setting-dialog/Program/mousehover/FoldTriangle.svg) no-repeat center center fixed;
+	background-color: rgba(255,255,255,0%);
+}
+
+#AFQProgramSettingAreaWidget #label_PlatformIcon
+{
+	border-image: url(../assets/setting-dialog/stream/soop-global.svg) no-repeat center center fixed;
+}
+
+#AFQProgramSettingAreaWidget #label_Login
+{
+	color: rgba(255, 255, 255, 0.80);
+	font-size: 15px;
+	font-weight: 500;
+}
+
+#AFQProgramSettingAreaWidget #pushButton_Logout
+{
+	border-radius: 16px;
+	border: 1px solid #3a3d42;
+	background-color:rgba(255, 255, 255, 0%);
+	color: rgba(255, 255, 255, 60%);
+	font-size: 14px;
+	font-weight: 400;
+}
+
+#AFQProgramSettingAreaWidget #pushButton_Logout:hover {
+	color: rgba(255, 255, 255, 80%);
+}
+
+#AFQProgramSettingAreaWidget #pushButton_Logout:disabled {
+	color: rgba(255, 255, 255, 20%);
+}
+
+#AFQProgramSettingAreaWidget #widget_Login #label_Login:disabled {
+	color: rgba(255, 255, 255, 20%);
+}
+
+/* Stream Settings */
+#AFQStreamSettingAreaWidget
+{
+	border:none;
+}
+#AFQStreamSettingAreaWidget QScrollArea
+{
+	background: #24272D;
+}
+#AFQStreamSettingAreaWidget QPushButton
+{
+	background: transparent;
+}
+
+#AFQStreamSettingAreaWidget #AFQStreamSettingAreaWidget, 
+#AFQStreamSettingAreaWidget #scrollAreaWidgetContents, 
+#AFQStreamSettingAreaWidget #page_HaveAccount, 
+#AFQStreamSettingAreaWidget #page_NeedAccount, 
+#AFQStreamSettingAreaWidget #scrollAreaWidgetContents_AccountList
+{
+	background: #24272D;
+}
+
+#AFQStreamSettingAreaWidget #label_Platform
+{
+	background-color: transparent;
+}
+#AFQStreamSettingAreaWidget #label_ProfilePicture
+{
+	image: url("../assets/setting-dialog/Program/profile.png");
+	background-color: transparent;
+}
+
+#AFQStreamSettingAreaWidget #widget_DisconnectChannel > QLabel:disabled
+{
+	color: rgba(255, 255, 255, 20%);
+}
+#AFQStreamSettingAreaWidget #widget_ChannelInfo > QLabel:disabled
+{
+	color: rgba(255, 255, 255, 20%);
+}
+
+#pushButton_AddSoopGlobal
+{
+	border-radius: 6px;
+	border: 1px solid #3a3d42;
+}
+
+#pushButton_AddSoop
+{
+	border-radius: 6px;
+	border: 1px solid #3a3d42;
+}
+
+#pushButton_AddTwitch
+{
+	border-radius: 6px;
+	border: 1px solid #3a3d42;
+}
+
+
+#pushButton_AddYoutube
+{
+	border-radius: 6px;
+	border: 1px solid #3a3d42;
+}
+
+#AFQStreamSettingAreaWidget #pushButton_ChannelInfo
+{
+	color: rgba(255, 255, 255, 70%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+	border-radius: 6px;
+	border: 1px solid rgba(255, 255, 255, 10%);
+}
+
+#AFQStreamSettingAreaWidget #pushButton_DisconnectChannel
+{
+	color: rgba(255, 255, 255, 70%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+	border-radius: 6px;
+	border: 1px solid rgba(255, 255, 255, 10%);
+	border-radius: 6px;
+}
+
+#pushButton_AddSoopGlobal:hover,
+#pushButton_AddSoop:hover,
+#pushButton_AddTwitch:hover,
+#pushButton_AddYoutube:hover,
+#pushButton_AddRTMP:hover,
+#pushButton_ChannelInfo:hover,
+#pushButton_DisconnectChannel:hover
+{
+	border: 1px solid rgba(255, 255, 255, 80%);
+}
+
+#AFQStreamSettingAreaWidget QLabel
+{
+	color: rgba(255, 255, 255, 80%);
+	font-size: 18px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+#AFQStreamSettingAreaWidget #label_AddChannelInfo {
+	color: rgba(255, 255, 255, 0.80);
+	font-size: 16px;
+	font-weight: 400;
+}
+
+#AFQStreamSettingAreaWidget #label_AddChannelToStart
+{
+	color: rgba(255, 255, 255, 40%);
+	font-size: 16px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+
+#AFQStreamSettingAreaWidget #label_IdNumber
+{
+	color: rgba(255, 255, 255, 60%);
+	text-align: center;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQStreamSettingAreaWidget #label_Simulcast
+{
+	color: rgba(255, 255, 255, 60%);
+	text-align: right;
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQStreamSettingAreaWidget #label_ChannelInfoText,
+#AFQStreamSettingAreaWidget #label_DisconnectChannelText {
+	color: rgba(255, 255, 255, 70%);
+	font-size: 15px;
+	font-weight: 400;
+}
+
+#AFQStreamSettingAreaWidget #widget_AccountPart
+{
+	border-radius: 6px;
+	border: 1px solid #111;
+}
+
+#AFQStreamSettingAreaWidget #widget_AccountLine
+{
+	background-color: #1c1e22;
+}
+
+#AFQStreamSettingAreaWidget #pushButton_AddPlatform
+{
+	border-radius:4px; 
+	background-color:rgba(255,255,255, 0%)
+}
+
+#AFQStreamSettingAreaWidget #pushButton_AddPlatform:hover
+{
+	border-radius:4px; 
+	background-color:rgba(255,255,255, 7%)
+}
+
+#AFAddStreamWidget{
+	background:#24272D;
+	border-radius: 0px;
+}
+
+#AFAddStreamWidget #page_AddCustomRtmp,
+#AFAddStreamWidget #page_AuthBrowser,
+#AFAddStreamWidget #page_PlatformSelect
+{
+	border-left: 1px solid black;
+	border-right: 1px solid black;
+}
+
+#AFAddStreamWidget #widget_ButtonBox
+{
+	border-left: 1px solid black;
+	border-right: 1px solid black;
+	border-bottom: 1px solid black;
+}
+
+
+#AFAddStreamWidget #label_WindowTitle{
+	color: rgba(255, 255, 255, 90%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFAddStreamWidget #page_AuthBrowser{
+	background-color: #24272D;
+}
+
+#AFAddStreamWidget #widget_TopMenu{
+	border-bottom: 1px solid #111;
+}
+
+#AFAddStreamWidget #label_Url,
+#AFAddStreamWidget #label_StreamKey,
+#AFAddStreamWidget #label_ChannelName,
+#AFAddStreamWidget #label_ID,
+#AFAddStreamWidget #label_Password{
+	color: rgba(255, 255, 255, 60%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFAddStreamWidget #lineEdit_Url,
+#AFAddStreamWidget #lineEdit_ChannelName,
+#AFAddStreamWidget #lineEdit_ID,
+#AFAddStreamWidget #lineEdit_Password,
+#AFAddStreamWidget #widget_Streamkey,
+#AFAddStreamWidget #widget_Password
+{
+	border-radius:4px;
+	background:rgba(0,0,0,20%);
+}
+
+#AFAddStreamWidget #lineEdit_StreamKey,
+#AFAddStreamWidget #lineEdit_Password
+{
+	background:transparent;
+}
+
+#AFAddStreamWidget #pushButton_ShowStreamKey,
+#AFAddStreamWidget #pushButton_ShowPassword
+{
+	background:transparent;
+    image: url(../assets/setting-dialog/Stream/ic_hide.svg);
+}
+
+#AFAddStreamWidget #pushButton_ShowStreamKey:checked,
+#AFAddStreamWidget #pushButton_ShowPassword:checked
+{
+    image: url(../assets/setting-dialog/Stream/ic_show.svg);
+}
+
+
+
+#AFQStreamAccount::unchecked
+{
+	background: transparent;
+}
+
+#AFQStreamAccount:hover,
+#AFQStreamAccount::checked
+{
+	border-radius: 6px;
+	background: rgba(255, 255, 255, 5%);
+}
+
+#AFQStreamAccount #label_AccountPlatform
+{
+	image: url("../assets/setting-dialog/Stream/soop-global-icon.svg");
+	border-radius:11px;
+}
+
+
+#AFQStreamAccount #label_AccountID
+{
+	color: #DDD;
+	font-size: 16px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQStreamAccount #label_PlatformName
+{
+	color: #888;
+	font-size: 13px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQStreamAccount #label_Live
+{
+	color: #D1FF01;
+	text-align: center;
+	font-size: 12px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+	border-radius: 2px;
+	background: rgba(209, 255, 1, 10%);
+}
+
+/* Output Settings */
+#AFQOutputSettingAreaWidget {
+	border-bottom-left-radius: 8px;
+	border-bottom-right-radius: 8px;
+	background: #24272D;
+}
+
+#AFQOutputSettingAreaWidget, 
+#AFQOutputSettingAreaWidget #scrollAreaWidgetContents, 
+#AFQOutputSettingAreaWidget QScrollArea, 
+#AFQOutputSettingAreaWidget #PropertiesContainer,
+#AFQProgramSettingAreaWidget QScrollArea
+{
+	background: #24272D;
+}
+
+/* Output Settings */
+#AFQOutputSettingAreaWidget #label_SimpleOutputTitle,
+#AFQOutputSettingAreaWidget #label_AdvOutputTitle,
+#AFQOutputSettingAreaWidget #label_SimpleReplayBuffer,
+#AFQOutputSettingAreaWidget #label_AdvReplayBuffer,
+#AFQOutputSettingAreaWidget #label_AdvRecording
+{
+    color:rgba(255, 255, 255, 0.80);
+    text-align: center;
+    font-size: 18px;
+    font-style: normal;
+    font-weight: 700;
+    line-height: normal;
+}
+
+#AFQOutputSettingAreaWidget #widget_AdvRecType
+{
+	border-bottom: 1px solid rgba(255, 255, 255, 6%);
+}
+
+#AFQOutputSettingAreaWidget #widget_AdvRecording,
+#AFQOutputSettingAreaWidget #widget_SimpleReplayBuffer,
+#AFQOutputSettingAreaWidget #widget_AdvReplayBuffer
+{
+	border-top: 1px solid rgba(255, 255, 255, 6%);
+}
+
+/* Audio Settings */
+#AFQAudioSettingAreaWidget
+{
+	background: #24272D;
+}
+
+#AFQAudioSettingAreaWidget #scrollAreaWidgetContents,
+#AFQAudioSettingAreaWidget QScrollArea
+{
+	background: #24272D;
+}
+
+#AFQAudioSettingAreaWidget #label_TitleAudioGeneral, 
+#AFQAudioSettingAreaWidget #label_TitleAudioDevices,
+#AFQAudioSettingAreaWidget #label_TitleAudioMeters,
+#AFQAudioSettingAreaWidget #label_TitleAudioAdvanced,
+#AFQAudioSettingAreaWidget #label_TitleAudioHotkeys
+{
+	color: rgba(255, 255, 255, 80%);
+	font: 700 18px;
+}
+
+#AFQVideoSettingAreaWidget, 
+#AFQVideoSettingAreaWidget #PropertiesContainer,
+#AFQVideoSettingAreaWidget #scrollAreaWidgetContents,
+#AFQVideoSettingAreaWidget QScrollArea
+{
+	background: #24272D;
+}
+
+/* Label */
+#AFQVideoSettingAreaWidget #label_TitleVideoGeneral, 
+#AFQVideoSettingAreaWidget #label_TitleVideoEncoder,
+#AFQVideoSettingAreaWidget #label_TitleVideoRenderer
+{
+	color: rgba(255, 255, 255, 80%);
+	font: 700 18px;
+}
+
+#AFQOutputSettingAreaWidget QWidget[modeActive="true"],
+#AFQAudioSettingAreaWidget QWidget[modeActive="true"],
+#AFQVideoSettingAreaWidget QWidget[modeActive="true"] {
+	border-bottom: 1px solid #FFF;
+}
+#AFQOutputSettingAreaWidget QWidget[modeActive="false"],
+#AFQAudioSettingAreaWidget QWidget[modeActive="false"],
+#AFQVideoSettingAreaWidget QWidget[modeActive="false"] {
+	border-bottom: 1px solid #444;
+}
+
+#AFQOutputSettingAreaWidget QLabel[modeActive="true"],
+#AFQAudioSettingAreaWidget QLabel[modeActive="true"],
+#AFQVideoSettingAreaWidget QLabel[modeActive="true"] {
+	color: #FFF; font: 700 18px;
+}
+#AFQOutputSettingAreaWidget QLabel[modeActive="false"],
+#AFQAudioSettingAreaWidget QLabel[modeActive="false"],
+#AFQVideoSettingAreaWidget QLabel[modeActive="false"] {
+	color: rgba(255, 255, 255, 50%); font: 400 18px;
+}
+#AFQOutputSettingAreaWidget QLabel[modeActive="false"]:hover,
+#AFQAudioSettingAreaWidget QLabel[modeActive="false"]:hover,
+#AFQVideoSettingAreaWidget QLabel[modeActive="false"]:hover {
+	color: rgba(255, 255, 255, 80%); font: 400 18px;
+}
+
+
+/* Hotkey */
+
+
+#AFQHotkeySettingAreaWidget, 
+#AFQHotkeySettingAreaWidget #scrollAreaWidgetContents_Hotkeys, 
+#AFQHotkeySettingAreaWidget #scrollAreaWidgetContents_Scene,
+#AFQHotkeySettingAreaWidget QScrollArea
+{
+	background: #24272D;
+	border:none;
+}
+
+#AFQHotkeySettingAreaWidget AFQHotkeyEdit {
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQHotkeySettingAreaWidget AFQHotkeyEdit[editType="hotkeyWidgetEdit"] {
+	background-color : #1D1F24;
+	color: rgba(255, 255, 255, 60%);
+}
+
+/* HotKey Setting QPushButton */
+#AFQHotkeySettingAreaWidget #pushButton_Filter,
+#AFQHotkeySettingAreaWidget #pushButton_FilterByHotkey
+{    
+	border: 1px solid #31343A;
+	border-radius: 4px;
+	background: transparent;
+    color:rgba(255, 255, 255, 60%);
+}
+
+#AFQHotkeySettingAreaWidget #pushButton_Filter:hover,
+#AFQHotkeySettingAreaWidget #pushButton_FilterByHotkey:hover
+{    
+	border: 1px solid #31343A;
+	border-radius: 4px;
+	background-color: #2E3036;
+    color:rgba(255, 255, 255, 60%);
+}
+
+/* HotKey Setting QLineEdit */
+#AFQHotkeySettingAreaWidget #lineEdit_Filter,
+#AFQHotkeySettingAreaWidget #lineEdit_FilterByHotkey
+{    
+	border: 1px solid rgba(255, 255, 255, 6%);
+    background-color: #24272D;
+	border-radius: 4px;
+	background: transparent;
+    color:rgba(255, 255, 255, 60%);
+}
+
+#AFQHotkeySettingAreaWidget #lineEdit_Filter:disabled,
+#AFQHotkeySettingAreaWidget #lineEdit_FilterByHotkey:disabled
+{    
+	background: rgba(255, 255, 255, 1.8%);
+	color: rgba(255, 255, 255, 18%);
+}
+
+#AFQHotkeySettingAreaWidget #lineEdit_Filter:focus,
+#AFQHotkeySettingAreaWidget #lineEdit_FilterByHotkey:focus
+{
+    border: 2px solid #00E0FF;
+    border-radius: 4px;
+    background-color: #24272D;
+    color:rgba(255, 255, 255, 60%);
+    font-size:15px;
+    font-style: normal;
+    font-weight: 400;
+}
+
+#AFQHotkeySettingAreaWidget #hotkeywidget{
+	border: none;
+	border-radius: 4px;
+    min-width: 448px;
+    max-width: 448px;
+    min-height: 40px;
+    max-height: 40px;
+	background-color:rgba(0,0,0,20%)
+}
+
+AFHotkeyWidget QPushButton,
+AFHotkeyWidget QPushButton:disabled {
+	background-color : #1D1F24;
+}
+
+AFHotkeyWidget QPushButton:hover {
+	background-color : rgba(255,255,255,10%);
+}
+
+#AFQHotkeySettingAreaWidget QPushButton[themeID="revertIconHotKey"] {
+    image: url(":/image/resource/Settings/Component/button_revert_hotkey.svg");
+}
+#AFQHotkeySettingAreaWidget QPushButton[themeID="clearIconHotkey"] {
+    image: url("../assets/setting-dialog/Hotkey/button_clear_hotkey.svg");
+}
+#AFQHotkeySettingAreaWidget QPushButton[themeID="clearIconHotkey"]:disabled {
+    image: url("../assets/setting-dialog/Hotkey/button_clear_hotkey_disable.svg");
+}
+
+#AFQHotkeySettingAreaWidget QPushButton[themeID="addIconHotkey"] {
+    image: url("../assets/setting-dialog/Hotkey/button_add_hotkey.svg");
+}
+
+#AFQHotkeySettingAreaWidget QPushButton[themeID="removeIconHotkey"] {
+    image: url("../assets/setting-dialog/Hotkey/button_remove_hotkey.svg");
+}
+#AFQHotkeySettingAreaWidget QPushButton[themeID="removeIconHotkey"]:disabled {
+    image: url("../assets/setting-dialog/Hotkey/button_remove_hotkey_disable.svg");
+}
+
+/* Accessibility */
+
+#AFQAccessibilitySettingAreaWidget{
+	border-bottom-left-radius: 8px;
+	border-bottom-right-radius: 8px;
+	background: #24272D;
+}
+
+#AFQAccessibilitySettingAreaWidget #scrollAreaWidgetContents,
+#AFQAccessibilitySettingAreaWidget QScrollArea
+{
+	background: #24272D;
+	border:none;
+}
+
+#AFQAccessibilitySettingAreaWidget #label_ColorTitle{
+    color:rgba(255, 255, 255, 0.80);
+	text-align: center;
+	font-size: 18px;
+	font-weight: 700;
+}
+
+/* Advanced Settings */
+
+#AFQAdvancedSettingAreaWidget, 
+#AFQAdvancedSettingAreaWidget #scrollAreaWidgetContents,
+#AFQAccessibilitySettingAreaWidget QScrollArea
+{
+	background: #24272D;
+	border:none;
+}
+
+#AFQAdvancedSettingAreaWidget #label_General,
+#AFQAdvancedSettingAreaWidget #label_StreamDelay, 
+#AFQAdvancedSettingAreaWidget #label_ReplayBuffer, 
+#AFQAdvancedSettingAreaWidget #label_OutputReconnect, 
+#AFQAdvancedSettingAreaWidget #label_Network, 
+#AFQAdvancedSettingAreaWidget #label_Sources,
+#AFQAdvancedSettingAreaWidget #label_AdvRecording
+{
+	color: rgba(255, 255, 255, 80%);
+	font-size: 18px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+#AFQAdvancedSettingAreaWidget #label_StreamDelayInfo, 
+#AFQAdvancedSettingAreaWidget #label_ReplayBufferInfo
+{
+	color: rgba(255, 255, 255, 60%);
+	font-family: Arial;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+#AFQAdvancedSettingAreaWidget #label_ChangeSettings
+{
+	color: rgba(255, 255, 255,40%);
+	text-align: center;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+#AFQAdvancedSettingAreaWidget #label_Nickname, 
+#AFQAdvancedSettingAreaWidget #label_IdNumber
+{
+	color: rgba(255, 255, 255, 80%);
+	text-align: center;
+	font-size: 17px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+#AFQAdvancedSettingAreaWidget #label_Triangle
+{
+	background: url(":/image/resource/Settings/Component/SpreadTriangle.svg") no-repeat center center fixed;
+	border-radius:11px;
+	background-color: rgba(255,255,255,0%);
+}
+
+/* Advanced Audio */
+#AFQAudioAdvSettingDialog #scrollArea,
+#AFQAudioAdvSettingDialog #scrollAreaWidgetContents
+{
+	background-color: transparent;
+}
+
+#AFQAudioAdvSettingDialog QLabel
+{
+	color: rgba(255, 255, 255, 80%);
+	font-size: 14px;
+}
+
+#AFQAudioAdvSettingDialog QLabel:disabled 
+{
+	color: rgba(255, 255, 255, 20%);
+}
+
+#AFQAudioAdvSettingDialog #label_AudioTracks,
+#AFQAudioAdvSettingDialog #label_Balance,
+#AFQAudioAdvSettingDialog #label_Monitoring,
+#AFQAudioAdvSettingDialog #label_Mono,
+#AFQAudioAdvSettingDialog #label_Name,
+#AFQAudioAdvSettingDialog #label_Status,
+#AFQAudioAdvSettingDialog #label_SyncOffset,
+#AFQAudioAdvSettingDialog #label_Volume
+{
+	color: rgba(255, 255, 255, 0.80);
+	font-size: 14px;
+	font-weight: bold;
+}
+
+#AFQAudioAdvSettingDialog #checkBox_ShowActiveOnly
+{
+	color: rgba(255, 255, 255, 60%);
+	font: 400 14px;
+	margin: 10px 0px 10px 10px;
+}
+
+/* Slider */
+#AFQAudioAdvSettingDialog QSlider::groove:horizontal
+{
+    height: 4px;
+	border-radius: 2px;
+	background: #1D1F24;
+}
+
+#AFQAudioAdvSettingDialog QSlider::handle:horizontal 
+{
+	background: white;
+    height: 10px;
+    width: 10px;
+    border-radius: 5px;
+    margin: -3px 0px;
+}
+
+#AFQAudioAdvSettingDialog QSlider::handle:horizontal:disabled 
+{
+	background: none;
+    height: 0px;
+    width: 0px;
+    margin: 0px;
+}
+
+#AFQAudioAdvSettingDialog QSlider::add-page 
+{
+	background: #1D1F24;
+	border-radius: 2px;
+}
+
+#AFQAudioAdvSettingDialog QSlider::sub-page
+{
+	background: #00E0FF;
+	border-radius: 2px;
+}
+
+#AFQAudioAdvSettingDialog QSlider::sub-page:disabled
+{
+	background: none;
+}
+
+/*Balloon Widget*/
+#AFQBalloonWidget
+{
+	border: none;
+}
+
+#AFQBalloonWidget #widget_Border
+{
+	background-color:#3a3d42;
+	border-radius: 6px;
+}
+
+#AFQBalloonWidget #widget_Contents
+{
+	border-radius: 6px;
+	background-color: #24272D;
+}
+
+#AFQBalloonWidget QLabel
+{
+	color: #DDD;
+	font-size: 13px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQBalloonWidget #label_balloonPoint
+{
+	image: url("../assets/Popup/balloon-point.svg") 0 0 0 0 stretch;
+	margin:0px;
+}
+
+QDockWidget{
+	border: 1px solid black;
+}
+
+/* Dock Title */
+#AFDockTitle {
+	border-top-left-radius: 10px;
+	border-top-right-radius: 10px;
+	background: #24272D;
+}
+
+#AFDockTitle QWidget[widgetType="noradius"]
+{
+	background: #24272D;
+	border-top-left-radius: 0px;
+	border-top-right-radius: 0px;
+}
+
+#AFDockTitle #pushButton_Close{
+	image: url("../assets/mainview/default/close.svg");
+	border-radius:4px;
+	background-color: transparent;
+}
+#AFDockTitle #pushButton_Close:hover{
+	image: url("../assets/mainview/mousehover/close.svg");
+}
+
+#AFDockTitle #pushButton_ShowSceneControlDock {
+	image: url("../assets/mainview/default/scene-control-dock.svg");
+	border-radius:4px;
+	background-color: transparent;
+}
+#AFDockTitle #pushButton_ShowSceneControlDock:hover {
+	image: url("../assets/mainview/mousehover/scene-control-dock.svg");
+}
+
+/* Block Popup */
+#AFQBlockPopup #scrollAreaWidgetContents, #AFQBlockPopup #scrollArea
+{
+	border-radius: 24px;	
+	background-color: #24272D;
+}
+
+#AFQBlockPopup #scrollAreaWidgetContents
+{
+	border-radius: 26px;	
+	border:1px solid #3a3d42;
+	background-color: #24272D;
+}
+
+#AFQBlockPopup #pushButton_LockButton
+{
+	border-radius: 6px; 
+	border: 1px solid rgba(255, 255, 255, 10%); 
+	background-color: #24272D;
+}
+
+QPushButton[buttonType="SceneSource"]{
+	image: url("../assets/block-icon/popup/default/scenesource.svg");
+}
+
+QPushButton[buttonType="SceneSource"]:pressed {
+	image: url("../assets/block-icon/popup/clicked/scenesource.svg");
+}
+
+QPushButton[buttonType="Chat"]{
+	image: url("../assets/block-icon/popup/default/chat.svg");
+}
+
+QPushButton[buttonType="Chat"]:pressed {
+	image: url("../assets/block-icon/popup/clicked/chat.svg");
+}
+
+QPushButton[buttonType="AudioMixer"]{
+	image: url("../assets/block-icon/popup/default/audiomixer.svg");
+}
+
+QPushButton[buttonType="AudioMixer"]:pressed {
+	image: url("../assets/block-icon/popup/clicked/audiomixer.svg");
+}
+
+QPushButton[buttonType="Dashboard"]{
+	image: url("../assets/block-icon/popup/default/dashboard.svg");
+}
+
+QPushButton[buttonType="Dashboard"]:pressed {
+	image: url("../assets/block-icon/popup/clicked/dashboard.svg");
+}
+
+QPushButton[buttonType="settingDialog"] {
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 10%);
+    color:rgba(255, 255, 255, 80%);
+    font-size:15px;
+	font-weight: 500;
+}
+
+QPushButton[buttonType="settingDialog"]:hover {
+    background-color: rgba(255, 255, 255, 17%);
+}
+
+QPushButton[buttonType="settingDialog"]:disabled {
+    background-color: rgba(255, 255, 255, 2%);
+    color:rgba(255, 255, 255, 16%);
+}
+
+/* Popup Title Frame */
+QDialog #titleFrame {
+	border-top : none;
+	border-bottom : 1px solid #111;
+	border-left : none;
+	border-right : none;
+}
+
+QDialog #bottomFrame {
+	border: none;
+}
+
+/* Select Source */
+#AFQSelectSourceDialog #emptySourceFrame,
+#AFQSelectSourceDialog #frameSourceInfo {
+	background-color : rgba(0, 0, 0, 20%);
+	border-bottom-left-radius : 10px;
+}
+
+#AFQSelectSourceDialog #labelSourceName
+{
+	color: rgba(255, 255, 255, 90%);
+	text-align: center;
+	font-size: 18px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+#AFQSelectSourceDialog #labelScreenComposit,
+#AFQSelectSourceDialog #labelAudioComposit,
+#AFQSelectSourceDialog #labelEtcComposit { 
+	color: rgba(255, 255, 255, 90%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+#AFQSelectSourceDialog #label_EmptyGuide { 
+	color: rgba(255, 255, 255, 80%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+
+#AFQSelectSourceDialog QScrollArea { 
+	background : #24272D;
+}
+
+#AFQSelectSourceDialog #sourceScrollArea {
+	border-top : 1px solid #24272D;
+	border-bottom : none;
+	border-left : none;
+	border-right : none;
+}
+
+#AFQSelectSourceDialog #scrollAreaWidgetContents {
+	background : #24272D;
+}
+
+#AFQSelectSourceDialog #line, #AFQSelectSourceDialog #line_2 {
+	background : #111;
+}
+
+#AFQSelectSourceDialog AFQSelectSourceButton {
+	border-radius : 5px;
+	border: 1px solid #3a3d42;
+	background:transparent;
+}
+
+#AFQSelectSourceDialog AFQSelectSourceButton:hover {
+	border: 1px solid rgba(0, 224, 255, 10%);
+	background-color: rgba(0, 224, 255, 10%);
+}
+
+#AFQSelectSourceDialog AFQSelectSourceButton:press {
+	border: 1px solid #3a3d42;
+}
+
+AFQSelectSourceButton QLabel {
+	color: #FFF;
+	text-align: center;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+/*Slider Frame*/
+AFQSliderFrame #frame_SliderContent{
+	border-radius: 4px;
+	background: #2F3237;
+}
+
+#AFQSliderFrame QSlider::groove:vertical {
+	width: 3px;
+	border-radius: 1px;
+    background: #4C4C4C;
+    left: 4px; right: 4px;
+}
+
+#AFQSliderFrame QSlider::handle:vertical {
+    width: 11px;
+	height: 11px;
+	image: url("../assets/mainview/default/volumehandle.svg") no-repeat center center fixed;
+	background-color: transparent;
+	margin: 0px -5px;
+}
+
+#AFQSliderFrame QSlider::add-page:vertical {
+    width: 3px;
+	border-radius: 1px;
+	background: rgba(252, 252, 253, 100%);
+}
+
+#AFQSliderFrame QSlider::handle:vertical:disabled {
+    width: 0px;
+	height: 0px;
+	image: none;
+	background-color: transparent;
+	margin: 0px;
+}
+
+/* Source Properites */
+
+QGroupBox {
+    background: #3a3b3f;
+    border-radius: 4px;
+    padding-top: 32px;
+    padding-bottom: 8px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 8px;
+    top: 8px;
+	
+	color: rgba(255, 255, 255, 60%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+	
+}
+
+AFQPropertiesView #PropertiesContainer {
+    background-color: #24272D;;
+}
+
+AFQPropertiesView QWidget
+{
+	border:none;
+}
+
+AFQPropertiesView #AFQAdvancedSettingAreaWidget, 
+AFQPropertiesView #scrollAreaWidgetContents
+{
+	background: #24272D;
+}
+
+AFQBasicFilters #asyncWidget {
+	border : 1px solid #111;
+	border-top : none;
+	border-left : none;
+}
+
+AFQBasicFilters #effectWidget {
+	border : 1px solid #111;
+	border-bottom : none;
+	border-top : none;
+	border-left : none;
+}
+
+AFQBasicFilters #buttonBoxFrame {
+	border : 1px solid #111;
+	border-bottom : none;
+	border-left : none;
+	border-right : none;
+}
+
+AFQBasicFilters #asyncLabel,
+AFQBasicFilters #effectLabel
+{
+	color: rgba(255, 255, 255, 90%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+AFQBasicFilters QSplitter::handle,
+AFQSourceProperties QSplitter::handle {
+        background-color: #24272D;
+}
+
+AFQStatWidget #line_TitleDivider,
+AFQStatWidget #line_BottomDivider,
+AFQBasicFilters #line,
+AFQSourceProperties #line {
+    background-color:#111;
+}
+
+AFQBasicFilters QListWidget {
+    border-radius: 4px;
+    padding: 3px;
+    color: palette(text);
+    background-color: #24272D;
+}
+
+AFQBasicFilters QListWidget::item {
+    padding: 6px;
+	height : 40px;
+    border-radius: 4px;
+	border: 0px solid transparent;
+    color: rgba(255, 255, 255, 60%);
+    background-color: #24272D;
+	
+	color: rgba(255, 255, 255, 60%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+	
+}
+
+AFQBasicFilters QListWidget::item:selected{
+    color: #00E0FF;
+    background-color: rgba(255,255,255,10%);
+}
+
+AFQBasicFilters QListWidget::item:hover {
+    background-color: #24272D;
+}
+
+
+AFQBasicFilters QListWidget::item:selected:hover {
+    background-color: rgba(255,255,255,10%);
+}
+
+
+AFQBasicFilters QListWidget::item:disabled,
+AFQBasicFilters QListWidget::item:disabled:hover {
+    color: rgba(255, 0, 0, 60%);
+    background-color: rgb(29,31,36);
+}
+
+#AFQSourceProperties #advanceLine {
+    background-color: rgba(255,255,255,6%);
+}
+
+#AFQSourceProperties AFQPlainTextEdit {
+    padding :10px;
+}
+
+AFQBasicFilters QLineEdit, 
+AFQBasicFilters QLineEdit, 
+AFQSourceProperties QLineEdit, 
+AFQSourceProperties AFQPlainTextEdit {
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.20);
+    color:rgba(255, 255, 255, 0.60);
+    font-size:15px;
+    font-style: normal;
+    font-weight: 400;
+    line-weight: normal;
+    padding-left:12px;
+}
+
+AFQBasicFilters QLineEdit:focus, 
+AFQBasicFilters AFQPlainTextEdit:focus,
+AFQSourceProperties QLineEdit:focus, 
+AFQSourceProperties AFQPlainTextEdit:focus {
+    border: 2px solid #00E0FF;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.20);
+    color:rgba(255, 255, 255, 0.60);
+    font-size:15px;
+    font-style: normal;
+    font-weight: 400;
+    line-weight: normal;
+}
+
+
+#AFQSourceProperties QPushButton#m_buttonOK, m_buttonCancel {
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.06);
+    color:rgba(255, 255, 255, 0.70);
+    font-size:15px;
+}
+
+#AFQSourceProperties QPushButton#advancedButton {
+    background-color: #24272D;
+	color: rgba(255, 255, 255, 0.40);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQSourceProperties QPushButton#controlButton {
+    background-color: #24272D;
+	color: #BDBEC0;
+	border : 1px solid rgba(255, 255, 255, 0.10);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+
+/* Media Control Panel */
+AFQMediaControlPanel QLabel {
+	color: rgba(255, 255, 255, 50%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+AFQMediaControlPanel #timerLabel {
+	color : #00E0FF;
+}
+
+
+AFQBasicFilters QSpinBox,
+AFQSourceProperties QSpinBox { 
+	padding-left : 10px; 
+}
+
+
+AFQPropertiesView QLabel#fontLabel {
+	border-radius : 4px;
+	border : 1px solid rgba(255,255,255,10%);
+}
+
+#AFAudioMixerDockWidget {
+	background-color: #24272D;
+	border: 1px solid black;
+}
+
+/* Scene Source Dock */
+AFSceneSourceDockWidget {
+	background-color: #24272D;
+	border: 1px solid black;
+}
+
+#sceneListFrame,
+#scenListScrollArea, 
+#sceneListScrollAreaContents ,
+#widget_DockContents {
+	background-color: #24272D;
+	border-top-right-radius: 0px;
+	border-bottom-right-radius: 10px;
+	border-top-left-radius: 0px;
+	border-bottom-left-radius: 10px;
+}
+
+AFQSceneListItem,
+AFQSceneBottomButton {
+	background-color: #24272D;
+	border-color:#24272D;
+	border-radius: 5px;
+}
+
+AFQSceneBottomButton {
+	border: 1px solid #3a3d42;
+}
+
+AFQSceneListItem[sceneBtnType='selected'] {
+	border-top-right-radius: 0px;
+	border-bottom-right-radius: 0px;
+	border-top-left-radius: 4px;
+	border-bottom-left-radius: 4px;	
+	background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0,
+									  stop: 0.0 #00ACC9, 
+									  stop: 0.745 #124E5A, 
+									  stop: 1.0 #181B20);
+}
+
+AFQSceneBottomButton[sceneBtnType='selected'] {
+	border-radius: 5px;
+	border: none;
+	background-color: rgba(0, 224, 255, 10%);
+}
+
+AFQSceneListItem[sceneBtnType='idle'] {
+	background-color: #24272D;
+}
+
+AFQSceneListItem[sceneBtnType='hover'] {
+	background-color: #33363C;
+}
+
+AFQSceneBottomButton[sceneBtnType='']:hover {
+	background-color: #33363c;
+	border:none;
+}
+
+QPushButton#renameSceneEditBtn { 
+	background-color: transparent;
+	border:none;
+    image: url(../assets/scene-source-block/scene-list-icon/bt-rename-scene.svg);
+}
+
+QPushButton#renameSceneEditBtn:hover { 
+    image: url(../assets/scene-source-block/scene-list-icon/bt-rename-scene-hover.svg);	
+}
+
+QLineEdit#sceneNameEdit {
+    background-color: #24272D;
+    padding-left:0px;
+	border: 0px solid #24272D;
+    border-radius: 0px;
+}
+
+QFrame#sourceToolBarFrame
+{
+	border-bottom-left-radius : 6px;
+	border-bottom-right-radius : 6px;
+	border-top:1px solid #24272D;
+	background-color:#181B20;
+}
+
+/* 4px width Scroll */
+AFQStreamSettingAreaWidget QScrollBar:vertical,
+#hMixerScrollArea QScrollBar:vertical,
+AFQHotkeySettingAreaWidget QScrollBar:vertical,
+AFQListViewScrollArea QScrollBar:vertical,
+AFQSourceListView QScrollBar:vertical,
+AFQCustomFontDialog QScrollBar:vertical {
+    border: 2px solid grey;
+    background-color:transparent;
+	border:0px solid transparent;
+    width: 4px;	
+}
+
+AFQStreamSettingAreaWidget QScrollBar::handle:vertical,
+#hMixerScrollArea QScrollBar::handle:vertical,
+AFQHotkeySettingAreaWidget QScrollBar::handle:vertical,
+AFQListViewScrollArea QScrollBar::handle:vertical,
+AFQSourceListView QScrollBar::handle:vertical,
+AFQCustomFontDialog QScrollBar::handle:vertical {
+    background-color: rgba(255,255,255,30%);
+	border-radius:2px;
+}
+
+AFQStreamSettingAreaWidget QScrollBar::handle:vertical:hover,
+#hMixerScrollArea QScrollBar::handle:vertical:hover,
+AFQHotkeySettingAreaWidget QScrollBar::handle:vertical:hover,
+AFQListViewScrollArea QScrollBar::handle:vertical:hover,
+AFQSourceListView QScrollBar::handle:vertical:hover,
+AFQCustomFontDialog QScrollBar::handle:vertical:hover {
+    background-color: rgba(255,255,255,50%);
+	border-radius:2px;
+}
+
+/* 4px height Scroll */
+#vMixerScrollArea QScrollBar:horizontal{
+    border: 2px solid grey;
+    background-color:transparent;
+	border:0px solid transparent;
+    height: 4px;	
+}
+
+#vMixerScrollArea QScrollBar:handle:horizontal {
+    background-color: rgba(255,255,255,30%);
+	border-radius:2px;	
+}
+
+AFQSourceListView
+{
+	border-top-left-radius : 6px;
+	border-top-right-radius : 6px;
+	border:1px solid #181B20;
+	background-color:#181B20;
+	padding-top:10px;
+	padding-left:10px;
+	padding-right:10px;
+	
+	font-size:14px;
+    font-style: normal;
+    font-weight: 400;
+}
+
+AFQSourceListView::item {
+    border-radius: 4px;
+    color: palette(text);
+	border: none;
+	outline: none;
+}
+
+AFQSourceListView::item:hover,
+AFQSourceListView::item:selected:hover {
+	background-color: rgba(255, 255, 255, 5%);
+}
+
+/* Source ListView Group Expand Button */
+SourceTreeSubItemCheckBox::indicator:unchecked,
+SourceTreeSubItemCheckBox::indicator:unchecked:enabled {
+    image: url(../assets/scene-source-block/source-list-icon/bt_group_expand.svg);
+}
+
+SourceTreeSubItemCheckBox::indicator:checked,
+SourceTreeSubItemCheckBox::indicator:checked:enabled {
+    image: url(../assets/scene-source-block/source-list-icon/bt_group_unexpand.svg);
+}
+
+AFQSourceViewItem QLineEdit:focus {
+	background-color: #24272D;
+	border:none;
+	color:rgba(255,255,255,70%);
+}
+
+
+AFQVisibleCheckBox:indicator:checked,
+AFQVisibleCheckBox:indicator:checked:enabled, 
+AFQVisibleCheckBox:indicator:checked:hover {
+    image: url(../assets/scene-source-block/source-list-icon/ic_source_show.svg);
+}
+
+AFQVisibleCheckBox:indicator:unchecked,
+AFQVisibleCheckBox:indicator:unchecked:enabled, 
+AFQVisibleCheckBox:indicator:unchecked:hover {
+    image: url(../assets/scene-source-block/source-list-icon/ic_source_hide.svg);
+}
+
+AFQLockedCheckBox {
+    outline: none;
+    background: transparent;
+}
+
+AFQLockedCheckBox:indicator:checked,
+AFQLockedCheckBox:indicator:checked:enabled,
+AFQLockedCheckBox:indicator:checked:hover {
+    image: url(../assets/scene-source-block/source-list-icon/ic_source_lock.svg);
+}
+
+AFQLockedCheckBox:indicator:unchecked,
+AFQLockedCheckBox:indicator:unchecked:enabled,
+AFQLockedCheckBox:indicator:unchecked:hover {
+    image: url(../assets/scene-source-block/source-list-icon/ic_source_unlock.svg);
+}
+
+QPushButton#dotButton,
+QPushButton#dotButton:hover {
+    image: url(../assets/scene-source-block/source-control/bt_dot_source.svg);
+}
+
+QPushButton#addButton,
+QPushButton#addButton:hover {
+    image: url(../assets/scene-source-block/source-control/bt_add_source.svg);
+}
+
+QPushButton#propsButton,
+QPushButton#propsButton:hover {
+    image: url(../assets/scene-source-block/source-control/bt_props_source.svg);
+}
+
+QPushButton#removeButton,
+QPushButton#removeButton:hover {
+    image: url(../assets/scene-source-block/source-control/bt_remove_source.svg);
+}
+
+QPushButton#moveUpButton,
+QPushButton#moveUpButton:hover {
+    image: url(../assets/scene-source-block/source-control/bt_move_up_source.svg);
+}
+
+QPushButton#moveDownButton,
+QPushButton#moveDownButton:hover {
+    image: url(../assets/scene-source-block/source-control/bt_move_down_source.svg);
+}
+
+
+QPushButton#dotButton:pressed,
+QPushButton#dotButton:disabled {
+    image: url(../assets/scene-source-block/source-control/bt_pressed_dot_source.svg);
+}
+
+QPushButton#addButton:pressed,
+QPushButton#addButton:disabled {
+    image: url(../assets/scene-source-block/source-control/bt_pressed_add_source.svg);
+}
+
+QPushButton#propsButton:pressed,
+QPushButton#propsButton:disabled {
+    image: url(../assets/scene-source-block/source-control/bt_pressed_props_source.svg);
+}
+
+
+QPushButton#removeButton:pressed,
+QPushButton#removeButton:disabled {
+    image: url(../assets/scene-source-block/source-control/bt_pressed_remove_source.svg);
+}
+
+QPushButton#moveUpButton:pressed,
+QPushButton#moveUpButton:disabled {
+    image: url(../assets/scene-source-block/source-control/bt_pressed_move_up_source.svg);
+}
+
+QPushButton#moveDownButton:pressed,
+QPushButton#moveDownButton:disabled  {
+    image: url(../assets/scene-source-block/source-control/bt_pressed_move_down_source.svg);
+}
+
+QPushButton#sceneListAddButton {
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+	text-align:left;
+	color: rgba(255, 255, 255, 60%);
+	background-color: #24272D;
+	padding-left: 12px;
+}
+
+QPushButton#sceneListAddButton:hover {
+	color : #FFFFFF;
+	background-color: rgba(255,255,255,10%);
+}
+QPushButton#sceneListAddButton:pressed {
+	background-color: rgba(255, 255, 255, 2%);
+}
+
+
+/* Audio Mixer Dock */
+#frame_DockContents 
+{
+	background-color: #24272D;
+	border-top-right-radius: 0px;
+	border-bottom-right-radius: 10px;
+	border-top-left-radius: 0px;
+	border-bottom-left-radius: 10px;
+}
+
+#AudioMixerNameLabel, 
+#AudioMixerVolLabel
+{
+	color: rgba(255, 255, 255, 0.70);
+	font-size: 14px;
+}
+
+#AFQVolControl QLabel
+{
+	color: rgba(255, 255, 255, 0.70);
+	font-size: 14px;
+}
+
+#stackedMixerArea,
+#hMixerScrollArea,
+#vMixerScrollArea,
+#verticalLayoutWidget, 
+#horizontalLayoutWidget
+{
+	background: transparent;
+}
+
+AFQCustomPushbutton,
+AFQCustomPushbutton:hover
+{
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.015);
+    color: rgba(255, 255, 255, 0.24);
+    font-size: 14px;
+    font-weight: 400;
+}
+
+AFQCustomPushbutton:checked
+{
+	background: rgba(255, 255, 255, 0.05);
+	color: rgba(255, 255, 255, 0.80);
+}
+
+AFQCustomPushbutton#pushButton_AreaButton {
+	text-align: left; 
+	padding-left: 16px;
+	background:#24272D;
+	color: rgba(255, 255, 255, 70%);
+}
+
+AFQCustomPushbutton#pushButton_AreaButton:checked {
+    background: rgba(255, 255, 255, 10%);
+}
+
+
+
+AFQMuteCheckBox
+{
+	background-color: transparent;
+	border-radius: 4px;
+}
+
+AFQMuteCheckBox::indicator:checked:!pressed
+{
+	image: url(../assets/audio-mixer-block/audio_mixer_volume_mute.svg);
+}
+
+AFQMuteCheckBox::indicator:checked:pressed
+{
+	image: url(../assets/audio-mixer-block/audio_mixer_volume_mute_pressed.svg);
+}
+
+AFQMuteCheckBox::indicator:unchecked:!pressed
+{
+	image: url(../assets/audio-mixer-block/audio_mixer_volume.svg);
+}
+
+AFQMuteCheckBox::indicator:unchecked:pressed
+{
+	image: url(../assets/audio-mixer-block/audio_mixer_volume_pressed.svg);
+}
+
+QPushButton[themeID='menuIconSmall'] 
+{
+	background-color: transparent;
+	border-radius: 4px;
+	border-image: url(../assets/audio-mixer-block/vertical_dot.svg) no-repeat center center fixed;
+}
+
+QPushButton[themeID='menuIconSmall']:pressed 
+{
+	background-color: transparent;
+	border-image: url(../assets/audio-mixer-block/vertical_dot_pressed.svg) no-repeat center center fixed;
+}
+
+AFQMuteCheckBox:hover:!pressed,
+QPushButton[themeID='menuIconSmall']:hover:!pressed
+{
+	background-color: rgba(255, 255, 255, 10%);
+}
+
+AFCVolumeSlider::groove:horizontal {
+	background-color: #000;
+	height: 2px;
+	border: 1px;
+	border-radius: 1px;
+}
+
+AFCVolumeSlider::groove:vertical { 
+	background-color: #000;
+	width: 2px;
+	border: 1px;
+	border-radius: 1px;
+}
+
+AFCVolumeSlider::handle:horizontal,
+AFCVolumeSlider::handle:horizontal:pressed
+{
+	height: 10px;
+	width: 10px;
+	image: url(../assets/audio-mixer-block/audio_mixer_slider_handle.svg);
+	background: none;
+	margin: -8px 0px;
+}
+
+AFCVolumeSlider::handle:horizontal:disabled {
+	image: url(../assets/audio-mixer-block/audio_mixer_slider_handle_disabled.svg);
+}
+
+AFCVolumeSlider::handle:vertical
+{
+	height: 11px;
+	width: 13px;
+	image: url(../assets/audio-mixer-block/audio_mixer_slider_handle.svg);
+	background: none;
+	margin: -0px -4px;
+}
+
+AFCVolumeSlider::handle:vertical:disabled {
+	image: url(../assets/audio-mixer-block/audio_mixer_slider_handle_disabled.svg);
+}
+
+AFCVolumeSlider::handle:horizontal:hover,
+AFCVolumeSlider::handle:vertical:hover {
+	image: url(../assets/audio-mixer-block/audio_mixer_slider_handle_hover.svg);
+}
+
+AFCVolumeSlider::sub-page:horizontal { 
+	background-color: #999999;
+	border-radius: 1px;
+}
+
+AFCVolumeSlider::sub-page:horizontal:disabled {
+	background-color: #444444;
+}
+
+AFCVolumeSlider::add-page:vertical { 
+	background-color: #999999;
+	border-radius: 1px;
+}
+
+AFCVolumeSlider::add-page:vertical:disabled {
+	background-color: #444444;
+}
+
+/* Advance Controls Dock */
+#widget_AdvanceControlsDockContents {
+	background-color: #24272D;
+	border-top-right-radius: 0px;
+	border-bottom-right-radius: 10px;
+	border-top-left-radius: 0px;
+	border-bottom-left-radius: 10px;
+}
+
+#widget_AdvanceControlsDockContents QLabel {
+	color: rgb(255, 255, 255);
+	font-size: 15px;
+	font-weight: 400;
+}
+
+#widget_AdvanceControlsDockContents QLabel:disabled {
+	color: rgba(255, 255, 255, 20%);
+}
+
+#widget_AdvanceControlsDockContents QWidget[AdvControlWdtPressed="false"] {
+	background-color: rgba(255, 255, 255, 7%);
+	border-radius: 4px;
+}
+
+#widget_AdvanceControlsDockContents QWidget[AdvControlWdtPressed="false"]:hover {
+    background-color: rgba(255, 255, 255, 14%);
+}
+
+#widget_AdvanceControlsDockContents QWidget[AdvControlWdtPressed="false"]:disabled,
+#widget_AdvanceControlsDockContents QWidget[AdvControlWdtPressed="true"]{
+    background-color: rgba(255, 255, 255, 1.4%);
+}
+
+#widget_AdvanceControlsDockContents #label_RightArrowImg,
+#widget_AdvanceControlsDockContents #label_RightReplayBuffer {
+	background-color:transparent; 
+	border-image: url("../assets/advance-controls-block/right-arrow-gray.svg") 0 0 0 0 stretch stretch;
+}
+#widget_AdvanceControlsDockContents #label_RightArrowImg:disabled,
+#widget_AdvanceControlsDockContents #label_RightReplayBuffer:disabled {
+	border-image: url("../assets/advance-controls-block/right-arrow-gray-disabled.svg") 0 0 0 0 stretch stretch;
+}
+
+/* Advance Control Mode Icon */
+#widget_AdvanceControlsDockContents QLabel[AdvControlWdtStyle="studioMode"] {
+	background-color:transparent; 
+	border-image: url("../assets/advance-controls-block/basic-mode.svg") 0 0 0 0 stretch stretch;
+}
+#widget_AdvanceControlsDockContents QLabel[AdvControlWdtStyle="studioMode-pressed"],
+#widget_AdvanceControlsDockContents QLabel[AdvControlWdtStyle="studioMode"]:disabled {
+	border-image: url("../assets/advance-controls-block/basic-mode-disabled.svg") 0 0 0 0 stretch stretch;
+}
+#widget_AdvanceControlsDockContents QLabel[AdvControlWdtStyle="basicMode"] {
+	background-color:transparent; 
+	border-image: url("../assets/advance-controls-block/studio-mode.svg") 0 0 0 0 stretch stretch;
+}
+#widget_AdvanceControlsDockContents QLabel[AdvControlWdtStyle="basicMode-pressed"],
+#widget_AdvanceControlsDockContents QLabel[AdvControlWdtStyle="basicMode"]:disabled {
+	border-image: url("../assets/advance-controls-block/studio-mode-disabled.svg") 0 0 0 0 stretch stretch;
+}
+
+/* Advance Control ReplayBuffer Icon */
+#widget_AdvanceControlsDockContents #label_IconReplayBuffer {
+	background-color:transparent; 
+	border-image: url("../assets/advance-controls-block/replay-buffer.svg") 0 0 0 0 stretch stretch;
+}
+#widget_AdvanceControlsDockContents #label_IconReplayBuffer:disabled {
+	border-image: url("../assets/advance-controls-block/replay-buffer-disabled.svg") 0 0 0 0 stretch stretch;
+}
+
+/* Advance Control Download ReplayBuffer */
+#widget_AdvanceControlsDockContents #pushButton_DownloadReplayBuffer {
+	width: 24px;
+	height: 24px;
+	background-image: url("../assets/advance-controls-block/download.svg");
+	background-repeat: no-repeat;
+    background-position: center;
+	background-color: rgba(255, 255, 255, 7%);
+	border-radius: 4px;
+}
+#widget_AdvanceControlsDockContents #pushButton_DownloadReplayBuffer:hover {
+    background-color: rgba(255, 255, 255, 14%);
+}
+#widget_AdvanceControlsDockContents #pushButton_DownloadReplayBuffer:pressed,
+#widget_AdvanceControlsDockContents #pushButton_DownloadReplayBuffer:disabled {
+	background-image: url("../assets/advance-controls-block/download-disabled.svg");
+	background-color: rgba(255, 255, 255, 1.4%);
+}
+
+/* browser interaction dialog */
+#AFQBrowserInteraction #refreshButton {
+	image: url("../assets/source-context-panel/bt_refresh.svg");
+}
+
+#AFQBrowserInteraction #refreshButton,
+#AFQBrowserInteraction #refreshButton:pressed {
+	background-color: #24272D;
+}
+
+#AFQBrowserInteraction #refreshButton:hover {
+	background-color: rgba(255, 255, 255, 10%);
+}
+
+/* Custom Color Pick Dialog */
+AFQCustomColorDialog {
+	border: 2px solid #111;
+}
+
+AFQCustomColorDialog QPushButton {
+	height : 40px;
+}
+
+AFQCustomColorDialog QSpinBox {
+	height : 40px;
+}
+
+AFQCustomColorDialog QLineEdit {
+	background-color:#1D1F24;
+	height : 40px;
+}
+
+/* Custom Font Pick Dialog */
+AFQCustomFontDialog {
+	border:1px solid #111;
+}
+
+AFQCustomFontDialog QLabel {
+	margin-bottom : 4px;
+}
+
+AFQCustomFontDialog QPushButton {
+	height : 40px;
+}
+
+AFQCustomFontDialog QSpinBox {
+	height : 40px;
+}
+
+AFQCustomFontDialog QLineEdit {
+	height : 40px;
+}
+
+AFQCustomFontDialog QComboBox {
+	height : 40px;
+}
+
+AFQCustomFontDialog QListView {
+    background-color: rgb(29,31,36);
+	color: rgba(255, 255, 255, 90%);
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+	padding: 5px;
+}
+
+AFQCustomFontDialog QListView::item {
+	height : 33px;
+    padding-left: 6px;	
+    border-radius: 4px;
+	border: 0px solid transparent;
+    color: rgba(255, 255, 255, 60%);
+    background-color: rgb(29,31,36);
+}
+
+AFQCustomFontDialog QListView::item:selected {
+	background: rgba(255, 255, 255, 5%);
+	color: #00E0FF;
+}
+
+AFQCustomFontDialog QScrollBar:vertical {
+	width: 10px;
+	margin-left:5px;
+}
+
+AFQCustomFontDialog QScrollBar::handle:vertical {
+	min-height : 20px;
+}
+
+AFQCustomFontDialog QGroupBox {
+	background-color: transparent; 
+	border: none;
+}
+
+#widget_DockContentsArea {
+	background-color: #111;
+	border-radius: 10px;
+}
+
+/* Source List Color Select */
+AFQColorSelect {
+	radius : 4px;
+	background-color : #000;	
+}
+
+/* PC Stat */
+AFQStatWidget #widget_Stat
+{
+	border-radius: 10px;
+	border: 1px solid #111;
+	background-color: #24272D;
+}
+
+AFQStatWidget #widget_PCResource,
+AFQStatWidget #widget_FrameResource
+{
+	border-bottom : 1px solid rgba(255, 255, 255, 5%);
+}
+
+AFQStatWidget QLabel
+{
+	color: rgba(255, 255, 255, 60%);
+	font-size: 14px;
+	font-weight: 400;
+}
+
+AFQStatWidget #label_PCResource,
+AFQStatWidget #label_FrameResource,
+AFQStatWidget #label_StreamRecordResource
+{
+	color: rgba(255, 255, 255, 90%);
+	font-size: 15px;
+	font-weight: 700;
+}
+
+AFQStatWidget #label_Stream,
+AFQStatWidget #label_Rec
+{
+	color: rgba(255, 255, 255, 90%);
+	font-size: 14px;
+	font-weight: 700;
+}
+
+/* System Alert */
+AFQSystemAlert #frame_SystemAlertBG
+{
+	background: rgba(0, 0, 0, 80%);
+}
+
+AFQSystemAlert #frame_SystemAlertTitle
+{
+	background: #000000;
+}
+
+AFQSystemAlert #label_SoopTitle
+{
+	image: url("../assets/mainview/soop-studio.svg");
+}
+
+AFQSystemAlert #label_channelID,
+AFQSystemAlert #label_AlertText
+{
+	color: #FFF;
+	font-size: 14px;
+	font-weight: 400;
+}
+
+AFQSystemAlert #label_AlertIcon
+{
+	image: url(../assets/mainview/warning-sign.svg);
+}
+
+/* Program Guide */
+AFQProgramGuideWidget #widget_GuideContentArea
+{
+	border-radius: 10px;
+	background: #24272D;
+	border: 1px solid #111;
+}
+
+AFQProgramGuideWidget #label_Title
+{
+	color: #FFF;
+	font-size: 18px;
+	font-weight: 700;
+}
+
+AFQProgramGuideWidget #label_AllClear,
+AFQProgramGuideWidget #label_StartLive
+{
+	color: #FFF;
+	font-size: 24px;
+	font-weight: 700;
+}
+
+AFQProgramGuideItemWidget #label_StepText
+{
+	color: rgba(255, 255, 255, 70%);
+	font-size: 14px;
+	font-weight: 700;
+}
+
+AFQProgramGuideItemWidget #label_MissionText
+{
+	color: #FFF;
+	font-size: 16px;
+	font-weight: 700;
+}
+
+AFQProgramGuideItemWidget #label_ArrowIcon
+{
+	image: url(../assets/guide/arrow-icon.svg);
+}
+
+#AFQRemux
+{
+    border-radius: 10px;
+    border: 1px solid #111;
+    background: #24272D;
+}
+
+#AFQRemux QTableView
+{
+    border-radius: 4px;
+    background: #24272D;
+    color: rgba(255, 255, 255, 0.60);
+    font-size: 15px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: normal;
+    
+	border: 0px solid transparent;
+    gridline-color: #24272D;
+}
+#AFQRemux QTableView QHeaderView
+{
+    height: 24px;
+    border-radius: 4px;
+    background: #24272D;
+}
+#AFQRemux QTableView QHeaderView::section
+{
+    background: #241f1d;
+    color: rgba(255, 255, 255, 0.60);
+    border-radius: 4px;
+    
+    margin: 5px;
+}
+#AFQRemux QTableView QHeaderView::section:horizontal:first
+{
+    background: #24272D;
+}
+#AFQRemux QTableView QHeaderView::section:vertical:first
+{
+    background: #24272D;
+}
+#AFQRemux QProgressBar
+{
+    border-radius: 13px;
+    background: #1D1F24;
+    color: #FFFFFF;
+    font-size: 15px;
+    font-weight: 700;
+	text-align: center;
+}
+#AFQRemux QProgressBar::chunk
+{
+    border-radius: 13px;
+	background: qlineargradient( x1:0 y1:0, x2:1 y2:0, stop:0 #00E0FF , stop:1 #BEF7FF );
+}
+
+/* Importer */
+AFQImporterDialog
+{
+    border-radius: 10px;
+    border: 1px solid #111;
+    background: #24272D;
+}
+
+AFQImporterDialog QScrollArea,
+AFQImporterDialog #scrollAreaWidgetContents_Table
+{
+	background: transparent;
+}
+
+AFQImporterDialog QToolButton
+{
+	border: transparent;
+	background-color: #1D1F24;
+}
+
+AFQImporterDialog #lineEdit_Name,
+AFQImporterDialog #lineEdit_Path,
+AFQImporterDialog #lineEdit_Program{
+	background-color: #1D1F24;
+	border-radius: 4px;
+}
+
+AFQImporterDialog #widget_PathWidget{
+	background-color: #1D1F24;
+	border-radius: 4px;
+}
+
+AFQImporterDialog #pushButton_Browser {
+	image: url("../assets/mainview/default/horizontalthreedots.svg");
+	border-radius:4px;
+	background-color: #1D1F24;
+}
+AFQImporterDialog #pushButton_Browser:hover {
+	image: url("../assets/mainview/mousehover/horizontalthreedots.svg");
+}
+
+AFQImporterDialog #pushButton_Delete {
+	image: url("../assets/mainview/default/close.svg");
+	border-radius:4px;
+	background-color: #1D1F24;
+}
+AFQImporterDialog #pushButton_Delete:hover {
+	image: url("../assets/mainview/mousehover/close.svg");
+}
+
+
+AFQSliderFrame QPushButton[AudioSliderBtnType="soundVolume"] {
+	border-image: url("../assets/mainview/default/soundvolume.svg");
+}
+AFQSliderFrame QPushButton[AudioSliderBtnType="soundVolume"]:hover {
+	border-image: url("../assets/mainview/mousehover/soundvolume.svg");
+}
+
+AFQSliderFrame QPushButton[AudioSliderBtnType="soundVolumeMute"] {
+	border-image: url("../assets/mainview/default/soundvolume-mute.svg");
+}
+AFQSliderFrame QPushButton[AudioSliderBtnType="soundVolumeMute"]:hover {
+	border-image: url("../assets/mainview/mousehover/soundvolume-mute.svg");
+}
+
+AFQSliderFrame QPushButton[AudioSliderBtnType="micVolume"] {
+	border-image: url("../assets/mainview/default/micvolume.svg");
+}
+AFQSliderFrame QPushButton[AudioSliderBtnType="micVolume"]:hover {
+	border-image: url("../assets/mainview/mousehover/micvolume.svg");
+}
+
+AFQSliderFrame QPushButton[AudioSliderBtnType="micVolumeMute"] {
+	border-image: url("../assets/mainview/default/micvolume-mute.svg");
+}
+AFQSliderFrame QPushButton[AudioSliderBtnType="micVolumeMute"]:hover {
+	border-image: url("../assets/mainview/mousehover/micvolume-mute.svg");
+}
+
+#AFQCustomBrowserWidget
+{
+	background-color: #24272D;
+}
+
+#AFQCustomBrowserCollection
+{
+	background-color: #24272D;
+	border-raidus:10px;
+}
+#AFQCustomBrowserCollection #widget_Top
+{
+	border: 1px solid #111;
+	border-bottom: none;
+	border-top-left-radius: 10px;
+	border-top-right-radius: 10px;
+	background-color: #24272D;
+	border-bottom: 1px solid black;
+}
+
+#AFQCustomBrowserCollection #widget_Bottom
+{
+	border: 1px solid #111;
+	border-top: none;
+	border-bottom-left-radius: 10px;
+	border-bottom-right-radius: 10px;
+	background-color: #24272D;
+}
+
+#AFQCustomBrowserCollection #widget_Contents
+{
+	background-color: #24272D;
+}
+
+#AFQCustomBrowserCollection #widget_Middle
+{
+	background-color: #24272D;
+}
+
+#AFQCustomBrowserCollection QScrollArea
+{
+	background-color: #24272D;
+	border: 1px solid #111;
+	border-top: none;
+	border-bottom: none;
+}
+
+#AFQCustomBrowserCollection #scrollAreaWidgetContents
+{
+	background-color: #24272D;
+	border:none;
+}
+
+#AFQCustomBrowserCollection #pushButton_Close{
+	image: url("../assets/mainview/default/close.svg");
+	border-radius:4px;
+	background-color: transparent;
+}
+#AFQCustomBrowserCollection #pushButton_Close:hover{
+	image: url("../assets/mainview/mousehover/close.svg");
+}
+
+AFQCustomBrowserCollection #pushButton_ClearCustomBrowser:disabled{
+    color:rgba(255, 255, 255, 20%);
+    background-color:rgba(255,255,255,1%);
+    font-size:15px;
+}
+
+#AFQCustomBrowserCollection #label_Title
+{
+	color: rgba(255,255,255,90%);
+	font-size: 15px;
+	font-weight: 400;
+}
+
+#AFMainFrameGuide #pushButton_SceneSource
+{
+	image: url("../assets/block-icon/popup/default/SceneSource.svg");
+}
+
+#AFMainFrameGuide #pushButton_GuideBroad {
+	border-radius: 25px;
+	background: qlineargradient( x1:0 y1:0, x2:1 y2:0, stop:0 #0EE3F1 , stop:1 #D1FF00 );
+	color: #000;
+	font-size: 14px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+	padding-bottom: 3px;
+	padding-left: 1px;
+}
+
+#checkBox_lockIcon::indicator {
+	image: url("../assets/audio-mixer-block/audio_mixer_locked.svg");
+}
+
+AFQStatWidget #pushButton_Reset {
+	border: 1px solid rgba(255, 255, 255, 10%);
+	color: rgba(255, 255, 255, 80%);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 500;
+	line-height: normal;
+	background:transparent; 
+}
+
+AFQStatWidget #pushButton_Reset:hover {
+border: 1px solid #66686C; 
+}
+
+AFQStatWidget #pushButton_Reset::pressed {
+	border: 1px solid rgba(255, 255, 255, 6%);
+	color: rgba(255, 255, 255, 16%);
+}
+
+
+QWidget[widgetType="settingHoverWidget"],
+#widget_AddRTMP,
+#widget_AddSoop,
+#widget_AddSoopGlobal,
+#widget_AddTwitch,
+#widget_AddYoutube
+{
+	border-radius: 4px;
+	border: 1px solid #3A3D42;
+}
+
+QWidget[widgetType="settingHoverWidget"]:hover {
+	border: 1px solid #66686C;
+}
+
+#widget_AddRTMP:hover,
+#widget_AddSoop:hover,
+#widget_AddSoopGlobal:hover,
+#widget_AddTwitch:hover,
+#widget_AddYoutube:hover {
+	border: 1px solid #D3D4D5;
+}
+
+#label_SoopGlobalConnected,
+#label_SoopConnected,
+#label_TwitchConnected,
+#label_RTMPConnected,
+#label_YoutubeConnected {
+	color: rgba(255, 255, 255, 60%);
+	font-size: 13px;
+	font-weight: 400;
+}
+
+#label_RTMPIcon
+{
+	color: #FFF;
+	text-align: center;
+	font-family: Arial;
+	font-size: 19px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+	border-radius: 6px;
+}
+
+
+#AFQMissingFilesDialog QScrollArea {
+    border: 1px solid #111;
+    border-top: none;
+    border-bottom: none;
+}
+
+#AFQMissingFilesDialog #scrollArea,
+#AFQMissingFilesDialog #widget_Contents,
+#AFQMissingFilesDialog #widget_Title,
+#AFQMissingFilesDialog #scrollAreaWidgetContents
+{
+	background-color: #24272D;
+	
+}
+
+#AFQMissingFilesDialog #widget_SourceName,
+#AFQMissingFilesDialog #widget_MissingPathDir,
+#AFQMissingFilesDialog #widget_NewPathDir,
+#AFQMissingFilesDialog #widget_Status
+{
+	background-color: rgba(0,0,0,20%);
+	border-radius: 4px;
+}
+
+#AFQMissingFilesDialog #label_MissingFile,
+#AFQMissingFilesDialog #label_Name,
+#AFQMissingFilesDialog #label_NewFile,
+#AFQMissingFilesDialog #label_State
+{
+	color: rgba(255, 255, 255, 0.60);
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQMissingFilesDialog #label_HelpText
+{
+	color: rgba(255, 255, 255, 0.80);
+	font-size: 20px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: normal;
+}
+
+#AFQMissingFilesDialog #found
+{
+	color: rgba(255, 255, 255, 0.60);
+	font-size: 16px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+}
+
+#AFQMissingFilesDialog #lineEdit_NewPath
+{
+	background-color: #1D1F24;
+	border-radius: 4px;
+}
+
+#AFQMissingFilesDialog #pushButton_FindPath {
+	image: url("../assets/mainview/default/horizontalthreedots.svg");
+	border-radius:4px;
+	background-color: #1D1F24;
+}
+#AFQMissingFilesDialog #pushButton_FindPath:hover {
+	image: url("../assets/mainview/mousehover/horizontalthreedots.svg");
+}
+
+#AFQMissingFilesDialog #pushButton_ResetPath {
+	image: url("../assets/mainview/default/close.svg");
+	border-radius:4px;
+	background-color: #1D1F24;
+}
+#AFQMissingFilesDialog #pushButton_ResetPath:hover {
+	image: url("../assets/mainview/mousehover/close.svg");
+}
+
+#AFQMissingFilesDialog #pushButton_Checked {
+	background-color:transparent;
+	image: url("../assets/Popup/missingfile/missing.svg");
+
+}
+
+#AFQMissingFilesDialog #pushButton_Checked:checked {
+	background-color:transparent;
+	image: url("../assets/Popup/missingfile/modified.svg");
+}
+/* Program Info Dialog */
+AFQProgramInfoDialog #buttonFrame {
+	border : 1px solid #111;
+	border-top : none;
+	border-bottom : none;
+}
+
+AFQProgramInfoDialog #titleFrame {
+	border-bottom : 1px solid #111;
+}
+
+AFQProgramInfoDialog #buttonBoxFrame {
+	border-top : 1px solid #111;
+}
+
+AFQProgramInfoDialog #button_PrivacyPolicy,
+AFQProgramInfoDialog #button_TermsConditions {
+	padding-left:10px;
+	text-align:left;
+	font-size: 15px;
+	font-style: normal;
+	font-weight: 400;
+	line-height: normal;
+	background-color: #24272D;
+}
+
+AFQProgramInfoDialog #button_PrivacyPolicy:hover,
+AFQProgramInfoDialog #button_TermsConditions:hover {
+    background-color: rgba(255, 255, 255, 20%);
+}
+
+AFQProgramInfoDialog #button_PrivacyPolicy:checked,
+AFQProgramInfoDialog #button_TermsConditions:checked {
+    background-color: rgba(255, 255, 255, 20%);
+	color:#00E0FF;
+}
+
+AFQProgramInfoDialog QTextBrowser {
+	border : none;
+}
+
+QToolBarExtension {
+    background: palette(button);
+    min-width: 12px;
+    max-width: 12px;
+    padding: 4px 0px;
+    margin-left: 0px;
+
+    qproperty-icon: url(./Dark/dots-vert.svg);
+}
+
+/* Tab Widget */
+QTabWidget::pane { /* The tab widget frame */
+    border-top: 1px solid #111;
+}
+
+QTabWidget::tab-bar {
+    alignment: left;
+}
+
+QTabBar QToolButton {
+    background: rgb(44,46,53);
+    border: none;
+}
+
+QTabBar::tab:top {
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+QTabBar::tab:bottom {
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+QTabBar::tab {
+    background: rgba(255, 255, 255, 6%);
+    color: rgba(255, 255, 255, 70%);
+    border: none;
+    padding: 8px 12px;
+    min-width: 50px;
+    margin: 1px 2px;
+}
+
+QTabBar::tab:pressed {
+    background: rgba(255, 255, 255, 14%);
+}
+
+QTabBar::tab:hover {
+    background: rgba(255, 255, 255, 20%);
+    color: rgba(255, 255, 255, 70%);
+}
+
+QTabBar::tab:selected {
+    background: rgba(255, 255, 255, 20%);
+    color: #00E0FF;
+}
+
+QTabBar QToolButton {
+    background: palette(button);
+    min-width: 16px;
+    padding: 0px;
+}
+
+/* YouTube Integration */
+
+AFQYouTubeSettingDialog {
+    qproperty-thumbPlaceholder: url(./Dark/sources/image.svg);
+}
+
+AFQYouTubeSettingDialog QScrollArea,
+AFQYouTubeSettingDialog #scrollAreaWidgetContents,
+AFQYouTubeSettingDialog #scrollAreaWidgetContents_3{
+	background:#24272D;
+}
+
+
+AFQYouTubeSettingDialog QPlainTextEdit {
+    border-radius: 4px;
+	padding :10px;
+    background-color: rgba(0, 0, 0, 0.20);
+    color:rgba(255, 255, 255, 0.60);
+    font-size:15px;
+    font-style: normal;
+    font-weight: 400;
+    line-weight: normal;
+    padding-left:12px;
+}
+
+AFQYouTubeSettingDialog QPlainTextEdit:focus {
+    border: 2px solid #00E0FF;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.20);
+    color:rgba(255, 255, 255, 0.60);
+    font-size:15px;
+    font-style: normal;
+    font-weight: 400;
+    line-weight: normal;
+}
+
+
+
+#ytEventList QLabel {
+    color: rgba(255, 255, 255, 80%);
+    background-color: rgba(255, 255, 255, 10%);
+    border: none;
+    border-radius: 4px;
+    padding: 4px 20px;
+}
+
+#ytEventList QLabel:hover {
+    background-color: rgba(255, 255, 255, 17%);
+}
+
+#ytEventList QLabel[isSelectedEvent=true] {
+    background-color: rgb(40,76,184);
+    border: none;
+}
+
+#ytEventList QLabel[isSelectedEvent=true]:hover {
+    background-color: rgb(54,92,192);
+    color: palette(text);
+}
+
+/* Calendar Widget */
+
+/* Calendar Top Bar */
+QCalendarWidget QWidget#qt_calendar_navigationbar {
+    background-color: rgba(255, 255, 255, 4%);
+    padding: 4px 8px;
+}
+
+/* Calendar Top Bar Buttons */
+QCalendarWidget QToolButton {
+    background-color: palette(button);
+    padding: 2px 16px;
+    border-radius: 4px;
+    margin: 2px;
+}
+
+#qt_calendar_monthbutton::menu-indicator {
+    image: url(./Dark/down.svg);
+    subcontrol-position: right;
+    padding-top: 2px;
+    padding-right: 6px;
+    height: 10px;
+    width: 10px;
+}
+
+QCalendarWidget #qt_calendar_prevmonth {
+    padding: 2px;
+    qproperty-icon: url(./Dark/left.svg);
+    icon-size: 16px, 16px;
+}
+
+QCalendarWidget #qt_calendar_nextmonth {
+    padding: 2px;
+    qproperty-icon: url(./Dark/right.svg);
+    icon-size: 16px, 16px;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: rgb(79,83,94);
+    border-radius: 4px;
+}
+
+QCalendarWidget QToolButton:pressed {
+    background-color: rgb(25,27,38);
+}
+
+/* Month Dropdown Menu */
+QCalendarWidget QMenu {
+
+}
+/* Year spinbox */
+QCalendarWidget QSpinBox {
+    background-color: rgb(25,27,38);
+    border: none;
+    border-radius: 4px;
+    margin: 0px 3px 0px 0px;
+    padding: 4px 16px;
+}
+
+QCalendarWidget QSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; width: 16px; }
+QCalendarWidget QSpinBox::down-button {subcontrol-origin: border; subcontrol-position: bottom right; width: 16px;}
+QCalendarWidget QSpinBox::up-arrow { width: 10px; height: 10px; }
+QCalendarWidget QSpinBox::down-arrow { width: 10px; height: 10px; }
+
+/* Days of the Week Bar */
+QCalendarWidget QWidget { alternate-background-color: palette(mid); }
+
+QCalendarWidget QAbstractItemView:enabled {
+    background-color: palette(base);
+    color: palette(text);
+}
+
+QCalendarWidget QAbstractItemView:disabled {
+    color: rgb(122,121,122);
+}

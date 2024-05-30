@@ -1,0 +1,14 @@
+/build/*
+/build_x64/*
+
+# we build lib
+/lib/*
+
+# Exclude lock files
+*.lock.json
+
+# Exclude macOS legacy resource forks
+.DS_Store
+
+# Exclude CMake build number cache
+/cmake/.CMakeBuildNumber
