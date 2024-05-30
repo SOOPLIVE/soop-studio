@@ -20,7 +20,7 @@ This application currently only supports windows 10,11 and macOS 11.0 and newer.
 - [Github issues](https://github.com/SOOPLIVE/soop-studio/issues)
 - [Contact Us](https://sooplive.helpshift.com/hc/en/3-soop/contact-us/)
 
-## Community
+## License
 
 Copyright SOOP CO., LTD..
 
