@@ -8,21 +8,15 @@
 #include <QDialogButtonBox>
 
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
-class AFQNameDialog : public AFQRoundedDialogBase
+class AFQNameDialog : public AFTTopBaseDialog
 {
-
-#pragma region QT Field
     Q_OBJECT
-#pragma endregion QT Field
 
-#pragma region class initializer, destructor
 public:
     explicit AFQNameDialog(QWidget* parent = nullptr);
     ~AFQNameDialog();
-
-#pragma endregion class initializer, destructor
 
     // Returns true if user clicks OK, false otherwise
     // userTextInput returns string that user typed into dialog
@@ -34,16 +28,18 @@ public:
     // Returns true if user clicks OK, false otherwise
     // userTextInput returns string that user typed into dialog
     // userOptionReturn the checkbox was ticked user accepted
-    static bool
-        AskForNameWithOption(QWidget* parent, const QString& title,
-            const QString& text, std::string& userTextInput,
-            const QString& optionLabel, bool& optionChecked,
-            const QString& placeHolder = QString(""));
+    static bool AskForNameWithOption(QWidget* parent, const QString& title,
+                                     const QString& text, std::string& userTextInput,
+                                     const QString& optionLabel, bool& optionChecked,
+                                     const QString& placeHolder = QString(""));
+
+protected:
+    void showEvent(QShowEvent* event) override;
 
 private:
-    QLabel*     m_pLabelTitle;
+    QLabel* m_pLabelTitle = nullptr;
 
-    QLabel*     m_pLabel;
-    QLineEdit*  m_pUserText;
-    QCheckBox*  m_pCheckbox;
+    QLabel* m_pLabel = nullptr;
+    QLineEdit* m_pUserText = nullptr;
+    QCheckBox* m_pCheckbox = nullptr;
 };

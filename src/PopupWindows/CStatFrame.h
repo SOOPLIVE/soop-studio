@@ -12,13 +12,14 @@ class AFQStatWidget;
 class AFStatistics;
 enum class PCStatState;
 
-class AFQStatWidget : public AFCQMainBaseWidget
+class AFQStatWidget : public QWidget
 {
 #pragma region QT Field
 	Q_OBJECT
 
 signals:
 	void qsignalStatMouseLeave();
+	void qsignalCloseTriggered(int type);
 
 public slots:
 	void qslotReset();
@@ -26,8 +27,11 @@ public slots:
 	void qslotCPUState(PCStatState state);
 	void qslotDiskState(PCStatState state);
 	void qslotMemoryState(PCStatState state);
+	void qslotFPSState(PCStatState state);
+	void qslotRenderTimeState(PCStatState state);
 	void qslotSkippedFrameState(PCStatState state);
 	void qslotLaggedFrameState(PCStatState state);
+	void qslotCloseButtonTriggered();
 #pragma endregion QT Field
 
 #pragma region class initializer, destructor
@@ -61,7 +65,6 @@ private:
 #pragma region private var
 private:
 	Ui::AFQStatWidget* ui;
-	AFStatistics* m_Statistics = nullptr;
 
 	uint64_t m_streamLastBytesSent = 0;
 	uint64_t m_streamLastBytesSentTime = 0;

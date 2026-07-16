@@ -7,85 +7,84 @@
 #include <QByteArray>
 #include <QSslCipher>
 #include <QCryptographicHash>
-
-
-#include <json11.hpp>
-
-
+#include <QtConcurrent/QtConcurrent>
 
 #include "SBaseAuth.h"
+#include "SBroadInfo.h"
 
 
 #define IN
 #define OUT
 
-
-
+#define PLATFORM_SOOP           "SOOP"
+#define PLATFORM_TWITCH         "Twitch"
+#define PLATFORM_YOUTUBE        "Youtube"
+#define PLATFORM_CUSTOM_RTMP    "Custom RTMP"
 
 typedef std::unordered_map<std::string, AFBasicAuth*> tAUTH_MAP;  // key : uuid
 typedef std::unordered_map<std::string, int> tAUTH_CACHE_MAP;  // key : uuid
 
 class AFAuthManager final
 {
-#pragma region QT Field, CTOR/DTOR
 public:
-    static AFAuthManager& GetSingletonInstance()
-    {
-        static AFAuthManager* instance = nullptr;
-        if (instance == nullptr)
-            instance = new AFAuthManager;
-        
-        return *instance;
-    };
-    ~AFAuthManager();
-private:
-    // singleton constructor
     AFAuthManager() = default;
-    AFAuthManager(const AFAuthManager&) = delete;
-    AFAuthManager(/* rValue */AFAuthManager&& other) noexcept = delete;
-    AFAuthManager& operator=(const AFAuthManager&) = delete;
-    //
-#pragma endregion QT Field, CTOR/DTOR
+    ~AFAuthManager() = default;
 
-#pragma region public func
 public:
-//    void                                InitContext() { void; };
-//    void                                FinContext() { void; };
- 
     void                                LoadAllAuthed();
     void                                SaveAllAuthed();
-    
+
     void                                ClearCache();
     bool                                CacheAuth(bool main, AFBasicAuth cacheAuth);
+    bool                                CacheAuth(bool main, AFBasicAuth* cacheAuth);
+    void                                GetUuidFromCache(std::string platform, std::string& outUuid);
     void                                RemoveCachedAuth(const char* uuid);
     void                                FlushAuthCache();
 
     int                                 IsRegisterChannel(const char* uuid);
     void                                swapChannel(int newIndex, int oldIndex);
-
-    void ClearRegisterChannel() {
-        m_vecListRegChannel.clear();
-    };
+ 
+    void 								ClearRegisterChannel() { m_listRegChannel.clear(); };
 
     void                                RegisterChannel(const char* uuid, AFChannelData* pChannel);
+    void                                RemoveAllChannel(bool removeMain = true);
     void                                RemoveChannel(int indx);
     void                                RemoveMainChannel();
+    void                                RemoveChannel(std::string platform);
+    void                                RemoveChannel(AFChannelData* data);
     
     bool                                CacheMain(AFBasicAuth cacheAuth);
-    void                                FlushAuthMain();
-    
+
+    /// SOOP
+    bool                                SetSoopCookie(std::string cookie);
+    std::string                         SoopCookie();
+    bool                                RefreshCookie();
+    bool                                VodSaveAvailableFromAPI();
+    bool                                VodRequestVodSave(std::string title, std::string hashtag);
+    bool                                RequestBroadInfoAPI(bool initStudio = false);
+    bool                                RequestStickerItemInfo();
+    void                                SendSoopBroadInfoSetting(bool sendSubscribe = false);
+    std::string                         MergeHashTag();
+
+    void                                SendCheckBroadStart(QObject* receiver, const char* slot);
+    void                                SendCheckBroading(QObject* receiver, const char* slot);
+
+    std::chrono::steady_clock::time_point    GetMinsimCheckStartTime() { return m_minsim_check_start_time; }
+    void                                     SetMinsimCheckStartTime(std::chrono::steady_clock::time_point time) { m_minsim_check_start_time = time; }
+    void                                     InitMinsimCheckStartTime() { m_minsim_check_start_time = std::chrono::steady_clock::time_point{}; }
+
+    std::string                         GetMinsimCheckThemeInfo() { return m_minsim_check_theme_log_type; }
+    void                                SetMinsimCheckThemeInfo(std::string str_info) { m_minsim_check_theme_log_type = str_info; }
+
+    /// SOOP
+
     std::string                         CreateUrlProfileImg(AFChannelData* pChannelData);
+    bool                                GetChannelID(const char* platform, std::string& channelID);
     bool                                GetChannelData(int viewIndx, AFChannelData*& outRefDataPointer);
     bool                                GetChannelData(void* pObjOBSService, AFChannelData*& outRefDataPointer);
+    bool                                GetChannelData(std::string platform, AFChannelData*& outRefDataPointer);
     bool                                GetMainChannelData(AFChannelData*& outRefDataPointer);
-    
-    bool                                FindRTMPKey(const char* channelID, OUT std::string& key);
-    bool                                FindRTMPUrl(const char* channelID, OUT std::string& url);
-    
-    bool                                GetRTMPKeyGlobalSoopMainAuth(OUT std::string& key);
-    bool                                GetRTMPUrlGlobalSoopMainAuth( OUT std::string& url);
-    
-    
+        
     bool                                IsAuthed(const char* uuid);
     bool                                IsCachedAuth(const char* uuid);
     
@@ -93,75 +92,75 @@ public:
     std::vector<void*>*                 GetContainerDeferrdDelObj();
     
     
-    int                                 GetCntChannel() { return m_vecListRegChannel.size(); };
-    bool                                IsHaveLoadedAuth() { return m_bLoaded; };
+    int                                 GetCntChannel() { return m_listRegChannel.size(); };
+    bool                                IsHaveLoadedAuth() { return m_loaded; };
 
-    bool                                IsTwitchRegistered() { return m_bTwitchRegistered; };
-    bool                                IsYoutubeRegistered() { return m_bYoutubeRegistered; };
-    bool                                IsSoopRegistered() { return m_bSoopRegistered; };
-    bool                                IsSoopGlobalRegistered() { return m_bSoopGlobalRegistered; };
-    void                                SetTwitchRegistered(bool regi) { SetTwitchPreregistered(regi);  m_bTwitchRegistered = regi; };
-    void                                SetYoutubeRegistered(bool regi) { SetYoutubePreregistered(regi);  m_bYoutubeRegistered = regi; };
-    void                                SetSoopRegistered(bool regi) { SetSoopPreregistered(regi);  m_bSoopRegistered = regi; };
-    void                                SetSoopGlobalRegistered(bool regi) { SetSoopGlobalPreregistered(regi);  m_bSoopGlobalRegistered = regi; };
-
-    bool                                IsTwitchPreregistered() { return m_bTwitchPreregistered; };
-    bool                                IsYoutubePreregistered() { return m_bYoutubePreregistered; };
-    bool                                IsSoopPreregistered() { return m_bSoopPreregistered; };
-    bool                                IsSoopGlobalPreregistered() { return m_bSoopGlobalPreregistered; };
-    void                                SetTwitchPreregistered(bool regi) { m_bTwitchPreregistered = regi; };
-    void                                SetYoutubePreregistered(bool regi) { m_bYoutubePreregistered = regi; };
-    void                                SetSoopPreregistered(bool regi) { m_bSoopPreregistered = regi; };
-    void                                SetSoopGlobalPreregistered(bool regi) { m_bSoopGlobalPreregistered = regi; };
+    bool                                IsTwitchRegistered() { return m_twitchRegistered; };
+    bool                                IsYoutubeRegistered() { return m_youtubeRegistered; };
+    bool                                IsSoopRegistered() { return m_soopRegistered; };
+    bool                                IsSoopStreaming();
+    void                                SetTwitchRegistered(bool regi) { m_twitchRegistered = regi; };
+    void                                SetYoutubeRegistered(bool regi) { m_youtubeRegistered = regi; };
+    void                                SetSoopRegistered(bool regi) { m_soopRegistered = regi; };
     
-    void                                SetSoopGlobalClientID(std::string value) { m_strMainAuthClientID = value; };
-    std::string                         GetSoopGlobalClientID() { return m_strMainAuthClientID; };
-#pragma endregion public func
+    //KR BroadInfo
+    void                                InitSoopBroadInfo();
+    void                                DeleteSoopBroadInfo();
+    bool                                LoadSoopBroadInfo();    
+    bool                                LoadSoopBroadInfo(const char* json_data);
+    void                                LoadSoopStreamerInfo();
+    void                                SaveSoopBroadInfo();
+    AFQBroadInfo*                       GetSoopBroadInfo() { return m_pSoopBroadInfo; }
 
-#pragma region private func
-private:
-    std::string                         _APIProfileImgSoopGlobal(AFBasicAuth* pAuthedData);
+    //KR BroadInfo
+
+    bool                                GetSoopChatUrl(std::string& chaturl);
+    bool                                GetTwitchChatUrl(std::string& moderation_tools_url, std::string& chaturl);
+    bool                                GetYoutubeChatUrl(std::string chat_id, std::string api_chat_id, std::string& chatUrl);
+
+    std::string                         CategoryNumberString(int category);
+    std::string                         FullCategoryName(int category);
+    bool                                ReceiveCategoryString(int categoryNum, std::string& categoryString);
+    bool                                ReceiveCategoryNum(std::string categoryString, int& categoryNumString);
+
+    void                                TwitchTryLoadSecondaryUIPanes();
+    QMap<std::string, std::string>      GetLiveChannels();
+    void                                OffLiveExceptSoop();
+
+    int64_t                             GetServerTime();
+    void                                GetAIManagerToken(QObject* receiver, const char* slot);
+
+private: 
     std::string                         _APIProfileImgSoop(AFBasicAuth* pAuthedData);
     std::string                         _APIProfileImgTwitch(AFBasicAuth* pAuthedData);
     std::string                         _APIProfileImgYoutube(AFBasicAuth* pAuthedData);
 
-    
-
     std::string                         _GetPathSaveFile();
     std::string                         _ToString(uint64_t value);
-    json11::Json                        _AuthObjToJson(AFBasicAuth* pAuth, AFChannelData* pChannel);
-    AFBasicAuth                         _JsonObjToAuth(json11::Json& item);
     
     bool                                _CheckInvalidAuth(AFBasicAuth& auth);
-#pragma endregion private func
-#pragma region public member var
 
-#pragma endregion public member var
-#pragma region private member var
+    void                                _InitPrivateKey(OUT QByteArray& HashedKey,
+                                                        OUT QByteArray& initVector);
+    //
 private:
-    std::string                         m_strMainAuthClientID;
-    AFBasicAuth*                        m_CacheMainGlobalSoop = nullptr;
-    AFChannelData*                      m_ChannelMainGlobalSoop = nullptr;
+    AFBasicAuth*                        m_pCacheMainSoop = nullptr;
+    AFChannelData*                      m_pChannelMainSoop = nullptr;
+    AFQBroadInfo*                       m_pSoopBroadInfo = nullptr;
     
+    int                                 m_indxLastCache = -1;
+    std::vector<AFBasicAuth*>           m_cacheAuths;
+    tAUTH_CACHE_MAP                     m_cacheAuthMap;
     
-    int                                 m_IndxLastCache = -1;
-    std::vector<AFBasicAuth*>           m_vecCacheAuth;
-    tAUTH_CACHE_MAP                     m_mapCacheAuth;
+    std::vector<AFChannelData*>         m_listRegChannel;
     
-    std::vector<AFChannelData*>         m_vecListRegChannel;
-    
-    
-    std::vector<void*>                  m_vecDeferredDeleteQtPixmap;
-    
-    bool                                m_bLoaded = false;
-    bool                                m_bTwitchRegistered = false;
-    bool                                m_bYoutubeRegistered = false;
-    bool                                m_bSoopRegistered = false;
-    bool                                m_bSoopGlobalRegistered = false;
+    std::vector<void*>                  m_deferredDeleteQtPixmap;
 
-    bool                                m_bTwitchPreregistered = false;
-    bool                                m_bYoutubePreregistered = false;
-    bool                                m_bSoopPreregistered = false;
-    bool                                m_bSoopGlobalPreregistered = false;
-#pragma endregion private member var
+    bool                                m_loaded = false;
+    bool                                m_twitchRegistered = false;
+    bool                                m_youtubeRegistered = false;
+    bool                                m_soopRegistered = false;
+
+    std::chrono::steady_clock::time_point       m_minsim_check_start_time{};
+    std::string                                 m_minsim_check_theme_log_type = "default";
 };

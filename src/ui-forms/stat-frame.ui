@@ -7,25 +7,25 @@
     <x>0</x>
     <y>0</y>
     <width>600</width>
-    <height>630</height>
+    <height>549</height>
    </rect>
   </property>
   <property name="sizePolicy">
-   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
     <horstretch>0</horstretch>
     <verstretch>0</verstretch>
    </sizepolicy>
   </property>
   <property name="minimumSize">
    <size>
-    <width>600</width>
-    <height>630</height>
+    <width>0</width>
+    <height>0</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>600</width>
-    <height>630</height>
+    <width>16777215</width>
+    <height>16777215</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -89,127 +89,6 @@
       <property name="bottomMargin">
        <number>0</number>
       </property>
-      <item>
-       <widget class="QWidget" name="widget_TitleBar" native="true">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>37</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>16777215</width>
-          <height>37</height>
-         </size>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayout">
-         <property name="spacing">
-          <number>6</number>
-         </property>
-         <property name="leftMargin">
-          <number>16</number>
-         </property>
-         <property name="topMargin">
-          <number>6</number>
-         </property>
-         <property name="rightMargin">
-          <number>8</number>
-         </property>
-         <property name="bottomMargin">
-          <number>6</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="label_Title">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>24</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>16777215</width>
-             <height>24</height>
-            </size>
-           </property>
-           <property name="text">
-            <string>Basic.Stats</string>
-           </property>
-           <property name="labelType" stdset="0">
-            <string>labelTitle</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <spacer name="horizontalSpacer">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>1</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item>
-          <widget class="QPushButton" name="pushButton_Close">
-           <property name="minimumSize">
-            <size>
-             <width>24</width>
-             <height>24</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>24</width>
-             <height>24</height>
-            </size>
-           </property>
-           <property name="text">
-            <string/>
-           </property>
-           <property name="iconSize">
-            <size>
-             <width>11</width>
-             <height>11</height>
-            </size>
-           </property>
-           <property name="buttonType" stdset="0">
-            <string>closeButton</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="Line" name="line_TitleDivider">
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>1</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>16777215</width>
-          <height>1</height>
-         </size>
-        </property>
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-       </widget>
-      </item>
       <item>
        <widget class="QWidget" name="widget_PCResource" native="true">
         <property name="sizePolicy">
@@ -275,6 +154,9 @@
            <property name="text">
             <string>Basic.Stats.PCResource</string>
            </property>
+           <property name="labelType" stdset="0">
+            <string>statTitle</string>
+           </property>
           </widget>
          </item>
          <item row="0" column="1">
@@ -319,7 +201,7 @@
                <number>0</number>
               </property>
               <property name="topMargin">
-               <number>0</number>
+               <number>3</number>
               </property>
               <property name="rightMargin">
                <number>0</number>
@@ -378,6 +260,9 @@
              <property name="text">
               <string>Network : </string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -402,6 +287,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -462,7 +350,7 @@
                <number>0</number>
               </property>
               <property name="topMargin">
-               <number>0</number>
+               <number>3</number>
               </property>
               <property name="rightMargin">
                <number>0</number>
@@ -521,6 +409,9 @@
              <property name="text">
               <string>CPU</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -545,6 +436,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -605,7 +499,7 @@
                <number>0</number>
               </property>
               <property name="topMargin">
-               <number>0</number>
+               <number>3</number>
               </property>
               <property name="rightMargin">
                <number>0</number>
@@ -664,6 +558,9 @@
              <property name="text">
               <string>Disk</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -688,6 +585,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -748,7 +648,7 @@
                <number>0</number>
               </property>
               <property name="topMargin">
-               <number>0</number>
+               <number>3</number>
               </property>
               <property name="rightMargin">
                <number>0</number>
@@ -807,6 +707,9 @@
              <property name="text">
               <string>Memory</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -831,6 +734,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -905,6 +811,9 @@
            <property name="text">
             <string>Basic.Stats.FrameResource</string>
            </property>
+           <property name="labelType" stdset="0">
+            <string>statTitle</string>
+           </property>
           </widget>
          </item>
          <item row="0" column="1">
@@ -918,6 +827,70 @@
            <property name="bottomMargin">
             <number>4</number>
            </property>
+           <item alignment="Qt::AlignHCenter|Qt::AlignVCenter">
+            <widget class="QWidget" name="widget_FPSState" native="true">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>16</width>
+               <height>16</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>16</width>
+               <height>16</height>
+              </size>
+             </property>
+             <layout class="QHBoxLayout" name="horizontalLayout_11">
+              <property name="spacing">
+               <number>0</number>
+              </property>
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>3</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="label_FPSState">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>6</width>
+                  <height>6</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>6</width>
+                  <height>6</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
            <item>
             <widget class="QLabel" name="label_FPS">
              <property name="sizePolicy">
@@ -940,6 +913,9 @@
              </property>
              <property name="text">
               <string>Basic.Stats.FPS</string>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
              </property>
             </widget>
            </item>
@@ -965,6 +941,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1022,7 +1001,7 @@
                <number>0</number>
               </property>
               <property name="topMargin">
-               <number>0</number>
+               <number>3</number>
               </property>
               <property name="rightMargin">
                <number>0</number>
@@ -1081,6 +1060,9 @@
              <property name="text">
               <string>Basic.Stats.SkippedFrames</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -1105,6 +1087,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1134,6 +1119,70 @@
            <property name="bottomMargin">
             <number>4</number>
            </property>
+           <item alignment="Qt::AlignHCenter|Qt::AlignVCenter">
+            <widget class="QWidget" name="widget_RenderTimeState" native="true">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>16</width>
+               <height>16</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>16</width>
+               <height>16</height>
+              </size>
+             </property>
+             <layout class="QHBoxLayout" name="horizontalLayout_12">
+              <property name="spacing">
+               <number>0</number>
+              </property>
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>3</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="label_RenderTimeSState">
+                <property name="sizePolicy">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                  <horstretch>0</horstretch>
+                  <verstretch>0</verstretch>
+                 </sizepolicy>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>6</width>
+                  <height>6</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>6</width>
+                  <height>6</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string/>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
            <item>
             <widget class="QLabel" name="label_FrameRenderingAvg">
              <property name="sizePolicy">
@@ -1156,6 +1205,9 @@
              </property>
              <property name="text">
               <string>Basic.Stats.AverageTimeToRender</string>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
              </property>
             </widget>
            </item>
@@ -1181,6 +1233,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1238,7 +1293,7 @@
                <number>0</number>
               </property>
               <property name="topMargin">
-               <number>0</number>
+               <number>3</number>
               </property>
               <property name="rightMargin">
                <number>0</number>
@@ -1297,6 +1352,9 @@
              <property name="text">
               <string>Basic.Stats.MissedFrames</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -1321,6 +1379,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1395,6 +1456,9 @@
            <property name="text">
             <string>Basic.Stats.StreamResource</string>
            </property>
+           <property name="labelType" stdset="0">
+            <string>statTitle</string>
+           </property>
           </widget>
          </item>
          <item row="0" column="1">
@@ -1430,6 +1494,9 @@
              </property>
              <property name="text">
               <string>Basic.Stats.Output.Stream</string>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statMidTitle</string>
              </property>
             </widget>
            </item>
@@ -1469,6 +1536,9 @@
              <property name="text">
               <string>Basic.Stats.DroppedFrames</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -1493,6 +1563,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1545,6 +1618,9 @@
              <property name="text">
               <string>Basic.Stats.MegabytesSent</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -1569,6 +1645,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1621,6 +1700,9 @@
              <property name="text">
               <string>Basic.Stats.Bitrate</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -1645,6 +1727,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1697,6 +1782,9 @@
              <property name="text">
               <string>Basic.Stats.Output.Recording</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statMidTitle</string>
+             </property>
             </widget>
            </item>
           </layout>
@@ -1735,6 +1823,9 @@
              <property name="text">
               <string>Basic.Stats.DroppedFrames</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -1759,6 +1850,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1811,6 +1905,9 @@
              <property name="text">
               <string>Basic.Stats.MegabytesSent</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -1835,6 +1932,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1887,6 +1987,9 @@
              <property name="text">
               <string>Basic.Stats.Bitrate</string>
              </property>
+             <property name="labelType" stdset="0">
+              <string>statSubTitle</string>
+             </property>
             </widget>
            </item>
            <item>
@@ -1911,6 +2014,9 @@
              </property>
              <property name="text">
               <string/>
+             </property>
+             <property name="labelType" stdset="0">
+              <string>statValue</string>
              </property>
             </widget>
            </item>
@@ -1946,28 +2052,9 @@
        </spacer>
       </item>
       <item>
-       <widget class="Line" name="line_BottomDivider">
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>1</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>16777215</width>
-          <height>1</height>
-         </size>
-        </property>
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QWidget" name="widget_bottomArea" native="true">
+       <widget class="QFrame" name="buttonBoxFrame">
         <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>

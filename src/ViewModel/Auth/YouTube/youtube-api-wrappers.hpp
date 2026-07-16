@@ -39,7 +39,6 @@ struct BroadcastDescription {
 };
 
 bool IsYouTubeService(const std::string &service);
-bool IsUserSignedIntoYT();
 
 class AFAddStreamWidget;
 
@@ -89,15 +88,15 @@ public:
 	bool FindBroadcast(const QString &id, json11::Json &json_out);
 	bool FindStream(const QString &id, json11::Json &json_out);
 
-	QString GetLastError() { return lastErrorMessage; };
+	QString GetLastError() { return m_lastErrorMessage; };
 	bool GetTranslatedError(QString &error_message);
 
 	virtual void GetAuthInfo(AFAddStreamWidget* widget) override;
 
 private:
-	QString broadcast_id;
+	QString m_broadcastId;
 
-	int lastError = 0;
-	QString lastErrorMessage;
-	QString lastErrorReason;
+	int m_lastError = 0;
+	QString m_lastErrorMessage;
+	QString m_lastErrorReason;
 };

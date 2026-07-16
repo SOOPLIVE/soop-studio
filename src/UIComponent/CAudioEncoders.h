@@ -1,7 +1,4 @@
-﻿// [copy-obs]
-
-
-// [audio-encoders.hpp]
+// [copy-obs] [audio-encoders.hpp]
 #pragma once
 
 #include <obs.hpp>

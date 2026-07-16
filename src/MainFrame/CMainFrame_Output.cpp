@@ -1,316 +1,201 @@
 ﻿#include "CMainFrame.h"
 #include "ui_aneta-main-frame.h"
 
-#include "Application/CApplication.h"
-
 #include <QStyleOption>
 #include <QWindow>
 #include <QMessageBox>
 #include <qcheckbox.h>
 #include <qfileinfo.h>
 
-#include "CUIValidation.h"
-#include "Common/SettingsMiscDef.h"
-#include "include/qt-wrapper.h"
+#include "qt-wrappers.hpp"
+#include "util/dstr.hpp"
+
+#include "Application/CApplication.h"
+
+#include "ui-validation.hpp"
 #include "libavformat/avformat.h"
 
+#include "Common/SettingsMiscDef.h"
+
+#include "CoreModel/Statistics/CStatistics.h"
 #include "CoreModel/Service/CService.h"
+#include "CoreModel/OBSOutput/COutput.h"
+#include "CoreModel/OBSOutput/COBSOutputContext.h"
+#include "CoreModel/Video/CVideo.h"
+#include "CoreModel/Auth/CAuthManager.h"
+
 #include "UIComponent/CMessageBox.h"
+
+#include "CoreModel/Profile/CProfile.h"
+
 #include "PopupWindows/CRemuxFrame.h"
+#include "PopupWindows/SettingPopup/CSettingUtils.h"
 
-// public function
-void AFMainFrame::OBSStreamStarting(void* data, calldata_t* params)
+#include "Output/COutput.h"
+
+
+void AFMainFrame::setResolution()
 {
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    obs_output_t* obj = (obs_output_t*)calldata_ptr(params, "output");
+    AFQBroadInfo* pSoopBroadInfo = AUTH_CONTEXT.GetSoopBroadInfo();
 
-    int sec = (int)obs_output_get_active_delay(obj);
-    if(sec == 0)
-        return;
+    if (pSoopBroadInfo && !pSoopBroadInfo->Allow1440P())
+    {
+        OBSData advEncorderData;
+        advEncorderData = AFProfileUtil::GetDataFromJsonFile("streamEncoder.json");
 
-    output->delayActive = true;
-    QMetaObject::invokeMethod(output->main, "qslotStreamDelayStarting", Q_ARG(void*, output), Q_ARG(int, sec));
+        auto config = ACTIVECONFIG;
+        //
+        int outCx = config_get_uint(config, "Video", "OutputCX");
+        int outCy = config_get_uint(config, "Video", "OutputCY");
+        int baseCx = config_get_uint(config, "Video", "BaseCX");
+        int baseCy = config_get_uint(config, "Video", "BaseCY");
+        int vBitrate = config_get_uint(config, "SimpleOutput", "VBitrate");
+        int vFFBitrate = obs_data_get_int(advEncorderData, "bitrate");
+
+        bool validResolution = (outCx > 1920 || outCy > 1080) ? false : true;
+        if (!validResolution &&
+            ((outCx == 720 && outCy == 1280) || (outCx == 1600 && outCy == 1200)))
+        {
+            validResolution = true;
+        }
+
+        bool validBitrate = vBitrate > 8000 ? false : true;
+        bool validFFBitrate = vFFBitrate > 8000 ? false : true;
+
+        if (!validResolution) {
+            baseCx = outCx = 1920;
+            baseCy = outCy = 1080;
+
+            config_set_uint(config, "Video", "OutputCX", outCx);
+            config_set_uint(config, "Video", "OutputCY", outCy);
+
+            config_set_uint(config, "Video", "BaseCX", baseCx);
+            config_set_uint(config, "Video", "BaseCY", baseCy);
+        }
+        if (!validBitrate) {
+            vBitrate = 8000;
+            config_set_uint(config, "SimpleOutput", "VBitrate", vBitrate);
+        }
+
+        if (!validFFBitrate) {
+            vFFBitrate = 8000;
+            obs_data_set_int(advEncorderData, "bitrate", vFFBitrate);
+            AFProfileUtil::SetDataToJsonFile("streamEncoder.json", advEncorderData);
+        }
+
+        config_save_safe(config, "tmp", nullptr);
+        AFVideoUtil::ResetVideo();
+    }
 }
-void AFMainFrame::OBSStreamStopping(void* data, calldata_t* params)
+
+void AFMainFrame::qslotRefreshMainResourceText()
 {
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    obs_output_t* obj = (obs_output_t*)calldata_ptr(params, "output");
+    struct obs_video_info ovi = {};
+    obs_get_video_info(&ovi);
+    double obsFPS = (double)ovi.fps_num / (double)ovi.fps_den;
 
-    int sec = (int)obs_output_get_active_delay(obj);
-    if(sec == 0)
-        QMetaObject::invokeMethod(output->main, "qslotStreamStopping", Q_ARG(void*, output));
-    else
-        QMetaObject::invokeMethod(output->main, "qslotStreamDelayStopping",
-                                  Q_ARG(void*, output), Q_ARG(int, sec));
+    double fps = STATISTICS.GetCurFPS();
+    QString str = QString("%1 / %2 FPS").arg(QString::number(fps, 'f', 2)).arg(QString::number(obsFPS, 'f', 2));
+    ui->label_ResourceValue->setText(str);
 }
-void AFMainFrame::OBSStartStreaming(void* data, calldata_t* /* params */)
+
+void AFMainFrame::qslotResourceState(PCStatState state) 
 {
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    output->streamingActive = true;
-    QMetaObject::invokeMethod(output->main, "qslotStreamingStart",
-                              Q_ARG(void*, output));
-}
-void AFMainFrame::OBSStopStreaming(void* data, calldata_t* params)
-{
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    int code = (int)calldata_int(params, "code");
-    const char* last_error = calldata_string(params, "last_error");
-
-    QString arg_last_error = QString::fromUtf8(last_error);
-
-    output->streamingActive = false;
-    output->delayActive = false;
-
-    QMetaObject::invokeMethod(output->main, "qslotStreamingStop",
-                              Q_ARG(void*, output),
-                              Q_ARG(int, code),
-                              Q_ARG(QString, arg_last_error));
-}
-void AFMainFrame::OBSStartRecording(void* data, calldata_t* /* params */)
-{
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-
-    output->recordingActive = true;
-
-    QMetaObject::invokeMethod(output->main, "qslotRecordingStart");
-}
-void AFMainFrame::OBSStopRecording(void* data, calldata_t* params)
-{
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    int code = (int)calldata_int(params, "code");
-    const char* last_error = calldata_string(params, "last_error");
-
-    QString arg_last_error = QString::fromUtf8(last_error);
-
-    output->recordingActive = false;
-
-    QMetaObject::invokeMethod(output->main, "qslotRecordingStop",
-                              Q_ARG(int, code),
-                              Q_ARG(QString, arg_last_error));
-}
-void AFMainFrame::OBSRecordStopping(void* data, calldata_t* /* params */)
-{
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    QMetaObject::invokeMethod(output->main, "qslotRecordStopping");
-}
-void AFMainFrame::OBSRecordFileChanged(void* data, calldata_t* params)
-{
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    const char* next_file = calldata_string(params, "next_file");
-    QString arg_last_file = QString::fromUtf8(output->lastRecordingPath.c_str());
-    QMetaObject::invokeMethod(output->main, "qslotRecordingFileChanged", Q_ARG(QString, arg_last_file));
-    output->lastRecordingPath = next_file;
-}
-void AFMainFrame::OBSStartReplayBuffer(void* data, calldata_t* /* params */)
-{
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-
-    output->replayBufferActive = true;
-
-    QMetaObject::invokeMethod(output->main, "qslotReplayBufferStart");
-}
-void AFMainFrame::OBSStopReplayBuffer(void* data, calldata_t* params)
-{
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    int code = (int)calldata_int(params, "code");
-
-    output->replayBufferActive = false;
-
-    QMetaObject::invokeMethod(output->main, "qslotReplayBufferStop", Q_ARG(int, code));
-}
-void AFMainFrame::OBSReplayBufferStopping(void* data, calldata_t* /* params */)
-{
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    QMetaObject::invokeMethod(output->main, "qslotReplayBufferStopping");
-}
-void AFMainFrame::OBSReplayBufferSaved(void* data, calldata_t* /* params */)
-{
-    AFBasicOutputHandler* output = static_cast<AFBasicOutputHandler*>(data);
-    QMetaObject::invokeMethod(output->main, "qslotReplayBufferSaved", Qt::QueuedConnection);
-}
-//
-void AFMainFrame::OBSErrorMessageBox(const char* errorMsg, const char* defaultMsg, const char* errorLabel)
-{
-    QWidget* main  = AFMainDynamicComposit::Get();
-    //
-    QString error_reason;
-    if(errorMsg)
-        error_reason = QT_UTF8(errorMsg);
-    else
-        error_reason = QTStr(defaultMsg);
-    //
-    AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, main, "", errorMsg);
+    SetPCStateIconStyle(ui->label_ResourceIcon, state);
 }
 
-void AFMainFrame::qslotRefreshNetworkText() 
-{
-    int network = App()->GetStatistics()->GetNetworkState();
-    QString str = QString::number(network) + QStringLiteral("%");
-    ui->label_NetworkValue->setText(str);
-}
-
-void AFMainFrame::qslotNetworkState(PCStatState state) {
-    SetPCStateIconStyle(ui->label_NetworkIcon, state);
-}
-// public qslot
-// streaming
 void AFMainFrame::qslotStartStreaming()
 {
-    if (IsStreamActive())
+    if (AFOutputUtil::IsStreamActive())
         return;
+ 
+    auto& auth = AUTH_CONTEXT;
+    auto userConfig = USERCONFIG;
 
-    if(m_disableOutputsRef)
-        return;
-
-    auto& authManager = AFAuthManager::GetSingletonInstance();
-
-    AFChannelData* mainChannel = nullptr;
-
-    if (authManager.GetMainChannelData(mainChannel))
-    {
-        if (mainChannel->bIsStreaming)
-        {
-            OBSDataAutoRelease settingData = obs_data_create();
-            obs_data_set_bool(settingData, "bwtest", false);
-            obs_data_set_string(settingData, "key", mainChannel->pAuthData->strKeyRTMP.c_str());
-            obs_data_set_string(settingData, "server", mainChannel->pAuthData->strUrlRTMP.c_str());
-            obs_data_set_bool(settingData, "use_auth", false); 
-            obs_service_t* obsService = obs_service_create("rtmp_common", "default_service", settingData, nullptr);
-            mainChannel->pObjOBSService = obsService;
-            PrepareStreamingOutput(0, (obs_service_t*)mainChannel->pObjOBSService);
-        }
+    int nMinsimCheckCnt = config_get_int(userConfig, "SARSA", "UseMinsimCheckCnt");
+    if (nMinsimCheckCnt > 0) {
+        auto startTime = std::chrono::steady_clock::now();
+        auth.SetMinsimCheckStartTime(startTime);
     }
 
-    int cntOfAccount = authManager.GetCntChannel();
-    int handlerIdx = 0;
+    bool streamingStart = m_pMainOutput->StartStreamingOutputs();
+    if (!streamingStart)
+    {
+        ToggleBroadTimerUI(false);
+        ChangeStreamStateUI(true, false, "LIVE", 77);
+        return;
+    }
 
-    for (int idx = 0; idx < cntOfAccount; idx++) {
-        AFChannelData* tmpChannel = nullptr;
-        authManager.GetChannelData(idx, tmpChannel);
-        if (!tmpChannel || !tmpChannel->pAuthData)
-            continue;
-        if (tmpChannel->bIsStreaming) {
-            OBSDataAutoRelease settingData = obs_data_create();
-            obs_data_set_bool(settingData, "bwtest", false);
-            obs_data_set_string(settingData, "key", tmpChannel->pAuthData->strKeyRTMP.c_str());
-            obs_data_set_string(settingData, "server", tmpChannel->pAuthData->strUrlRTMP.c_str());
-            if (!tmpChannel->pAuthData->strCustomID.empty()) {
-                obs_data_set_bool(settingData, "use_auth", true);
-                obs_data_set_string(settingData, "username", tmpChannel->pAuthData->strCustomID.c_str());
-                if (!tmpChannel->pAuthData->strCustomPassword.empty())
-                    obs_data_set_string(settingData, "password", tmpChannel->pAuthData->strCustomPassword.c_str());
-            }
-            else
-                obs_data_set_bool(settingData, "use_auth", false);
-
-            // set service
-            obs_service_t* obsService = obs_service_create("rtmp_common", "default_service", settingData, nullptr);
-            tmpChannel->pObjOBSService = obsService;
-
-            handlerIdx++;
-            PrepareStreamingOutput(handlerIdx, (obs_service_t*)tmpChannel->pObjOBSService); 
-        }
-    }    
-
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_STREAMING_STARTING);
+    OnEvent(OBS_FRONTEND_EVENT_STREAMING_STARTING);
 
     qslotSaveProject();
 
-    _ChangeStreamState(false, false, Str("Basic.Main.Connecting"), 110);
+    emit StreamingStarting(false);
 
-    OUTPUT_HANDLER_LIST::iterator it = m_outputHandlers.begin();
-    for (; it != m_outputHandlers.end(); ++it) {
-        if ((*it).first) {
-            m_streamingOuputRef++;
-            if (!StartStreamingOutput((*it).first)) {
-                AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
-                    QTStr("Output.Streaming.Failed"),
-                    QTStr("Output.StartStreaming.Failed"));
-            }
-        }
-    }
-    
-    auto& statusLogManager = AFStatusLogManager::GetSingletonInstance();
-    statusLogManager.SendLogStartBroad();
+    bool recordWhenStreaming = config_get_bool(USERCONFIG, "BasicWindow", "RecordWhenStreaming");
 
-    SetOutputHandler();
-
-    bool recordWhenStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "RecordWhenStreaming");
     if(recordWhenStreaming)
         qslotStartRecording();
 
-    bool replayBufferWhileStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "ReplayBufferWhileStreaming");
+    bool replayBufferWhileStreaming = config_get_bool(userConfig, "BasicWindow", "ReplayBufferWhileStreaming");
     if(replayBufferWhileStreaming)
         qslotStartReplayBuffer();
 
-    _ToggleBroadTimer(true);
+    ToggleBroadTimerUI(true);
+
+    BroadStatusCheckTimerStart();
 
     emit qsignalToggleUseVideo(true);
 
-    os_atomic_set_bool(&m_streaming_active, true);
+    os_atomic_set_bool(&OUTPUT_CONTEXT.m_streamingActive, true);
 }
 
 void AFMainFrame::qslotStopStreaming()
 {
     qslotSaveProject();
 
-    m_streamingStopping = true;
-    m_statusbar.ClearAllSignals();
+    m_pMainOutput->GetStatusBarTemp().ClearAllSignals();
 
-    OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-        if (outputIter->second->StreamingActive()) {
-            outputIter->second->StopStreaming(m_streamingStopping);
-            obs_service_release(outputIter->first);
-            outputIter->first = nullptr;
-        }
-    }
+    AFOutputUtil::StopStreaming();
 
     OnDeactivate();
 
-    bool recordWhenStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "RecordWhenStreaming");
-    bool keepRecordingWhenStreamStops =
-        config_get_bool(GetGlobalConfig(), "BasicWindow", "KeepRecordingWhenStreamStops");
+    auto userConfig = USERCONFIG;
+    //
+    bool recordWhenStreaming = config_get_bool(userConfig, "BasicWindow", "RecordWhenStreaming");
+    bool keepRecordingWhenStreamStops = config_get_bool(userConfig, "BasicWindow", "KeepRecordingWhenStreamStops");
     if(!keepRecordingWhenStreamStops)
         qslotStopRecording();
 
-    bool replayBufferWhileStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "ReplayBufferWhileStreaming");
-    bool keepReplayBufferStreamStops =
-        config_get_bool(GetGlobalConfig(), "BasicWindow", "KeepReplayBufferStreamStops");
+    bool replayBufferWhileStreaming = config_get_bool(userConfig, "BasicWindow", "ReplayBufferWhileStreaming");
+    bool keepReplayBufferStreamStops = config_get_bool(userConfig, "BasicWindow", "KeepReplayBufferStreamStops");
     if(!keepReplayBufferStreamStops)
         qslotStopReplayBuffer();
 
-    _ToggleBroadTimer(false);
+    ToggleBroadTimerUI(false);
     emit qsignalToggleUseVideo(false);
+    MAINFRAME_UI->pushButton_Broad->setProperty("IsLive", false);
 
-    os_atomic_set_bool(&m_streaming_active, false);
+    os_atomic_set_bool(&OUTPUT_CONTEXT.m_streamingActive, false);
 }
 
 void AFMainFrame::qslotForceStopStreaming()
 {
     qslotSaveProject();
 
-    OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-        if (outputIter->second->StreamingActive()) {
-            outputIter->second->StopStreaming(true);
-            obs_service_release(outputIter->first);
-            outputIter->first = nullptr;
-        }
-    }
+    AFOutputUtil::StopForceStreaming();
 
     OnDeactivate();
 
-    bool recordWhenStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "RecordWhenStreaming");
-    bool keepRecordingWhenStreamStops =
-        config_get_bool(GetGlobalConfig(), "BasicWindow", "KeepRecordingWhenStreamStops");
+    auto userConfig = USERCONFIG;
+    //
+    bool recordWhenStreaming = config_get_bool(userConfig, "BasicWindow", "RecordWhenStreaming");
+    bool keepRecordingWhenStreamStops = config_get_bool(userConfig, "BasicWindow", "KeepRecordingWhenStreamStops");
     if(!keepRecordingWhenStreamStops)
         qslotStopRecording();
 
-    bool replayBufferWhileStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "ReplayBufferWhileStreaming");
-    bool keepReplayBufferStreamStops =
-        config_get_bool(GetGlobalConfig(), "BasicWindow", "KeepReplayBufferStreamStops");
+    bool replayBufferWhileStreaming = config_get_bool(userConfig, "BasicWindow", "ReplayBufferWhileStreaming");
+    bool keepReplayBufferStreamStops = config_get_bool(userConfig, "BasicWindow", "KeepReplayBufferStreamStops");
     if(replayBufferWhileStreaming && !keepReplayBufferStreamStops)
         qslotStopReplayBuffer();
 
@@ -319,6 +204,7 @@ void AFMainFrame::qslotForceStopStreaming()
 
 void AFMainFrame::qslotStreamDelayStarting(void* output, int sec)
 {
+    emit StreamingStarted(true);
     /*
     if(!startStreamMenu.isNull())
         startStreamMenu->deleteLater();
@@ -329,12 +215,18 @@ void AFMainFrame::qslotStreamDelayStarting(void* output, int sec)
     ui->streamButton->setMenu(startStreamMenu);
     ui->statusbar->StreamDelayStarting(sec);
     */
-    _ChangeStreamState(true, true, "END LIVE", 92);
+    int buttonSize = 81;
+    QString locale = QString::fromStdString(LOCALE_CONTEXT.GetCurrentLocaleStr());
+    if (locale != "ko-KR")
+        buttonSize = 92;
+
+    ChangeStreamStateUI(true, true, QTStr("Basic.Main.StopBroad"), buttonSize);
 
     OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    for (outputIter = outputHandlers.begin(); outputIter != outputHandlers.end(); ++outputIter) {
         if (output == outputIter->second.get()) {
-            m_statusbar.StreamDelayStarting(sec);
+            m_pMainOutput->GetStatusBarTemp().StreamDelayStarting(sec);
             break;
         }
     }
@@ -344,6 +236,7 @@ void AFMainFrame::qslotStreamDelayStarting(void* output, int sec)
 
 void AFMainFrame::qslotStreamDelayStopping(void* output, int sec)
 {
+    emit StreamingStopped(true);
     /*
     if(!startStreamMenu.isNull())
         startStreamMenu->deleteLater();
@@ -354,101 +247,148 @@ void AFMainFrame::qslotStreamDelayStopping(void* output, int sec)
     ui->streamButton->setMenu(startStreamMenu);
     ui->statusbar->StreamDelayStopping(sec);
     */
-    if (!IsStreamActive()) {
-        _ChangeStreamState(true, false, "LIVE", 77);
+    if (!AFOutputUtil::IsStreamActive()) {
+        ChangeStreamStateUI(true, false, "LIVE", 77);
     }
 
     OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    for (outputIter = outputHandlers.begin(); outputIter != outputHandlers.end(); ++outputIter) {
         if (output == outputIter->second.get()) {
-            m_statusbar.StreamDelayStopping(sec);
+            m_pMainOutput->GetStatusBarTemp().StreamDelayStopping(sec);
             break;
         }
     }
 
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_STREAMING_STOPPING);
+    OnEvent(OBS_FRONTEND_EVENT_STREAMING_STOPPING);
 }
 
 void AFMainFrame::qslotStreamingStart(void* output)
 {
+    emit StreamingStarted();
+
+    auto& auth = AUTH_CONTEXT;
+    //
     /*
     ui->statusbar->StreamStarted(outputHandler->streamOutput);
     */
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
     OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-        if (output == outputIter->second.get()) {
-            m_statusbar.StreamStarted(outputIter->second->streamOutput);
-            //break;
+    if (m_isMainStreaming)
+        outputIter = outputHandlers.begin();
+    else
+        outputIter = outputHandlers.begin() + 1;
+    if (outputIter->second.get() == output) {
+        m_pMainOutput->GetStatusBarTemp().StreamStarted(outputIter->second->streamOutput);
+
+        OnEvent(OBS_FRONTEND_EVENT_STREAMING_STARTED);
+
+        int buttonSize = 81;
+        QString locale = QString::fromStdString(LOCALE_CONTEXT.GetCurrentLocaleStr());
+        if (locale != "ko-KR")
+            buttonSize = 92;
+
+        ChangeStreamStateUI(true, true, QTStr("Basic.Main.StopBroad"), buttonSize);
+        STATISTICS.BroadStatus(true);
+        STATISTICS.SetCongestionUpdate(true);
+
+        OnActivate();
+
+        if (auth.IsSoopStreaming())
+        {
+            QDateTime now = QDateTime::currentDateTime();
+            QString formattedTime = now.toString("yyyy-MM-dd HH:mm:ss");
+
+            AFQBroadInfo* pSoopBroadInfo = auth.GetSoopBroadInfo();
+            if (pSoopBroadInfo) {
+                pSoopBroadInfo->SetBroadStartTime(formattedTime);
+                pSoopBroadInfo->BroadNumTimerAfterStart();
+            }
+
+            if (m_blockManager) {
+                m_blockManager->SendBroadState(true);
+            }
         }
-    }
 
 #ifdef YOUTUBE_ENABLED
-    // get a current stream key
-    obs_service_t* service_obj = AFServiceManager::GetSingletonInstance().GetService();
-    OBSDataAutoRelease settings = obs_service_get_settings(service_obj);
-    std::string key = obs_data_get_string(settings, "stream_id");
-    if(!key.empty() && !youtubeStreamCheckThread) {
-        youtubeStreamCheckThread = CreateQThread([this, key] { YoutubeStreamCheck(key); });
-        youtubeStreamCheckThread->setObjectName("YouTubeStreamCheckThread");
-        youtubeStreamCheckThread->start();
-    }
+        if (YouTubeAppDock::IsYTServiceSelected())
+            youtubeAppDock->IngestionStarted();
 #endif
 
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_STREAMING_STARTED);
+        emit qsignalToggleUseVideo(false);
+        blog(LOG_INFO, STREAMING_START);
 
-    _ChangeStreamState(true, true, "END LIVE", 92);
-    App()->GetStatistics()->BroadStatus(true);
-    App()->GetStatistics()->SetCongestionUpdate(true);
-
-    OnActivate();
-    
 #ifdef YOUTUBE_ENABLED
-    if(YouTubeAppDock::IsYTServiceSelected())
-        youtubeAppDock->IngestionStarted();
+        // get a current stream key
+        obs_service_t* service_obj = SERVICE_MANAGER.GetService();
+        OBSDataAutoRelease settings = obs_service_get_settings(service_obj);
+        std::string key = obs_data_get_string(settings, "stream_id");
+        if (!key.empty() && !youtubeStreamCheckThread) {
+            youtubeStreamCheckThread = CreateQThread([this, key] { YoutubeStreamCheck(key); });
+            youtubeStreamCheckThread->setObjectName("YouTubeStreamCheckThread");
+            youtubeStreamCheckThread->start();
+        }
 #endif
-
-    emit qsignalToggleUseVideo(false);
-    blog(LOG_INFO, STREAMING_START);
+        m_pMainOutput->StartStreamingOutputs(false);
+    }
 }
 
 void AFMainFrame::qslotStreamStopping(void* output)
 {
-    if (true == m_streamingStopping) {
-        _ChangeStreamState(false, false, Str("Basic.Main.StoppingStreaming"), 120);
+    emit StreamingStopping();
 
-        if (api)
-            api->on_event(OBS_FRONTEND_EVENT_STREAMING_STOPPING);
+    if (true == m_outputContext->IsStreamingStopping()) {
+        ChangeStreamStateUI(false, false, Str("Basic.Main.StoppingStreaming"), 120);
+
+        OnEvent(OBS_FRONTEND_EVENT_STREAMING_STOPPING);
     }
 }
 
 void AFMainFrame::qslotStreamingStop(void* output, int code, QString last_error)
 {
+    if(!output)
+        return;
+
     const char* errorDescription = "";
     DStr errorMessage;
     bool use_last_error = false;
     bool encode_error = false;
 
-    
-    if (!output)
-        return;
-
+    bool isMainStreamStop = false;
+    int index = 0;
     std::string strChannelID = "";
+
+    auto& auth = AUTH_CONTEXT;
+    //
     OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    for (outputIter = outputHandlers.begin(); outputIter != outputHandlers.end(); ++outputIter) {
         if (outputIter->second.get() == output) {
+            if (m_isMainStreaming && index == 0)
+                isMainStreamStop = true;
+            else if (!m_isMainStreaming && index == 1)
+                isMainStreamStop = true;
+
             AFChannelData* tmpChannel = nullptr;
-            auto& authManager = AFAuthManager::GetSingletonInstance();
-            authManager.GetChannelData(outputIter->first, tmpChannel);
+            auth.GetChannelData(outputIter->first, tmpChannel);
             if (tmpChannel) {
-                strChannelID = tmpChannel->pAuthData->strChannelID;
-                tmpChannel->bIsStreaming = false;
+                strChannelID = tmpChannel->pAuthData->channelID;
+                if(tmpChannel->pAuthData->platform != PLATFORM_SOOP)
+                    tmpChannel->isStreaming = false;
                 LoadAccounts();
+                if (outputIter->first) {
+                    obs_service_release(outputIter->first);
+                    outputIter->first = nullptr;
+                }
                 break;
             }                        
         }
+        index++;
+    }    
+    if (isMainStreamStop) {
+        BroadStatusCheckTimerStop();
     }
+
    
     switch(code) {
         case OBS_OUTPUT_BAD_PATH:
@@ -481,46 +421,49 @@ void AFMainFrame::qslotStreamingStop(void* output, int code, QString last_error)
         case OBS_OUTPUT_DISCONNECTED:
             // doesn't happen if output is set to reconnect.  note that
             // reconnects are handled in the output, not in the UI
-            use_last_error = true;
-            errorDescription = Str("Output.ConnectFail.Disconnected");
+            code = OBS_OUTPUT_SUCCESS; //qslotBroadStartAPIResponse_CheckStream
+            auth.SendCheckBroading(this, "qslotBroadStartAPIResponse_CheckStream");
     }
 
     std::string strErrorDesc = "";
     strErrorDesc = (!strChannelID.empty() ? strChannelID + " : " : "") + errorDescription;
     
     if(use_last_error && !last_error.isEmpty())
-        dstr_printf(errorMessage, "%s\n\n%s", strErrorDesc.c_str(),
-                QT_TO_UTF8(last_error));
+        dstr_printf(errorMessage, "%s\n\n%s", strErrorDesc.c_str(), QT_TO_UTF8(last_error));
     else
         dstr_copy(errorMessage, strErrorDesc.c_str());
 
     bool currentStreamOutputStopped = false;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
+    for (outputIter = outputHandlers.begin(); outputIter != outputHandlers.end(); ++outputIter) {
         if (output == outputIter->second.get()) {
-            m_statusbar.StreamStopped(outputIter->second->streamOutput);
+            m_pMainOutput->GetStatusBarTemp().StreamStopped(outputIter->second->streamOutput);
             currentStreamOutputStopped = true;
             break;
         }
     }
 
     if(currentStreamOutputStopped)
-        SetOutputHandler();
+        m_pMainOutput->SetOutputHandler();
 
-    m_streamingOuputRef--;
+    int streamingOutputRef = m_pMainOutput->GetStreamingOutputRef();
+    streamingOutputRef--;
+    m_pMainOutput->SetStreamingOutputRef(streamingOutputRef);
 
-    if (true == m_streamingStopping) {
+    if (true == m_outputContext->IsStreamingStopping()) {
 
-        if (0 == m_streamingOuputRef) {
-            
-            m_streamingStopping = false;
-            if (api)
-                api->on_event(OBS_FRONTEND_EVENT_STREAMING_STOPPED);
+        emit StreamingStopped();
+
+        if (0 >= m_pMainOutput->GetStreamingOutputRef()) {
+            m_pMainOutput->SetStreamingOutputRef(0);
+            m_outputContext->SetStreamingStopping(false);
+
+            OnEvent(OBS_FRONTEND_EVENT_STREAMING_STOPPED);
 
             OnDeactivate();
 
-            _ToggleBroadTimer(false);
-            _ChangeStreamState(true, false, "LIVE", 77);
-            App()->GetStatistics()->BroadStatus(false);
+            ToggleBroadTimerUI(false);
+            ChangeStreamStateUI(true, false, "LIVE", 77);
+            STATISTICS.BroadStatus(false);
 
 #ifdef YOUTUBE_ENABLED
             if (YouTubeAppDock::IsYTServiceSelected())
@@ -529,34 +472,39 @@ void AFMainFrame::qslotStreamingStop(void* output, int code, QString last_error)
 
             blog(LOG_INFO, STREAMING_STOP);
         }
+
+        if (OBS_OUTPUT_SUCCESS == code)
+        {
+            //
+        }
     }
     else {
-        if (0 == m_streamingOuputRef) {
+        if (0 >= m_pMainOutput->GetStreamingOutputRef()) {
 
+            m_pMainOutput->SetStreamingOutputRef(0);
             qslotSaveProject();
 
             OnDeactivate();
 
-            bool recordWhenStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "RecordWhenStreaming");
-            bool keepRecordingWhenStreamStops =
-                config_get_bool(GetGlobalConfig(), "BasicWindow", "KeepRecordingWhenStreamStops");
+            auto userConfig = USERCONFIG;
+            //
+            bool recordWhenStreaming = config_get_bool(userConfig, "BasicWindow", "RecordWhenStreaming");
+            bool keepRecordingWhenStreamStops = config_get_bool(userConfig, "BasicWindow", "KeepRecordingWhenStreamStops");
             if (!keepRecordingWhenStreamStops)
                 qslotStopRecording();
 
-            bool replayBufferWhileStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "ReplayBufferWhileStreaming");
-            bool keepReplayBufferStreamStops =
-               config_get_bool(GetGlobalConfig(), "BasicWindow", "KeepReplayBufferStreamStops");
+            bool replayBufferWhileStreaming = config_get_bool(userConfig, "BasicWindow", "ReplayBufferWhileStreaming");
+            bool keepReplayBufferStreamStops = config_get_bool(userConfig, "BasicWindow", "KeepReplayBufferStreamStops");
             if (!keepReplayBufferStreamStops)
                 qslotStopReplayBuffer();            
 
-            os_atomic_set_bool(&m_streaming_active, false);
-            // 
-            _ToggleBroadTimer(false);
-            _ChangeStreamState(true, false, "LIVE", 77);
-            App()->GetStatistics()->BroadStatus(false);
+            os_atomic_set_bool(&OUTPUT_CONTEXT.m_streamingActive, false);
+            //
+            ToggleBroadTimerUI(false);
+            ChangeStreamStateUI(true, false, "LIVE", 77);
+            STATISTICS.BroadStatus(false);
 
-            if (api)
-                api->on_event(OBS_FRONTEND_EVENT_STREAMING_STOPPED);
+            OnEvent(OBS_FRONTEND_EVENT_STREAMING_STOPPED);
             blog(LOG_INFO, STREAMING_STOP);
         }
     }
@@ -587,17 +535,50 @@ void AFMainFrame::qslotStreamingStop(void* output, int code, QString last_error)
         startStreamMenu = nullptr;
     }
     */
-    if (0 == m_streamingOuputRef) {
-        auto& statusLogManager = AFStatusLogManager::GetSingletonInstance();
-        statusLogManager.SendLogStartBroad(false);
+
+    if (0 == m_pMainOutput->GetStreamingOutputRef()) {
+
+        auto soopBroadInfo = auth.GetSoopBroadInfo();
+        if (soopBroadInfo) {
+            soopBroadInfo->SetBroadNumber(0);
+            soopBroadInfo->SetBroadStartTime("");
+        }
+
+        //
+        int nMinsimCheckCnt = config_get_int(USERCONFIG, "SARSA", "UseMinsimCheckCnt");
+        if (nMinsimCheckCnt > 0) {
+            auto endTime = std::chrono::steady_clock::now();
+            auto startTime = auth.GetMinsimCheckStartTime();
+            if (startTime != std::chrono::steady_clock::time_point{}) {
+                auth.InitMinsimCheckStartTime();
+            }
+
+        }
+
+        // 
+        if (m_blockManager)
+        {
+            QWidget* broadInfoDock = nullptr;
+            m_blockManager->FindBlock(ENUM_WINDOW_TYPE::BroadInfo, broadInfoDock);
+            if (broadInfoDock) {
+                QMetaObject::invokeMethod(broadInfoDock, "qslotStopStreamingInfoTimer");
+            }
+        }
+
+        _DeleteBroadInfoData();
+
         emit qsignalToggleUseVideo(false);
     }
+
+    
+    if (isMainStreamStop) {
+        AFOutputUtil::StopForceStreaming();
+    }    
 }
+
 void AFMainFrame::qslotStartRecording()
 {
-    if(IsRecordingActive())
-        return;
-    if(m_disableOutputsRef)
+    if(AFOutputUtil::IsRecordingActive())
         return;
 
     if(!_OutputPathValid()) {
@@ -611,59 +592,80 @@ void AFMainFrame::qslotStartRecording()
         return;
     }
 
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_RECORDING_STARTING);
+    OnEvent(OBS_FRONTEND_EVENT_RECORDING_STARTING);
 
     qslotSaveProject();
 
 
-    if(!m_outputHandlers[0].second->StartRecording())
+    if(!AFOutputUtil::StartRecording())
         ui->pushButton_Record->setChecked(false);
 
+    STATISTICS.SetDiskFullTimer(true);
 
     emit qsignalToggleUseVideo(true);
 }
+
 void AFMainFrame::qslotStopRecording()
 {
     qslotSaveProject();
 
-    if(IsRecordingActive())
-        m_outputHandlers[0].second->StopRecording(m_recordingStopping);
+    AFOutputUtil::StopRecording();
 
     OnDeactivate();
 
+    STATISTICS.SetDiskFullTimer(false);
+
     emit qsignalToggleUseVideo(false);
+
+    os_atomic_set_bool(&OUTPUT_CONTEXT.m_recordingActive, false);
 }
+
 void AFMainFrame::qslotRecordingStart()
 {
-    m_statusbar.RecordingStarted(m_outputHandlers[0].second->fileOutput);
+    obs_output_t* output = AFOutputUtil::GetRecordingFileOutput();
+    m_pMainOutput->GetStatusBarTemp().RecordingStarted(output);
 
-    _ChangeRecordState(true);
+    emit RecordingStarted(m_signalFlags.isRecordingPausable);
 
-    m_recordingStopping = false;
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_RECORDING_STARTED);
+    m_outputContext->SetRecordingStopping(false);
+
+    OnEvent(OBS_FRONTEND_EVENT_RECORDING_STARTED);
 
     OnActivate();
-    _UpdatePause();
+    m_pMainOutput->UpdatePause();
 
     emit qsignalToggleUseVideo(true);
     blog(LOG_INFO, RECORDING_START);
+
+    int buttonSize = 73;
+    QString locale = QString::fromStdString(LOCALE_CONTEXT.GetCurrentLocaleStr());
+    if (locale == "th-TH" || locale == "en-US")
+        buttonSize = 110;
+
+    ChangeRecordStateUI(true, true, QTStr("Basic.Main.StopRecord"), buttonSize);
+
+    os_atomic_set_bool(&OUTPUT_CONTEXT.m_recordingActive, true);
 }
+
 void AFMainFrame::qslotRecordStopping()
 {
     /*
     ui->recordButton->setText(QTStr("Basic.Main.StoppingRecording"));
     */
-    m_recordingStopping = true;
+    emit RecordingStopping();
 
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_RECORDING_STOPPING);
+    m_outputContext->SetRecordingStopping(true);
+
+    os_atomic_set_bool(&OUTPUT_CONTEXT.m_recordingActive, false);
+
+    OnEvent(OBS_FRONTEND_EVENT_RECORDING_STOPPING);
 }
+
 void AFMainFrame::qslotRecordingStop(int code, QString last_error)
 {
-    _ChangeRecordState(false);
+    emit RecordingStopped();
 
+    ChangeRecordStateUI(true, false, "REC", 48);
     blog(LOG_INFO, RECORDING_STOP);
 
     if(code == OBS_OUTPUT_UNSUPPORTED && isVisible()) {
@@ -713,149 +715,149 @@ void AFMainFrame::qslotRecordingStop(int code, QString last_error)
         ShowSystemAlert(QTStr("Output.RecordError.Msg"));
         //SysTrayNotify(QTStr("Output.RecordError.Msg"), QSystemTrayIcon::Warning);
     } else if(code == OBS_OUTPUT_SUCCESS) {
-        std::string path = m_outputHandlers[0].second->lastRecordingPath;
+        std::string path = AFOutputUtil::GetLastRecordingPath();
         QString str = QTStr("Basic.StatusBar.RecordingSavedTo");
-        
-        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
-                                   QT_UTF8(""), str.arg(QT_UTF8(path.c_str())), false, true);
+        ShowSystemAlert(str.arg(QT_UTF8(path.c_str())),"", AFQSystemAlert::AlertIcon::Success);
         //ShowStatusBarMessage());
     }
 
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_RECORDING_STOPPED);
+    OnEvent(OBS_FRONTEND_EVENT_RECORDING_STOPPED);
 
-    _AutoRemux(m_outputHandlers[0].second->lastRecordingPath.c_str());
+    m_pMainOutput->AutoRemux(AFOutputUtil::GetLastRecordingPath().c_str());
 
     OnDeactivate();
-    _UpdatePause(false);
+    m_pMainOutput->UpdatePause(false);
+    STATISTICS.SetDiskFullTimer(false);
 
     emit qsignalToggleUseVideo(false);
+
 }
 void AFMainFrame::qslotRecordingFileChanged(QString lastRecordingPath)
 {
     QString str = QTStr("Basic.StatusBar.RecordingSavedTo");
-    
-    AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
-                               QT_UTF8(""), str.arg(lastRecordingPath), false, true);
-    //ShowStatusBarMessage(str.arg(lastRecordingPath));
-
-    _AutoRemux(lastRecordingPath, true);
+    ShowSystemAlert(str.arg(lastRecordingPath), "", AFQSystemAlert::AlertIcon::Success);
+   
+    m_pMainOutput->AutoRemux(lastRecordingPath, true);
 }
-void AFMainFrame::qslotShowReplayBufferPauseWarning()
-{
-    auto msgBox = []() {
-        QMessageBox msgbox(App()->GetMainView());
-        msgbox.setWindowTitle(QTStr("Output.ReplayBuffer." "PauseWarning.Title"));
-        msgbox.setText(QTStr("Output.ReplayBuffer." "PauseWarning.Text"));
-        msgbox.setIcon(QMessageBox::Icon::Information);
-        msgbox.addButton(QMessageBox::Ok);
-        //
-        QCheckBox* cb = new QCheckBox(QTStr("DoNotShowAgain"));
-        msgbox.setCheckBox(cb);
-
-        msgbox.exec();
-
-        if(cb->isChecked()) {
-            config_set_bool(GetGlobalConfig(), "General", "WarnedAboutReplayBufferPausing", true);
-            config_save_safe(GetGlobalConfig(), "tmp", nullptr);
-        }
-    };
-
-    bool warned = config_get_bool(GetGlobalConfig(), "General",
-                      "WarnedAboutReplayBufferPausing");
-    if(!warned) {
-        QMetaObject::invokeMethod(App(), "Exec", Qt::QueuedConnection, Q_ARG(VoidFunc, msgBox));
-    }
-}
+//void AFMainFrame::qslotShowReplayBufferPauseWarning()
+//{
+//    auto userConfig = USERCONFIG;
+//    auto msgBox = []() {
+//        QMessageBox msgbox(MAINFRAME);
+//        msgbox.setWindowTitle(QTStr("Output.ReplayBuffer." "PauseWarning.Title"));
+//        msgbox.setText(QTStr("Output.ReplayBuffer." "PauseWarning.Text"));
+//        msgbox.setIcon(QMessageBox::Icon::Information);
+//        msgbox.addButton(QMessageBox::Ok);
+//        //
+//        QCheckBox* cb = new QCheckBox(QTStr("DoNotShowAgain"));
+//        msgbox.setCheckBox(cb);
+//
+//        msgbox.exec();
+//
+//        if(cb->isChecked()) {
+//            config_set_bool(userConfig, "General", "WarnedAboutReplayBufferPausing", true);
+//            config_save_safe(userConfig, "tmp", nullptr);
+//        }
+//    };
+//
+//    bool warned = config_get_bool(userConfig, "General", "WarnedAboutReplayBufferPausing");
+//    if(!warned) {
+//        QMetaObject::invokeMethod(App(), "Exec", Qt::QueuedConnection, Q_ARG(VoidFunc, msgBox));
+//    }
+//}
 
 void AFMainFrame::qslotStartReplayBuffer()
 {
-    if(IsReplayBufferActive())
-        return;
-    if(m_disableOutputsRef)
+
+    if(AFOutputUtil::IsReplayBufferActive())
         return;
 
-    if(!AFUIValidation::NoSourcesConfirmation(this)) {
+    if(!UIValidation::NoSourcesConfirmation(this)) {
 //        recording_paused->first()->setChecked(false);
-        GetMainWindow()->SetReplayBufferStartStopMode(false);
+
+        SetReplayBufferStartStopMode(false);
         return;
     }
     if(!_OutputPathValid()) {
         _OutputPathInvalidMessage();
-        GetMainWindow()->SetReplayBufferStartStopMode(false);
+        SetReplayBufferStartStopMode(false);
 //        recording_paused->first()->setChecked(false);
         return;
     }
     if(_LowDiskSpace()) {
         _DiskSpaceMessage();
-        GetMainWindow()->SetReplayBufferStartStopMode(false);
+        SetReplayBufferStartStopMode(false);
 //        recording_paused->first()->setChecked(false);
         return;
     }
 
-    GetMainWindow()->SetReplayBufferReleased();
+    //SetReplayBufferReleased();
 
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTING);
+    OnEvent(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTING);
 
     qslotSaveProject();
 
-    if(!m_outputHandlers[0].second->StartReplayBuffer()) {
-        GetMainWindow()->SetReplayBufferStartStopMode(false);
-    } else if(os_atomic_load_bool(&m_recording_paused)) {
-        qslotShowReplayBufferPauseWarning();
-    }
+    if(!AFOutputUtil::StartReplayBuffer()) {
+        SetReplayBufferStartStopMode(false);
+    } 
+
+    //else if(os_atomic_load_bool(&OUTPUT_CONTEXT.m_recordingPaused)) {
+    //    qslotShowReplayBufferPauseWarning();
+    //}
+
 }
 void AFMainFrame::qslotStopReplayBuffer()
 {
-    if(!m_outputHandlers[0].second->replayBuffer)
+    if (!AFOutputUtil::StopReplayBuffer())
         return;
 
     qslotSaveProject();
 
-    if(IsReplayBufferActive())
-        m_outputHandlers[0].second->StopReplayBuffer(m_replayBufferStopping);
-
     OnDeactivate();
 }
+
 void AFMainFrame::qslotReplayBufferStart()
 {
-    if (!m_outputHandlers[0].second->replayBuffer)
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if (!outputHandlers[0].second->replayBuffer)
         return;
 
-    GetMainWindow()->SetReplayBufferStartStopMode(true);
+    SetReplayBufferStartStopMode(true);
     /*
     replayBufferButton->first()->setText(QTStr("Basic.Main.StopReplayBuffer"));
     replayBufferButton->first()->setChecked(true);
     */
 
-    m_replayBufferStopping = false;
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
+    m_outputContext->SetReplayBufferStopping(false);
+
+    OnEvent(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
 
     OnActivate();
-    _UpdateReplayBuffer();
+    m_pMainOutput->UpdateReplayBuffer();
 
     blog(LOG_INFO, REPLAY_BUFFER_START);
 }
+
 void AFMainFrame::qslotReplayBufferStopping()
 {
-    if (!m_outputHandlers[0].second->replayBuffer)
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if (!outputHandlers[0].second->replayBuffer)
         return;
 
-    GetMainWindow()->SetReplayBufferStoppingMode();
+    SetReplayBufferStoppingMode();
 //    replayBufferButton->first()->setText( QTStr("Basic.Main.StoppingReplayBuffer"));
 
-    m_replayBufferStopping = true;
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPING);
+    m_outputContext->SetReplayBufferStopping(true);
+
+    OnEvent(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPING);
 }
+
 void AFMainFrame::qslotReplayBufferStop(int code)
 {
-    if (!m_outputHandlers[0].second->replayBuffer)
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if (!outputHandlers[0].second->replayBuffer)
         return;
 
-    GetMainWindow()->SetReplayBufferStartStopMode(false);
     /*
     replayBufferButton->first()->setText(QTStr("Basic.Main.StartReplayBuffer"));
     replayBufferButton->first()->setChecked(false);
@@ -886,206 +888,228 @@ void AFMainFrame::qslotReplayBufferStop(int code)
 //        SysTrayNotify(QTStr("Output.RecordError.Msg"), QSystemTrayIcon::Warning);
     }
 
-    if(api)
-        api->on_event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+    OnEvent(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
 
     OnDeactivate();
-    _UpdateReplayBuffer(false);
+    m_pMainOutput->UpdateReplayBuffer(false);
+
+    SetReplayBufferStartStopMode(false);
 }
 
-void AFMainFrame::qslotPauseRecording()
+void AFMainFrame::qslotStartVirtualCam()
 {
-    if(//!pause || 
-       !m_outputHandlers[0].second || !m_outputHandlers[0].second->fileOutput ||
-        os_atomic_load_bool(&m_recording_paused))
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if(outputHandlers.empty())
+        return;
+    //
+    OUTPUT_HANDLER_PTR& outputHandler = outputHandlers[0].second;
+    if(!outputHandler ||
+       !outputHandler->virtualCam)
         return;
 
-    obs_output_t* output = m_outputHandlers[0].second->fileOutput;
-    if(obs_output_pause(output, true))
-    {
-        /*pause->setAccessibleName(QTStr("Basic.Main.UnpauseRecording"));
-        pause->setToolTip(QTStr("Basic.Main.UnpauseRecording"));
-        pause->blockSignals(true);
-        pause->setChecked(true);
-        pause->blockSignals(false);
+    if(outputHandler->VirtualCamActive())
+        return;
 
-        ui->statusbar->RecordingPaused();*/
+    qslotSaveProject();
 
-        os_atomic_set_bool(&m_recording_paused, true);
-
-        /*auto replay = replayBufferButton ? replayBufferButton->second() : nullptr;
-        if(replay)
-            replay->setEnabled(false);*/
-
-        if(api)
-            api->on_event(OBS_FRONTEND_EVENT_RECORDING_PAUSED);
-
-        if(os_atomic_load_bool(&m_replaybuf_active))
-            qslotShowReplayBufferPauseWarning();
+    if(!outputHandler->StartVirtualCam()) {
+        //vcamButton->first()->setChecked(false);
     }
 }
-void AFMainFrame::qslotUnpauseRecording()
+void AFMainFrame::qslotStopVirtualCam()
 {
-    if(//!pause || 
-       !m_outputHandlers[0].second || !m_outputHandlers[0].second->fileOutput ||
-        !os_atomic_load_bool(&m_recording_paused))
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if(outputHandlers.empty())
+        return;
+    //
+    OUTPUT_HANDLER_PTR& outputHandler = outputHandlers[0].second;
+    if(!outputHandler ||
+       !outputHandler->virtualCam)
         return;
 
-    obs_output_t* output = m_outputHandlers[0].second->fileOutput;
-    if(obs_output_pause(output, false))
-    {
-        /*pause->setAccessibleName(QTStr("Basic.Main.PauseRecording"));
-        pause->setToolTip(QTStr("Basic.Main.PauseRecording"));
-        pause->blockSignals(true);
-        pause->setChecked(false);
-        pause->blockSignals(false);
+    qslotSaveProject();
 
-        ui->statusbar->RecordingUnpaused();*/
+    if(AFOutputUtil::IsVirtualCamActive())
+        outputHandler->StopVirtualCam();
 
-        os_atomic_set_bool(&m_recording_paused, false);
+    OnDeactivate();
+}
+void AFMainFrame::qslotVirtualCamStart()
+{
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if(outputHandlers.empty())
+        return;
+    //
+    OUTPUT_HANDLER_PTR& outputHandler = outputHandlers[0].second;
+    if(!outputHandler ||
+       !outputHandler->virtualCam)
+        return;
 
-        /*auto replay = replayBufferButton ? replayBufferButton->second() : nullptr;
-        if(replay)
-            replay->setEnabled(true);*/
+    //vcamButton->first()->setText(QTStr("Basic.Main.StopVirtualCam"));
+    //if(sysTrayVirtualCam)
+    //    sysTrayVirtualCam->setText(QTStr("Basic.Main.StopVirtualCam"));
+    //vcamButton->first()->setChecked(true);
 
-        if(api)
-            api->on_event(OBS_FRONTEND_EVENT_RECORDING_UNPAUSED);
-    }
+    OnEvent(OBS_FRONTEND_EVENT_VIRTUALCAM_STARTED);
+
+    OnActivate();
+
+    blog(LOG_INFO, VIRTUALCAM_START);
+}
+void AFMainFrame::qslotVirtualCamStop(int code)
+{
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if(outputHandlers.empty())
+        return;
+    //
+    OUTPUT_HANDLER_PTR& outputHandler = outputHandlers[0].second;
+    if(!outputHandler ||
+       !outputHandler->virtualCam)
+        return;
+
+    /*vcamButton->first()->setText(QTStr("Basic.Main.StartVirtualCam"));
+    if(sysTrayVirtualCam)
+        sysTrayVirtualCam->setText(QTStr("Basic.Main.StartVirtualCam"));
+    vcamButton->first()->setChecked(false);*/
+
+    OnEvent(OBS_FRONTEND_EVENT_VIRTUALCAM_STOPPED);
+
+    blog(LOG_INFO, VIRTUALCAM_STOP);
+
+    OnDeactivate();
+
+    if(!m_restartingVCam)
+        return;
+
+    /* Restarting needs to be delayed to make sure that the virtual camera
+     * implementation is stopped and avoid race condition. */
+    QTimer::singleShot(100, this, &AFMainFrame::RestartingVirtualCam);
+}
+
+//void AFMainFrame::qslotPauseRecording()
+//{
+//    if(AFOutputUtil::PauseRecording())
+//    {
+//        /*pause->setAccessibleName(QTStr("Basic.Main.UnpauseRecording"));
+//        pause->setToolTip(QTStr("Basic.Main.UnpauseRecording"));
+//        pause->blockSignals(true);
+//        pause->setChecked(true);
+//        pause->blockSignals(false);
+//
+//        emit RecordingPaused();
+// 
+//        ui->statusbar->RecordingPaused();*/
+//
+//        /*auto replay = replayBufferButton ? replayBufferButton->second() : nullptr;
+//        if(replay)
+//            replay->setEnabled(false);*/
+//
+//        OnEvent(OBS_FRONTEND_EVENT_RECORDING_PAUSED);
+//
+//        if(os_atomic_load_bool(&m_outputContext->m_replaybufActive))
+//            qslotShowReplayBufferPauseWarning();
+//    }
+//}
+//void AFMainFrame::qslotUnpauseRecording()
+//{
+//    if(AFOutputUtil::UnPauseRecording())
+//    {
+//        /*pause->setAccessibleName(QTStr("Basic.Main.PauseRecording"));
+//        pause->setToolTip(QTStr("Basic.Main.PauseRecording"));
+//        pause->blockSignals(true);
+//        pause->setChecked(false);
+//        pause->blockSignals(false);
+//
+//        emit RecordingUnpaused();
+// 
+//        ui->statusbar->RecordingUnpaused();*/
+//
+//        /*auto replay = replayBufferButton ? replayBufferButton->second() : nullptr;
+//        if(replay)
+//            replay->setEnabled(true);*/
+//
+//        OnEvent(OBS_FRONTEND_EVENT_RECORDING_UNPAUSED);
+//    }
+//}
+
+static inline void SetEncoderName(obs_encoder_t* encoder, const char* name,
+    const char* defaultName)
+{
+    obs_encoder_set_name(encoder, (name && *name) ? name : defaultName);
+}
+
+//
+void AFMainFrame::StopReplayBuffer()
+{
+    qslotStopReplayBuffer();
 }
 //
-void AFMainFrame::_AutoRemux(QString input, bool no_show)
+extern void log_vcam_changed(const VCamConfig& config, bool starting);
+obs_output_t* AFMainFrame::GetVirtualCamOutput()
 {
-    auto config = GetBasicConfig();
-
-    bool autoRemux = config_get_bool(config, "Video", "AutoRemux");
-    if(!autoRemux)
-        return;
-
-    bool isSimpleMode = false;
-    const char* mode = config_get_string(config, "Output", "Mode");
-    if(!mode) {
-        isSimpleMode = true;
-    } else {
-        isSimpleMode = strcmp(mode, "Simple") == 0;
-    }
-
-    if(!isSimpleMode) {
-        const char* recType = config_get_string(config, "AdvOut", "RecType");
-
-        bool ffmpegOutput = astrcmpi(recType, "FFmpeg") == 0;
-        if(ffmpegOutput)
-            return;
-    }
-
-    if(input.isEmpty())
-        return;
-
-    QFileInfo fi(input);
-    QString suffix = fi.suffix();
-
-    /* do not remux if lossless */
-    if(suffix.compare("avi", Qt::CaseInsensitive) == 0) {
-        return;
-    }
-
-    QString path = fi.path();
-
-    QString output = input;
-    output.resize(output.size() - suffix.size());
-
-    const obs_encoder_t* videoEncoder = obs_output_get_video_encoder(m_outputHandlers[0].second->fileOutput);
-    const obs_encoder_t* audioEncoder = obs_output_get_audio_encoder(m_outputHandlers[0].second->fileOutput, 0);
-    const char* vCodecName = obs_encoder_get_codec(videoEncoder);
-    const char* aCodecName = obs_encoder_get_codec(audioEncoder);
-    const char* format = config_get_string(config, isSimpleMode ? "SimpleOutput" : "AdvOut", "RecFormat2");
-
-    bool audio_is_pcm = strncmp(aCodecName, "pcm", 3) == 0;
-
-#if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(60, 5, 100)
-    /* FFmpeg <= 6.0 cannot remux AV1+PCM into any supported format. */
-    if(audio_is_pcm && strcmp(vCodecName, "av1") == 0)
-        return;
-#endif
-
-    /* Retain original container for fMP4/fMOV */
-    if(strncmp(format, "fragmented", 10) == 0) {
-        output += "remuxed." + suffix;
-    } else if(strcmp(vCodecName, "prores") == 0) {
-        output += "mov";
-#if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(60, 5, 100)
-    } else if(audio_is_pcm) {
-        output += "mov";
-#endif
-    } else {
-        output += "mp4";
-    }
-
-    AFQRemux* remux = new AFQRemux(QT_TO_UTF8(path), this, true);
-    if(!no_show)
-        remux->show();
-    remux->AutoRemux(input, output);
-
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if(outputHandlers.empty())
+        return nullptr;
+    //
+    OUTPUT_HANDLER_PTR& outputHandler = outputHandlers[0].second;
+    if(!outputHandler ||
+       !outputHandler->virtualCam)
+        return nullptr;
+    //
+    OBSOutput output = outputHandler->virtualCam.Get();
+    return obs_output_get_ref(output);
 }
-void AFMainFrame::_UpdatePause(bool activate)
+void AFMainFrame::SetVirtualCamOutputType(const VCamOutputType type)
 {
-    if(!activate ||
-       !IsRecordingActive()) {
+    m_vcamConfig.type = type;
+    //
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if(outputHandlers.empty())
         return;
-    }
-
-    auto config = GetBasicConfig();
-
-    const char* mode = config_get_string(config, "Output", "Mode");
-    bool adv = astrcmpi(mode, "Advanced") == 0;
-    bool shared = false;
-    if(adv) {
-        const char* recType = config_get_string(config, "AdvOut", "RecType");
-        if(astrcmpi(recType, "FFmpeg") == 0) {
-            shared = config_get_bool(config, "AdvOut", "FFOutputToFile");
-        } else {
-            const char* recordEncoder = config_get_string(config, "AdvOut", "RecEncoder");
-            shared = astrcmpi(recordEncoder, "none") == 0;
-        }
-    } else {
-        const char* quality = config_get_string(config, "SimpleOutput", "RecQuality");
-        shared = strcmp(quality, "Stream") == 0;
-    }
-
-    if(!shared) {
-        /*pause.reset(new QPushButton());
-        pause->setAccessibleName(QTStr("Basic.Main.PauseRecording"));
-        pause->setToolTip(QTStr("Basic.Main.PauseRecording"));
-        pause->setCheckable(true);
-        pause->setChecked(false);
-        pause->setProperty("themeID", QVariant(QStringLiteral("pauseIconSmall")));
-
-        QSizePolicy sp;
-        sp.setHeightForWidth(true);
-        pause->setSizePolicy(sp);
-
-        connect(pause.data(), &QAbstractButton::clicked, this, &OBSBasic::PauseToggled);
-        ui->recordingLayout->addWidget(pause.data());*/
-    } else {
-//        pause.reset();
-    }
-}
-void AFMainFrame::_UpdateReplayBuffer(bool activate)
-{
-   if(!activate || !IsReplayBufferActive()) {
+    //
+    OUTPUT_HANDLER_PTR& outputHandler = outputHandlers[0].second;
+    if(!outputHandler)
         return;
-    }
+
+    outputHandler->UpdateVirtualCamOutputSource();
 }
-
-void AFMainFrame::_ClearAllStreamSignals()
+void AFMainFrame::UpdateVirtualCamConfig(const VCamConfig& config)
 {
-    OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-        if (outputIter->first != nullptr && 
-            outputIter->second != nullptr) 
-        {
-            m_statusbar.StreamStopped(outputIter->second->streamOutput);
-        }
-    }
+    m_vcamConfig = config;
+    //
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if(outputHandlers.empty())
+        return;
+    //
+    OUTPUT_HANDLER_PTR& outputHandler = outputHandlers[0].second;
+    if(!outputHandler)
+        return;
 
-    m_statusbar.ClearAllSignals();
+    outputHandler->UpdateVirtualCamOutputSource();
+    log_vcam_changed(config, false);
+}
+void AFMainFrame::RestartVirtualCam(const VCamConfig& config)
+{
+    m_restartingVCam = true;
+
+    qslotStopVirtualCam();
+
+    m_vcamConfig = config;
+}
+void AFMainFrame::RestartingVirtualCam()
+{
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    if(outputHandlers.empty())
+        return;
+    //
+    OUTPUT_HANDLER_PTR& outputHandler = outputHandlers[0].second;
+    if(!outputHandler)
+        return;
+    //
+    if(!m_restartingVCam)
+        return;
+
+    outputHandler->UpdateVirtualCamOutputSource();
+    qslotStartVirtualCam();
+    m_restartingVCam = false;
 }

@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 #include <QDir>
+#include <unordered_set>
 
 #define STR_IMPORTER_TYPE_SOOP "SOOP Studio"
 
@@ -97,6 +98,29 @@ public:
 	bool Check(const std::string &path);
 	std::string Name(const std::string &) { return "XSplit Import"; };
 	OBSImporterFiles FindFiles();
+};
+
+class FreecShotImporter : public Importer {
+public:
+	std::string Prog() { return "FreecShot"; };
+	int ImportScenes(const std::string& path, std::string& name,
+		json11::Json& res);
+	bool Check(const std::string& path);
+	std::string Name(const std::string&) { return "FreecShot Import"; };
+	OBSImporterFiles FindFiles();
+
+	bool setDeviceUUID(std::string id);
+	std::string getDeviceUUID(std::string id) { return deviceMap[id]; }
+
+	bool setBrowserUUID(int browser_key);
+	std::string getBrowserUUID(int browser_key) { return browserMap[browser_key]; }
+
+	bool existSourceName(std::string name);
+
+private:
+	std::unordered_map<std::string, std::string> deviceMap; // <id, uuid>
+	std::unordered_map<int, std::string> browserMap; // <browser_key, uuid>
+	std::unordered_set<std::string> source_name_set;
 };
 
 void ImportersInit();

@@ -5,13 +5,13 @@
 
 #include <obs.hpp>
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 namespace Ui {
 class AFQSceneTransitionsDialog;
 }
 
-class AFQSceneTransitionsDialog : public AFQRoundedDialogBase
+class AFQSceneTransitionsDialog : public AFTTopBaseDialog
 {
     Q_OBJECT
 
@@ -26,7 +26,8 @@ private slots:
     void qslotRemoveTransition();
     void qslotMenuDotTransition();
     void qslotChangeTransition(int);
-    void qslotOkButtonClicked();
+    void qslotChangeDuration(int);
+    //void qslotOkButtonClicked();
     void qslotCloseButtonClicked();
 
     void qslotRenameTransition();
@@ -34,6 +35,12 @@ private slots:
 
 public:
     void        CreatePropertiesWindow(obs_source_t* source);
+    void        SetWidgetsEnabled(bool enable);
+
+#pragma region protected func
+protected:
+    void showEvent(QShowEvent* event) override;
+#pragma endregion protected func
 
 private:
     void        _SetCurTransitionUI(OBSSource curTransition, int curDuration);

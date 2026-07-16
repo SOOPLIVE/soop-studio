@@ -3,30 +3,32 @@
 #include <obs.hpp>
 #include <util/util.hpp>
 
-#include <map>
-#include <vector>
+#include <tuple>
 
-class AFEncoderUtil final
+#define SIMPLE_ARCHIVE_NAME	"simple_archive_audio"
+//
+namespace AFEncoderUtil
 {
-#pragma region QT Field, CTOR/DTOR
-public:
-	AFEncoderUtil();
-	~AFEncoderUtil();
-#pragma endregion QT Field, CTOR/DTOR
+    bool CreateSimpleAACEncoder(OBSEncoder& res, int bitrate, const char* name, size_t idx);
+    bool CreateSimpleOpusEncoder(OBSEncoder& res, int bitrate, const char* name, size_t idx);
+    bool return_first_id(void* data, const char* id);
+    bool can_use_output(const char* prot, const char* output,
+                        const char* prot_test1,
+                        const char* prot_test2 = nullptr);
+    const char* GetStreamOutputType(const obs_service_t* service);
+    std::tuple<int, int> AspectRatio(int cx, int cy);
+    bool ReturnFirstId(void* data, const char* id);
+    bool EncoderAvailable(const char* encoder);
+    bool ServiceSupportsCodec(const char** codecs, const char* codec);
+    bool ServiceSupportsEncoder(const char** codecs, const char* encoder);
+    bool ServiceSupportsVodTrack(const char* service);
+    void clear_archive_encoder(obs_output_t* output, const char* expected_name);
 
-#pragma region public func
-public:
-#pragma endregion public func
+    bool isAV1Codec(const char* encoder);
 
-#pragma region private func
-private:
-#pragma endregion private func
+    const char* getCurrentEncoder();
 
-#pragma region public member var
-#pragma endregion public member var
-
-#pragma region private member var
-#pragma endregion private member var
+#ifdef __APPLE__
+    void translate_macvth264_encoder(const char*& encoder);
+#endif // __APPLE__
 };
-
-#include "CEncoder.inl"

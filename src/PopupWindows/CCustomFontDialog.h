@@ -1,13 +1,13 @@
 ﻿#pragma once
 
 #include <QFontDialog>
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 namespace Ui {
 	class AFQCustomFontDialog;
 }
 
-class AFQCustomFontDialog : public AFQRoundedDialogBase
+class AFQCustomFontDialog : public AFTTopBaseDialog
 {
 	Q_OBJECT
 
@@ -21,11 +21,11 @@ public:
 						  QFontDialog::FontDialogOptions options = QFontDialog::FontDialogOptions());
 
 private slots:
-	void qSlotAccept();
-	void qSlotReject();
+	void qslotAccept();
+	void qslotReject();
 
 private:
 	Ui::AFQCustomFontDialog* ui;
 
-	QFontDialog* m_fontFrame = nullptr;
+	QFontDialog* m_pFontFrame = nullptr;
 };

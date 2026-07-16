@@ -1,4 +1,6 @@
-[submodule "obs-studio-clone"]
-	path = obs-studio-clone
-	url = https://github.com/obsproject/obs-studio
-	branch = release/30.0
+[submodule "obs-studio"]
+	path = obs-studio
+	url = https://github.com/SOOPLIVE/obs-studio.git
+[submodule "plugins/soop-spout2/Spout2"]
+	path = plugins/soop-spout2/Spout2
+	url = https://github.com/leadedge/Spout2.git

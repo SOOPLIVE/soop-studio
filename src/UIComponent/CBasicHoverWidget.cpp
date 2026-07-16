@@ -32,6 +32,8 @@ bool AFQHoverWidget::event(QEvent* e)
             emit qsignalHoverLeave();
             break;
         case QEvent::MouseButtonRelease:
+            emit qsignalMouseReleased();
+
             mouseEvent = dynamic_cast<QMouseEvent *>(e);
             if (mouseEvent) {
                 mousePos = mouseEvent->pos();
@@ -46,6 +48,7 @@ bool AFQHoverWidget::event(QEvent* e)
             }
             break;
         case QEvent::MouseButtonPress:
+            emit qsignalMousePressed();
             return true;
         case QEvent::MouseButtonDblClick:
             // Without double click event, the back of the widget can be clicked

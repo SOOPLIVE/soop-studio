@@ -16,13 +16,17 @@ public:
 
 #pragma region protected func
 protected:
-	void mousePressEvent(QMouseEvent* event);
+	void mousePressEvent(QMouseEvent* event) override;
+	void mouseReleaseEvent(QMouseEvent* event) override;
+	void mouseMoveEvent(QMouseEvent* event) override;
 #pragma endregion protected func
 
 #pragma region private func, var
 private:
 	void _SetValueToMousePos(QMouseEvent* event);
 #pragma endregion private func, var
+
+	Qt::MouseButton m_mouseButton = Qt::MouseButton::NoButton;
 };
 
 #endif // CMOUSECLICKSLIDER_H

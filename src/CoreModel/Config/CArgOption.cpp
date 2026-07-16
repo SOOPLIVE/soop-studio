@@ -11,8 +11,8 @@ void AFArgOption::LoadArgProgram(int argc, char* argv[])
 	{
 		if (_ArgIs(argv[i], "--multi", "-m"))
 		{
-			m_bMulti = true;
-			m_bDisableShutdownCheck = true;
+			m_multi = true;
+			m_disableShutdownCheck = true;
 
 #if ALLOW_PORTABLE_MODE
 		}
@@ -24,20 +24,20 @@ void AFArgOption::LoadArgProgram(int argc, char* argv[])
 		}
 		else if (_ArgIs(argv[i], "--verbose", nullptr))
 		{
-			m_bLogVerbose = true;
+			m_logVerbose = true;
 		}
 		else if (_ArgIs(argv[i], "--safe-mode", nullptr))
 		{
-			m_bSafeMode = true;
+			m_safeMode = true;
 		}
 		else if (_ArgIs(argv[i], "--only-bundled-plugins", nullptr))
 		{
-			m_bDisable3pPlugins = true;
+			m_disable3pPlugins = true;
 		}
 		else if (_ArgIs(argv[i], "--disable-shutdown-check", nullptr))
 		{
 			/* This exists mostly to bypass the dialog during development. */
-			m_bDisableShutdownCheck = true;
+			m_disableShutdownCheck = true;
 		}
 		else if (_ArgIs(argv[i], "--always-on-top", nullptr))
 		{
@@ -45,7 +45,7 @@ void AFArgOption::LoadArgProgram(int argc, char* argv[])
 		}
 		else if (_ArgIs(argv[i], "--unfiltered_log", nullptr))
 		{
-			m_bUnfilteredLog = true;
+			m_unfilteredLog = true;
 		}
 		else if (_ArgIs(argv[i], "--startstreaming", nullptr))
 		{
@@ -100,7 +100,7 @@ void AFArgOption::LoadArgProgram(int argc, char* argv[])
 		}
 		else if (_ArgIs(argv[i], "--steam", nullptr))
 		{
-			m_bSteam = true;
+			m_steam = true;
 		}
 //		else if (_ArgIs(argv[i], "--help", "-h")) {
 //			std::string help =

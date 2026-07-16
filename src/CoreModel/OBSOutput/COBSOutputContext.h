@@ -2,57 +2,49 @@
 
 
 #include <memory>
-
-
+#include <vector>
 
 #include "SBasicOutputHandler.h"
 
 
-typedef std::unique_ptr<AFBasicOutputHandler> tUPTR_BASIC_OUTPUT_HANDLER;
+typedef std::unique_ptr<AFBasicOutputHandler>            OUTPUT_HANDLER_PTR;
+typedef std::pair<obs_service_t*, OUTPUT_HANDLER_PTR>    PAIR_OUTPUT_HANDLER;
+typedef std::vector<PAIR_OUTPUT_HANDLER>                 OUTPUT_HANDLER_LIST;
 
 
 class AFOBSOutputContext final
 {
-#pragma region QT Field, CTOR/DTOR
 public:
+    AFOBSOutputContext();
+    ~AFOBSOutputContext();
 
-    static AFOBSOutputContext& GetSingletonInstance()
-    {
-        static AFOBSOutputContext* instance = nullptr;
-        if (instance == nullptr)
-            instance = new AFOBSOutputContext;
-        return *instance;
-    };
-    ~AFOBSOutputContext() {};
-private:
-    // singleton constructor
-    AFOBSOutputContext() = default;
-    AFOBSOutputContext(const AFOBSOutputContext&) = delete;
-    AFOBSOutputContext(/* rValue */AFOBSOutputContext&& other) noexcept = delete;
-    AFOBSOutputContext& operator=(const AFOBSOutputContext&) = delete;
-    //
-#pragma endregion QT Field, CTOR/DTOR
-
-#pragma region public func
 public:
-    void                                InitContext();
-    bool                                FinContext();
-    void                                ClearContext();
+    OUTPUT_HANDLER_LIST& GetOutputHandlerLists();
+    const AFBasicOutputHandler* getMainOutputHandler();
 
-    const tUPTR_BASIC_OUTPUT_HANDLER &   GetMainOuputHandler() const;
-#pragma endregion public func
+    volatile bool m_streamingActive = false;
+    volatile bool m_recordingActive = false;
+    volatile bool m_recordingPaused = false;
+    volatile bool m_replaybufActive = false;
+    volatile bool m_vcamActive = false;
 
-#pragma region private func
-#pragma endregion private func
+    bool IsStreamingStopping();
+    void SetStreamingStopping(bool stopping);
 
-#pragma region public member var
-#pragma endregion public member var
+    bool IsRecordingStopping();
+    void SetRecordingStopping(bool stopping);
 
-#pragma region private member var
+    bool IsReplayBufferStopping();
+    void SetReplayBufferStopping(bool stopping);
+
+    bool IsVirtualCamStopping();
+    void SetVirtualCamStopping(bool stopping);
+
 private:
-    tUPTR_BASIC_OUTPUT_HANDLER                  m_MainOutputHandler;
-    bool                                        m_bStreamingStopping = false;
-    bool                                        m_bRecordingStopping = false;
-    bool                                        m_bReplayBufferStopping = false;
-#pragma endregion private member var
+    OUTPUT_HANDLER_LIST m_outputHandlers;
+
+    bool m_streamingStopping = false;
+    bool m_recordingStopping = false;
+    bool m_replayBufferStopping = false;
+    bool m_vcamStopping = false;
 };

@@ -12,13 +12,13 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>940</width>
-    <height>760</height>
+    <width>0</width>
+    <height>0</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>940</width>
+    <width>16777215</width>
     <height>16777215</height>
    </size>
   </property>
@@ -45,7 +45,7 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QWidget" name="widget_SettingTop" native="true">
+    <widget class="QFrame" name="titleFrame">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -72,7 +72,7 @@
        <number>6</number>
       </property>
       <item>
-       <widget class="QLabel" name="label_Title">
+       <widget class="QLabel" name="titleLabel">
         <property name="minimumSize">
          <size>
           <width>0</width>
@@ -107,7 +107,7 @@
        </spacer>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton_Close">
+       <widget class="QPushButton" name="closeButton">
         <property name="enabled">
          <bool>true</bool>
         </property>
@@ -141,7 +141,7 @@
     </widget>
    </item>
    <item>
-    <widget class="QWidget" name="widget_SettingTab" native="true">
+    <widget class="QWidget" name="tabWidget" native="true">
      <layout class="QHBoxLayout" name="horizontalLayout">
       <property name="spacing">
        <number>0</number>
@@ -159,7 +159,7 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="AFQSettingTabButton" name="tabButtonProgram">
+       <widget class="AFQSettingTabButton" name="programButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -196,7 +196,7 @@
        </widget>
       </item>
       <item>
-       <widget class="AFQSettingTabButton" name="tabButtonStream">
+       <widget class="AFQSettingTabButton" name="streamButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -230,7 +230,7 @@
        </widget>
       </item>
       <item>
-       <widget class="AFQSettingTabButton" name="tabButtonOutput">
+       <widget class="AFQSettingTabButton" name="videoButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -264,7 +264,7 @@
        </widget>
       </item>
       <item>
-       <widget class="AFQSettingTabButton" name="tabButtonAudio">
+       <widget class="AFQSettingTabButton" name="audioButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -298,7 +298,7 @@
        </widget>
       </item>
       <item>
-       <widget class="AFQSettingTabButton" name="tabButtonVideo">
+       <widget class="AFQSettingTabButton" name="outputButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -332,7 +332,7 @@
        </widget>
       </item>
       <item>
-       <widget class="AFQSettingTabButton" name="tabButtonHotkeys">
+       <widget class="AFQSettingTabButton" name="hotkeyButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -366,7 +366,7 @@
        </widget>
       </item>
       <item>
-       <widget class="AFQSettingTabButton" name="tabButtonAccessibilty">
+       <widget class="AFQSettingTabButton" name="accessButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -400,7 +400,7 @@
        </widget>
       </item>
       <item>
-       <widget class="AFQSettingTabButton" name="tabButtonAdvanced">
+       <widget class="AFQSettingTabButton" name="advanceButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -437,7 +437,7 @@
     </widget>
    </item>
    <item>
-    <widget class="QWidget" name="widget_SettingArea" native="true">
+    <widget class="QWidget" name="settingAreaWidget" native="true">
      <property name="styleSheet">
       <string notr="true"/>
      </property>
@@ -461,13 +461,13 @@
        <widget class="QStackedWidget" name="stackedWidget">
         <property name="minimumSize">
          <size>
-          <width>940</width>
+          <width>0</width>
           <height>0</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
-          <width>940</width>
+          <width>16777215</width>
           <height>16777215</height>
          </size>
         </property>
@@ -475,31 +475,31 @@
          <string notr="true"/>
         </property>
         <property name="currentIndex">
-         <number>0</number>
+         <number>7</number>
         </property>
-        <widget class="QWidget" name="programSettingArea">
+        <widget class="QWidget" name="programPage">
          <property name="styleSheet">
           <string notr="true"/>
          </property>
         </widget>
-        <widget class="QWidget" name="streamSettingArea"/>
-        <widget class="QWidget" name="outputSettingArea"/>
-        <widget class="QWidget" name="audioSettingArea"/>
-        <widget class="QWidget" name="videoSettingArea"/>
-        <widget class="QWidget" name="hotkeysSettingArea"/>
-        <widget class="QWidget" name="accessibiltySettingArea">
+        <widget class="QWidget" name="streamPage"/>
+        <widget class="QWidget" name="outputPage"/>
+        <widget class="QWidget" name="audioPage"/>
+        <widget class="QWidget" name="videoPage"/>
+        <widget class="QWidget" name="hotkeyPage"/>
+        <widget class="QWidget" name="accessPage">
          <property name="styleSheet">
           <string notr="true"/>
          </property>
         </widget>
-        <widget class="QWidget" name="advancedSettingArea"/>
+        <widget class="QWidget" name="advancePage"/>
        </widget>
       </item>
      </layout>
     </widget>
    </item>
    <item>
-    <widget class="QWidget" name="widget_SettingBottom" native="true">
+    <widget class="QFrame" name="buttonBoxFrame">
      <layout class="QHBoxLayout" name="horizontalLayout_5">
       <property name="spacing">
        <number>0</number>
@@ -547,6 +547,15 @@
    <header>PopupWindows/SettingPopup/CSettingTabButton.h</header>
   </customwidget>
  </customwidgets>
+ <tabstops>
+  <tabstop>programButton</tabstop>
+  <tabstop>closeButton</tabstop>
+  <tabstop>streamButton</tabstop>
+  <tabstop>audioButton</tabstop>
+  <tabstop>hotkeyButton</tabstop>
+  <tabstop>accessButton</tabstop>
+  <tabstop>advanceButton</tabstop>
+ </tabstops>
  <resources>
   <include location="aneta-main-resource.qrc"/>
  </resources>

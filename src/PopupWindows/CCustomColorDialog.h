@@ -1,13 +1,13 @@
 ﻿#pragma once
 
 #include <QColorDialog>
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 namespace Ui {
 	class AFQCustomColorDialog;
 }
 
-class AFQCustomColorDialog : public AFQRoundedDialogBase
+class AFQCustomColorDialog : public AFTTopBaseDialog
 {
 	Q_OBJECT
 
@@ -22,18 +22,18 @@ public:
 	void setOptions(QColorDialog::ColorDialogOptions options);
 
 signals:
-	void qSignalCurrentColorChanged(const QColor& color);
-	void qSignalColorSelected(const QColor& color);
-	void qSignalReject();
+	void qsignalCurrentColorChanged(const QColor& color);
+	void qsignalColorSelected(const QColor& color);
+	void qsignalReject();
 
 private slots:
-	void qSlotAccept();
-	void qSlotReject();
-	void qSlotCurrentColorChanged(const QColor& color);
-	void qSlotColorSelected(const QColor& color);
+	void qslotAccept();
+	void qslotReject();
+	void qslotCurrentColorChanged(const QColor& color);
+	void qslotColorSelected(const QColor& color);
 
 private:
 	Ui::AFQCustomColorDialog* ui;
 
-	QColorDialog* m_colorPicker = nullptr;
+	QColorDialog* m_pColorPicker = nullptr;
 };

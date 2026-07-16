@@ -45,7 +45,6 @@ private:
 	QString FormatSeconds(int totalSeconds);
 	int64_t GetSliderTime(int val);
 
-
 	void StartMediaTimer();
 	void StopMediaTimer();
 	void RefreshControls();
@@ -64,8 +63,8 @@ private:
 	QTimer					m_timerSeek;
 
 	bool m_pressedSlider = false;
-	int	 m_seek;
-	int  m_lastSeek;
+	int	 m_seek = -1;
+	int  m_lastSeek = -1;
 	bool m_prevPaused = false;
 	bool m_countDownTimer = false;
 

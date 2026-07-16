@@ -4,18 +4,19 @@
 #include <QStyle>
 #include <QCloseEvent>
 
+#include "qt-wrappers.hpp"
+
 #include "ControlPanel/CMediaControlPanel.h"
 #include "ControlPanel/CSliderControlPanel.h"
 
 AFQSourceControlDialog::AFQSourceControlDialog(QWidget* parent) :
-	AFQRoundedDialogBase((QDialog*)parent),
+	AFTTopBaseDialog((QDialog*)parent),
 	ui(new Ui::AFQSourceControlDialog)
 {
 	ui->setupUi(this);
 
 	connect(ui->closeButton, &QPushButton::clicked,
 			this, &AFQSourceControlDialog::qslotCloseButtonClicked);
-
 }
 
 AFQSourceControlDialog::~AFQSourceControlDialog()
@@ -71,7 +72,7 @@ void AFQSourceControlDialog::SetOBSSource(OBSSource source, bool force)
 					panel->SetSource(source);
 					ui->emptyFrame->layout()->addWidget(panel);
 				}
-				else if (strcmp(id, "ffmpeg_source") == 0)
+				else if (strcmp(id, "ffmpeg_source") == 0)// || strcmp(id, "ffmpeg_list_source") == 0)
 				{
 					AFQMediaControlPanel* panel = new AFQMediaControlPanel(ui->emptyFrame);
 					panel->SetSource(source);
@@ -89,8 +90,7 @@ void AFQSourceControlDialog::SelectedContextSource(bool selected)
 {
 	this->setProperty("selectedContext", selected);
 
-	style()->unpolish(this);
-	style()->polish(this);
+	PolishStyleSheet(this);
 }
 
 void AFQSourceControlDialog::ClearContextPanel()

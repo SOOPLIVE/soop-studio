@@ -5,21 +5,23 @@
 #include <QMouseEvent>
 #include <QAbstractButton>
 
+#include "MainFrame/CTransparentMouseEvents.h"
+
 #include "UIComponent/CCustomMenu.h"
 
 class AFQHoverWidget;
 class QPushButton;
+class QDockWidget;
 
 namespace Ui {
-class AFDockTitle;
+    class AFDockTitle;
 }
 
 class AFDockTitle : public QFrame
 {
-#pragma region QT Field
     Q_OBJECT
-        Q_PROPERTY(bool moving READ IsMoving WRITE SetMoving)
-        Q_PROPERTY(bool moveandfloat READ IsMoveAndFloat)
+    Q_PROPERTY(bool moving READ IsMoving WRITE SetMoving)
+    Q_PROPERTY(bool moveandfloat READ IsMoveAndFloat)
 
 public:
     explicit AFDockTitle(QWidget* parent = nullptr);
@@ -32,91 +34,115 @@ public slots:
     void qslotToggleDock();
     void qslotMaximumPopupTriggered();
     void qslotMinimumPopupTriggered();
+    void qslotRefreshButtonTriggered();
     void qslotCloseButtonTriggered();
-    void qslotCloseCustomBroserTriggered();
-    void qslotMaximizeCustomBrowserTriggered();
-    void qslotMinimizeCustomBrowserTriggered();
 
-    void qslotAddSceneTriggered();
-    void qslotAddSourceTriggered();
     void qslotTransitionScenePopup();
-    void qslotShowSceneControlDock();
+    void qslotAdvAudioMixerPopup();
 
     void qslotChangeMaximizeIcon(bool maximize);
+    void qslotBreaktimeTicked(int remainingSec, int totalSec);
+    void qslotBreaktimeFinished();
+    void qslotUpdateWindowTitle(QString title);
 
 signals:
-    void qsignalMaximumPopup(const char*);
-    void qsignalMinimumPopup(const char*);
-    void qsignalClose(const char*);
-    void qsignalCustomBrowserClose(QString);
-    void qsignalCustomBrowserMaximize(QString);
-    void qsignalCustomBrowserMinimize(QString);
-    void qsignalToggleDock(bool, const char*);
+    void qsignalMaximumWithType(int);
+    void qsignalMinimumWithType(int);
+    void qsignalCloseWithType(int);
+    void qsignalCloseWithUuid(QString);
+    void qsignalMaximizeWithUuid(QString);
+    void qsignalMinimizeWithUuid(QString);
+    void qsignalToggleDock(bool, int);
     void qsignalAddScene();
     void qsignalAddSource();
     void qsignalTransitionScenePopup();
-    void qsignalShowSceneControlDock();
-#pragma endregion QT Field
+    void qsignalAdvAudioMixerPopup();
+    void qsignalRefreshButton(int);
+    void qsignalToggleCustomDock(bool, QString);
 
-#pragma region public func
 public:
-    void Initialize(bool onlyPopup, QString text, const char* BlockType);
-    void Initialize(QString customName);
+    void Initialize(bool onlyPopup, QString text, int BlockType, bool needQuestionMark, const QString& questionMarkToolTip);
+    void InitializeCustom(QString customName, QString customUuid, bool minmax, bool threeDots = false, bool closeButton = false);
+    void ShowRefreshButton();
     void AddButton(QAbstractButton* button);
     void AddButton(QList<QAbstractButton*> buttons);
-    void ChangeLabelText(QString text);
+    void UpdateTitleLabel();
     QString GetLabelText();
     void SetToggleWindowToDockButton(bool checked); //false: dock Button
+    void MinMaxButton(bool visible);
     void DeleteTreeDotsButton();
-    void DeleteSceneCollection();
-    const char* GetBlockType() { return m_sBlockType; };
+    void DeleteQuestionMarkButton();
+    void DeleteTitleIcon();
+    int GetBlockType() { return m_blockType; };
 
     bool IsMoving() const;
     void SetMoving(bool moving);
     bool IsFloating() const;
     void SetFloating(bool floating);
 
+    void SetHidePopup(bool hidePopup) { m_hidePopup = hidePopup; }
+    void SetIsPopup(bool popup) { m_popup = popup; }
+
     bool IsMoveAndFloat() const;
     void ChangeMaximizedIcon(bool isMaximized);
 
-#pragma endregion public func
+    void TitleChangePage(int nPage);
 
-#pragma region protected func
+    void ChangeLabelFontSize(int fontSize);
+    QFont GetFont();
+
 protected:
-#pragma endregion protected func
+    void resizeEvent(QResizeEvent* event);
 
-#pragma region private func
+    QSize sizeHint() const override { return minimumSizeHint(); }
+    QSize minimumSizeHint() const override;
+
 private:
-    void _ToggleWindowToDock(bool toggle);
+    void _ToggleWindowToDock(bool popup);
     void _MakeCustomMenu();
+    void _ConnectMaxIconChanged();
+    QDockWidget* _CheckDock();
 
-#pragma endregion private func
-
-#pragma region private member var
 private:
-    Ui::AFDockTitle *ui;
-    AFQCustomMenu* m_qMenu = nullptr;
-    AFQCustomMenu* m_qAddSceneSourceMenu = nullptr;
+    Ui::AFDockTitle* ui = nullptr;
+        
+    AFQCustomMenu* m_menu = nullptr;
+    AFQCustomMenu* m_addSceneSourceMenu = nullptr;
     
-    QAction* m_ToggleDockAction;
-    QAction* m_CloseAction;
-    QAction* m_TransitionScene;
-
-    QAction*    m_AddSceneAction;
-    QAction*    m_AddSourceAction;
-
+    QAction* m_broadInfoSettingAction = nullptr;
+    QAction* m_toggleDockAction = nullptr;
+    QAction* m_closeAction = nullptr;
+    QAction* m_transitionScene = nullptr;
+    QAction* m_advAudioMixerShow = nullptr;
+    QAction* m_changeAudioMixerLayout = nullptr;
+             
+    QAction* m_addSceneAction = nullptr;
+    QAction* m_addSourceAction = nullptr;
+             
     QPoint m_dragPosition;
+    
     int m_normalModeWidth = 0;
-    bool m_isMaximized;
-    bool m_dragInitiated;
+    bool m_dragInitiated = false;
+         
+    int  m_blockType = -1;
+    bool m_popup = true;
+    bool m_hidePopup = false;
+         
+    bool m_moving = false;
+    bool m_floating = false;
+    bool m_isMaximized = false;
 
-    const char* m_sBlockType;
-    bool m_bPopup = true;
-
-    bool m_bMoving;
-    bool m_bFloating;
-    bool m_bIsMaximized = false;
-#pragma endregion private member var
+    static const inline std::unordered_map<int, QString> windowTypesMap = {
+        //{ -1, "None" },
+        { 0, "SceneSource" },       { 1, "AudioMixer" },    //{ 2, "Null_3" },
+        { 3, "SoopChat" },          { 4, "TwitchChat" },    { 5, "YoutubeChat" },       //{ 6, "Null_7" },
+        { 7, "BroadInfo" },         { 8, "BLOCKITER" },     { 9, "AdvanceControls" },
+        { 10, "SceneControl" },     { 11, "CustomBrowserCollection" },  { 12, "StatPage" },
+        { 13, "Mission" },          { 14, "Vote" },         { 15, "Extensions" },
+        { 16, "SAVVYReaction" },    { 17, "AquaControl" },  { 18, "SoopOverlay" },
+        { 19, "Breaktime" },        { 20, "EventBannerImage" },        { 21, "SubTitle" },
+        //{ 22, "ENDOFINDE" }
+    };
 };
 
 #endif // AFCDOCKTITLE_H

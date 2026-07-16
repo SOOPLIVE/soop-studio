@@ -9,58 +9,61 @@ class QEvent;
 
 class AFQToggleButton : public QAbstractButton
 {
-#pragma region QT Field, CTOR/DTOR
     Q_OBJECT
     Q_PROPERTY(int offset READ offset WRITE setOffset)
     Q_PROPERTY(QBrush brush READ brush WRITE setBrush)
 
-#pragma endregion QT Field, CTOR/DTOR
-
-#pragma region class initializer, destructor
 public:
     AFQToggleButton(QWidget* parent = nullptr);
     ~AFQToggleButton() {};
-#pragma endregion class initializer, destructor
 
-#pragma region public func
-    QSize sizeHint() const override;
+public:
+    //QSize sizeHint() const override;
 
     QBrush brush() const {
-        return m_SlideBrush;
+        return m_slideBrush;
     }
     void setBrush(const QBrush& brush) {
-        m_SlideBrush = brush;
+        m_slideBrush = brush;
     }
 
     int offset() const {
-        return m_iButtonX;
+        return m_buttonX;
     }
     void setOffset(int offset) {
-        m_iButtonX = offset;
+        m_buttonX = offset;
         update();
     }
 
+    void SetChecked(bool checked);
     void ChangeState(bool state);
-#pragma endregion public func
 
-#pragma region protected func
+protected:
     void paintEvent(QPaintEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void enterEvent(QEnterEvent* event) override;
-#pragma endregion protected func
+    void resizeEvent(QResizeEvent* event) override;
 
-#pragma region private member var
-    bool m_bSwitchOn = false;
-    bool m_bAnimatingLock = false;
-    int m_iButtonX = 0;
-    int m_iButtonY = 0;
-    int m_iButtonHeight = 10;
-    int m_iButtonMargin = 3;
-    QBrush m_ButtonBrush = Qt::white;
-    QBrush m_SlideBrush = QBrush(QColor(22, 196, 40));
-    QBrush m_OffSlideBrush = QBrush(QColor(51, 51, 51));
-    QPropertyAnimation* m_SwitchAnimation = new QPropertyAnimation(this, "offset", this);
-#pragma endregion private member var
+private:
+    void _Init();
+
+private:
+    bool m_switchOn = false;
+    bool m_animatingLock = false;
+    int m_buttonX = 0;
+    //int m_buttonY = 0;
+    int m_buttonHeight = 10;
+    //int m_buttonMargin = 3;
+
+    QBrush m_buttonBrush = Qt::white;
+    QBrush m_slideBrush = QBrush(QColor(22, 196, 40)); // Checked
+    QBrush m_offSlideBrush = QBrush(QColor(51, 51, 51)); // Unchecked
+
+    QBrush m_disabledButtonBrush = QBrush(QColor(80, 82, 87));
+    QBrush m_disabledSlideBrush = QBrush(QColor(29, 57, 87)); // Disabled-Checked
+    QBrush m_disabledOffSlideBrush = QBrush(QColor(45, 48, 53)); // Disabled-Unchecked
+
+    QPropertyAnimation* m_pSwitchAnimation = new QPropertyAnimation(this, "offset", this);
 };
 
 #endif // AFQTOGGLEBUTTON_H

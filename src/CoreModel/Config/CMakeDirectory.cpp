@@ -1,83 +1,85 @@
-#include "CMakeDirectory.h"
+﻿#include "CMakeDirectory.h"
 
-#include <util/platform.h>
+#include "qt-wrappers.hpp"
+#include "util/platform.h"
 
-#include "include/qt-wrapper.h"
+#include "Application/CApplication.h"
 
-#include "CoreModel/Config/CConfigManager.h"
+#include "Common/StudioDefine.h"
 
-bool AFMakeDirectory::MakeUserDirs()
+//
+namespace AFMakeDirectoryUtil
 {
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    
-    char path[512];
+    bool MakeUserDirs()
+    {
+        char path[512] = { 0, };
+        if (GetAppConfigPath(path, sizeof(path), (LOCAL_FOLDER_NAME + "/basic").c_str()) <= 0)
+            return false;
+        if (!DoMkDir(path))
+            return false;
 
-    if (confManager.GetConfigPath(path, sizeof(path), "SOOPStudio/basic") <= 0)
-        return false;
-    if (!_DoMkDir(path))
-        return false;
+        if (GetAppConfigPath(path, sizeof(path), (LOCAL_FOLDER_NAME + "/logs").c_str()) <= 0)
+            return false;
+        if (!DoMkDir(path))
+            return false;
 
-    if (confManager.GetConfigPath(path, sizeof(path), "SOOPStudio/logs") <= 0)
-        return false;
-    if (!_DoMkDir(path))
-        return false;
+        if (GetAppConfigPath(path, sizeof(path), (LOCAL_FOLDER_NAME + "/logs/api").c_str()) <= 0)
+            return false;
+        if (!DoMkDir(path))
+            return false;
 
-    if (confManager.GetConfigPath(path, sizeof(path), "SOOPStudio/profiler_data") <= 0)
-        return false;
-    if (!_DoMkDir(path))
-        return false;
+        if (GetAppConfigPath(path, sizeof(path), (LOCAL_FOLDER_NAME + "/profiler_data").c_str()) <= 0)
+            return false;
+        if (!DoMkDir(path))
+            return false;
 
 #ifdef _WIN32
-    if (confManager.GetConfigPath(path, sizeof(path), "SOOPStudio/crashes") <= 0)
-        return false;
-    if (!_DoMkDir(path))
-        return false;
+        if (GetAppConfigPath(path, sizeof(path), (LOCAL_FOLDER_NAME + "/crashes").c_str()) <= 0)
+            return false;
+        if (!DoMkDir(path))
+            return false;
 #endif
 
 #ifdef WHATSNEW_ENABLED
-    if (confManager.GetConfigPath(path, sizeof(path), "SOOPStudio/updates") <= 0)
-        return false;
-    if (!_DoMkDir(path))
-        return false;
+        if (GetAppConfigPath(path, sizeof(path), "SOOPStudio/updates") <= 0)
+            return false;
+        if (!_DoMkDir(path))
+            return false;
 #endif
 
-    if (confManager.GetConfigPath(path, sizeof(path), "SOOPStudio/plugin_config") <= 0)
-        return false;
-    if (!_DoMkDir(path))
-        return false;
+        if (GetAppConfigPath(path, sizeof(path), (LOCAL_FOLDER_NAME + "/plugin_config").c_str()) <= 0)
+            return false;
+        if (!DoMkDir(path))
+            return false;
 
-    
-    return true;
-}
 
-bool AFMakeDirectory::MakeUserProfileDirs()
-{
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    
-    char path[512];
-
-    if (confManager.GetConfigPath(path, sizeof(path), "SOOPStudio/basic/profiles") <= 0)
-        return false;
-    if (!_DoMkDir(path))
-        return false;
-
-    if (confManager.GetConfigPath(path, sizeof(path), "SOOPStudio/basic/scenes") <= 0)
-        return false;
-    if (!_DoMkDir(path))
-        return false;
-
-    
-    return true;
-}
-
-bool AFMakeDirectory::_DoMkDir(const char* path)
-{
-    if (os_mkdirs(path) == MKDIR_ERROR)
-    {
-        AFErrorBox(NULL, "Failed to create directory %s", path);
-        return false;
+        return true;
     }
 
-    
-    return true;
+    bool MakeUserProfileDirs()
+    {
+        char path[512];
+
+        if (GetAppConfigPath(path, sizeof(path), (LOCAL_FOLDER_NAME + "/basic/profiles").c_str()) <= 0)
+            return false;
+        if (!DoMkDir(path))
+            return false;
+
+        if (GetAppConfigPath(path, sizeof(path), (LOCAL_FOLDER_NAME + "/basic/scenes").c_str()) <= 0)
+            return false;
+        if (!DoMkDir(path))
+            return false;
+
+
+        return true;
+    }
+    bool DoMkDir(const char* path)
+    {
+        if (os_mkdirs(path) == MKDIR_ERROR)
+        {
+            OBSErrorBox(NULL, "Failed to create directory %s", path);
+            return false;
+        }
+        return true;
+    }
 }

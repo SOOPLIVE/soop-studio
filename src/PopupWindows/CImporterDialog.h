@@ -8,7 +8,7 @@
 #include <QFileInfo>
 #include "ui_importer-dialog.h"
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 //class ImporterModel;
 class QCheckBox;
@@ -37,21 +37,22 @@ public:
 
     bool GetChecked();
     std::string GetName();
+    
     std::string GetPath();
     std::string GetProgram();
 
 private:
-    QCheckBox* m_qCheckBox = nullptr;
-    QLineEdit* m_qNameEdit = nullptr;
-    QLineEdit* m_qPathEdit = nullptr;
-    QLineEdit* m_qProgramEdit = nullptr;
+    QCheckBox* m_pCheckBox = nullptr;
+    QLineEdit* m_pNameEdit = nullptr;
+    QLineEdit* m_pPathEdit = nullptr;
+    QLineEdit* m_pProgramEdit = nullptr;
 
-    QPushButton* m_qDeleteButton = nullptr;
+    QPushButton* m_pDeleteButton = nullptr;
 
-    bool m_bInit = false;
+    bool m_init = false;
 };
 
-class AFQImporterDialog : public AFQRoundedDialogBase {
+class AFQImporterDialog : public AFTTopBaseDialog {
     Q_OBJECT
 
     //QPointer<ImporterModel> optionsModel;
@@ -84,9 +85,9 @@ private:
         bool selected;
     };
 
-    QList<AFQImporterRowWidget*> m_qImportEntryWidget;
+    QList<AFQImporterRowWidget*> m_importEntryWidget;
 
-    AFQImporterRowWidget* m_qNewRow = nullptr;
+    AFQImporterRowWidget* m_pNewRow = nullptr;
 };
 //
 //class ImporterModel : public QAbstractTableModel {

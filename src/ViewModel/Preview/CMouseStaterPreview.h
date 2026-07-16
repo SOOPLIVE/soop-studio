@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-
 #include <stdint.h>
 
 #define ITEM_LEFT (1 << 0)
@@ -22,68 +21,52 @@ enum class ItemHandle : uint32_t {
 	Rot = ITEM_ROT
 };
 
-
-class AFMouseStaterPreview final
+class CMouseStatePreview final
 {
-#pragma region QT Field, CTOR/DTOR
 public:
-	AFMouseStaterPreview() = default;
-	~AFMouseStaterPreview() = default;
-#pragma endregion QT Field, CTOR/DTOR
+	CMouseStatePreview() = default;
+	~CMouseStatePreview() = default;
 
-#pragma region public func
 public:
     // Preview Model Context State
-    bool            GetStateCropping() { return m_bCropping; };
-    void            SetStateCropping(bool value) { m_bCropping = value; };
-    bool            GetStateLocked() { return m_bLocked; };
-    void            SetStateLocked(bool value) { m_bLocked = value; };
-    bool            GetStateScrollMode() { return m_bScrollMode; };
-    void            SetStateScrollMode(bool value) { m_bScrollMode = value; };
-    bool            GetStateFixedScaling() { return m_bFixedScaling; };
-    void            SetStateFixedScaling(bool value) { m_bFixedScaling = value; };
-    bool            GetStateSelectionBox() { return m_bSelectionBox; };
-    void            SetStateSelectionBox(bool value) { m_bSelectionBox = value; };
-    
-    
+    bool GetStateCropping() { return cropping; };
+    void SetStateCropping(bool value) { cropping = value; };
+    bool GetStateLocked() { return locked; };
+    void SetStateLocked(bool value) { locked = value; };
+    bool GetStateScrollMode() { return scrollMode; };
+    void SetStateScrollMode(bool value) { scrollMode = value; };
+    bool GetStateFixedScaling() { return fixedScaling; };
+    void SetStateFixedScaling(bool value) { fixedScaling = value; };
+    bool GetStateSelectionBox() { return selectionBox; };
+    void SetStateSelectionBox(bool value) { selectionBox = value; };
+      
     // Mouse State
-	bool			IsMouseDown() { return m_stateMouseDown; };
-	void			SetMouseDown() { m_stateMouseDown = true; };
-	void			ResetMouseDown() { m_stateMouseDown = false; };
+	bool IsMouseDown() { return stateMouseDown; };
+	void SetMouseDown() { stateMouseDown = true; };
+	void ResetMouseDown() { stateMouseDown = false; };
 
-	bool			IsMouseMoved() { return m_stateMmouseMoved; };
-	void			SetMouseMoved() { m_stateMmouseMoved = true; };
-	void			ResetMouseMoved() { m_stateMmouseMoved = false; };
+	bool IsMouseMoved() { return stateMmouseMoved; };
+	void SetMouseMoved() { stateMmouseMoved = true; };
+	void ResetMouseMoved() { stateMmouseMoved = false; };
 
-	bool			IsMouseOverItems() { return m_stateMmouseOverItems; };
-	void			SetMouseOverItems() { m_stateMmouseOverItems = true; };
-	void			ResetMouseOverItems() { m_stateMmouseOverItems = false; };
-
-    
+	bool IsMouseOverItems() { return stateMmouseOverItems; };
+	void SetMouseOverItems() { stateMmouseOverItems = true; };
+	void ResetMouseOverItems() { stateMmouseOverItems = false; };
+ 
     // Item(OBSource)
-	ItemHandle		GetCurrStateHandle () { return m_currItemsHandle; };
-	void			SetCurrStateHandle(ItemHandle value) { m_currItemsHandle = value; };
-#pragma endregion public func
+	ItemHandle GetCurrStateHandle () { return currItemsHandle; };
+	void SetCurrStateHandle(ItemHandle value) { currItemsHandle = value; };
 
-#pragma region private func
-#pragma endregion private func
-
-#pragma region public member var
-#pragma endregion public member var
-
-#pragma region private member var
 private:
-    bool                m_bCropping = false;
-    bool                m_bLocked = false;
-    bool                m_bScrollMode = false;
-    bool                m_bFixedScaling = false;
-    bool                m_bSelectionBox = false;
-    
-    
-	bool				m_stateMouseDown = false;
-	bool				m_stateMmouseMoved = false;
-	bool				m_stateMmouseOverItems = false;
+    bool cropping = false;
+    bool locked = false;
+    bool scrollMode = false;
+    bool fixedScaling = false;
+    bool selectionBox = false;
+      
+	bool stateMouseDown = false;
+	bool stateMmouseMoved = false;
+	bool stateMmouseOverItems = false;
 
-	ItemHandle			m_currItemsHandle = ItemHandle::None;   // obs -> stretchHandle
-#pragma endregion private member var
+	ItemHandle currItemsHandle = ItemHandle::None;
 };

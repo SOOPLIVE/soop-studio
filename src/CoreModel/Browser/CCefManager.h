@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 
@@ -12,55 +12,30 @@ struct QCefCookieManager;
 
 class AFCefManager final
 {
-#pragma region QT Field, CTOR/DTOR
 public:
-    static AFCefManager& GetSingletonInstance()
-    {
-        static AFCefManager* instance = nullptr;
-        if (instance == nullptr)
-            instance = new AFCefManager;
-        return *instance;
-    };
+    AFCefManager();
     ~AFCefManager();
-private:
-    // singleton constructor
-    AFCefManager() = default;
-    AFCefManager(const AFCefManager&) = delete;
-    AFCefManager(/* rValue */AFCefManager&& other) noexcept = delete;
-    AFCefManager& operator=(const AFCefManager&) = delete;
-    //
-#pragma endregion QT Field, CTOR/DTOR
 
-#pragma region public func
 public:
-    void                                InitContext();
-    void                                FinContext();
+    void CheckExistingCookieId();
+    void InitPanelCookieManager();
+    void DestroyPanelCookieManager();
+    void DeleteCookies();
+         
+    void DuplicateCurrentCookieProfile(ConfigFile& config);
+    void InitBrowserPanelSafeBlock();
     
-    
-    void                                CheckExistingCookieId();
-    void                                InitPanelCookieManager();
-    void                                DestroyPanelCookieManager();
-    void                                DeleteCookies();
-    
-    void                                DuplicateCurrentCookieProfile(ConfigFile& config);
-    void                                InitBrowserPanelSafeBlock();
-    
-    
-    QCef*                               GetCef() { return m_pCef; };
-    QCefCookieManager*                  GetCefCookieManager() { return m_pPanelCookies; };
-#pragma endregion public func
+    QCef* GetCef() { return m_pCef; };
+    QCefCookieManager* GetCefCookieManager() { return m_pPanelCookies; };
 
-#pragma region private func
-private:
-    std::string                         _GenId();
-#pragma endregion private func
-#pragma region public member var
+    QCefWidget* createWidget(QWidget* parent, const std::string& url,
+                             QCefCookieManager* cookie_manager = nullptr,
+                             const std::string& headers = "", bool dummy = true);
 
-#pragma endregion public member var
-#pragma region private member var
+    void SetSoopCookie(std::string cookie);
+
 private:
-    QCef*                               m_pCef = nullptr;
-    QCefCookieManager*                  m_pPanelCookies = nullptr;
-    bool                                m_cef_js_avail = false;
-#pragma endregion private member var
+    QCef* m_pCef = nullptr;
+    QCefCookieManager* m_pPanelCookies = nullptr;
+    bool m_cef_js_avail = false;
 };

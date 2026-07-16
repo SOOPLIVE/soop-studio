@@ -1,17 +1,18 @@
 ﻿#include "CHotkeyComponent.h"
 #include "ui_hotkey-widget.h"
 
-#include "include/qt-wrapper.h"
 //#include "obs-app.hpp"
 
-#include <util/dstr.hpp>
 #include <QPointer>
 #include <QStyle>
 #include <QAction>
+#include <util/dstr.hpp>
+
+#include "qt-wrappers.hpp"
 
 #include "CoreModel/Icon/CIconContext.h"
 
-#include "PopupWindows/SettingPopup/CHotkeySettingAreaWidget.h"
+#include "PopupWindows/SettingPopup/CSettingHotkeyAreaWidget.h"
 
 static inline void UpdateStyle(QWidget* widget)
 {
@@ -178,13 +179,11 @@ void AFQHotkeyEdit::InitSignalHandler()
 
 void AFQHotkeyEdit::CreateDupeIcon()
 {
-    AFIconContext& icon = AFIconContext::GetSingletonInstance();
-    dupeIcon = addAction(icon.GetHotkeyConflictIcon(),
-        ActionPosition::TrailingPosition);
-
+    dupeIcon = addAction(ICON_CONTEXT.GetHotkeyConflictIcon(), ActionPosition::TrailingPosition);
     dupeIcon->setToolTip(QT_UTF8(Str("Basic.Settings.Hotkeys.DuplicateWarning")));
-    QObject::connect(dupeIcon, &QAction::triggered,
-        [=] { emit qsignalSearchKey(key); });
+    QObject::connect(dupeIcon, &QAction::triggered, [=] {
+        emit qsignalSearchKey(key);
+    });
     dupeIcon->setVisible(false);
 }
 
@@ -318,11 +317,11 @@ AFHotkeyWidget::AFHotkeyWidget(QWidget* parent, obs_hotkey_id id, std::string na
     QWidget(parent),
     ui(new Ui::AFHotkeyWidget),
     m_hotkeyId(id),
-    m_sName(name),
+    m_name(name),
     m_OBSSignalBindingsChanged(obs_get_signal_handler(),
         "hotkey_bindings_changed",
         &AFHotkeyWidget::_BindingsChanged, this),
-    m_HotkeySettingsDialog(settings)
+    m_pHotkeySettingsDialog(settings)
 {
     ui->setupUi(this);
     auto layout = new QVBoxLayout;
@@ -331,6 +330,10 @@ AFHotkeyWidget::AFHotkeyWidget(QWidget* parent, obs_hotkey_id id, std::string na
     setLayout(layout);
 
     SetKeyCombinations(combos);
+
+
+    if (MAINFRAME->IsSmallResolution())
+        setFixedWidth(305);
 }
 
 AFHotkeyWidget::~AFHotkeyWidget()
@@ -340,7 +343,7 @@ AFHotkeyWidget::~AFHotkeyWidget()
 
 void AFHotkeyWidget::HandleChangedBindings(obs_hotkey_id id_)
 {
-    if (m_bIgnoreChangedBindings || m_hotkeyId != id_)
+    if (m_ignoreChangedBindings || m_hotkeyId != id_)
         return;
 
     std::vector<obs_key_combination_t> bindings;
@@ -361,8 +364,8 @@ void AFHotkeyWidget::HandleChangedBindings(obs_hotkey_id id_)
         },
         static_cast<void*>(&LoadBindings));
 
-    while (m_Edits.size() > 0)
-        _RemoveEdit(m_Edits.size() - 1, false);
+    while (m_edits.size() > 0)
+        _RemoveEdit(m_edits.size() - 1, false);
 
     SetKeyCombinations(bindings);
 }
@@ -378,21 +381,21 @@ void AFHotkeyWidget::SetKeyCombinations(const std::vector<obs_key_combination_t>
 
 void AFHotkeyWidget::Apply()
 {
-    for (auto& edit : m_Edits) {
+    for (auto& edit : m_edits) {
         edit->original = edit->key;
         edit->changed = false;
     }
 
-    m_bChanged = false;
+    m_changed = false;
 
-    //for (auto& revertButton : m_RevertButtons)
+    //for (auto& revertButton : m_revertButtons)
     //    revertButton->setEnabled(false);
 }
 
 void AFHotkeyWidget::GetCombinations(std::vector<obs_key_combination_t>& combinations) const
 {
     combinations.clear();
-    for (auto& edit : m_Edits)
+    for (auto& edit : m_edits)
         if (!obs_key_combination_is_empty(edit->key))
             combinations.emplace_back(edit->key);
 }
@@ -409,12 +412,12 @@ void AFHotkeyWidget::Save(std::vector<obs_key_combination_t>& combinations)
     Apply();
 
     auto AtomicUpdate = [&]() {
-        m_bIgnoreChangedBindings = true;
+        m_ignoreChangedBindings = true;
 
         obs_hotkey_load_bindings(m_hotkeyId, combinations.data(),
             combinations.size());
 
-        m_bIgnoreChangedBindings = false;
+        m_ignoreChangedBindings = false;
     };
     using AtomicUpdate_t = decltype(&AtomicUpdate);
 
@@ -424,23 +427,25 @@ void AFHotkeyWidget::Save(std::vector<obs_key_combination_t>& combinations)
 }
 
 void AFHotkeyWidget::Clear() {
-    for (QPointer<AFQHotkeyEdit> edit : m_Edits) {
+    for (QPointer<AFQHotkeyEdit> edit : m_edits) {
         if (edit.data()->key.key != OBS_KEY_NONE) {
             edit.data()->qslotClearKey();
         }
     }
+
+    _Default();
 }
 
 bool AFHotkeyWidget::Changed() const
 {
-    return m_bChanged ||
-        std::any_of(begin(m_Edits), end(m_Edits),
+    return m_changed ||
+        std::any_of(begin(m_edits), end(m_edits),
             [](AFQHotkeyEdit* edit) { return edit->changed; });
 }
 
 size_t AFHotkeyWidget::GetEditCount()
 {
-    return m_Edits.size();
+    return m_edits.size();
 }
 
 void AFHotkeyWidget::enterEvent(QEnterEvent* event)
@@ -463,10 +468,14 @@ void AFHotkeyWidget::leaveEvent(QEvent* event)
 
 void AFHotkeyWidget::_AddEdit(obs_key_combination combo, int idx)
 {
-    auto edit = new AFQHotkeyEdit(parentWidget(), combo, m_HotkeySettingsDialog);
+    auto edit = new AFQHotkeyEdit(parentWidget(), combo, m_pHotkeySettingsDialog);
     edit->setProperty("editType", "hotkeyWidgetEdit");
-    edit->setToolTip(m_sToolTip);
+    edit->setToolTip(m_toolTip);
+
     edit->setFixedSize(346, 40);
+
+    if (MAINFRAME->IsSmallResolution())
+        edit->setFixedSize(189, 40);
 
     //auto revert = new QPushButton;
     //revert->setProperty("themeID", "revertIconHotKey");
@@ -475,9 +484,9 @@ void AFHotkeyWidget::_AddEdit(obs_key_combination combo, int idx)
     //revert->setEnabled(false);
 
     auto clear = new QPushButton;
-    clear->setProperty("themeID", "clearIconHotkey");
+    clear->setProperty("buttonType", "closeButton");
     clear->setToolTip(QT_UTF8("Clear"));
-    clear->setFixedSize(QSize(18, 18));
+    clear->setFixedSize(QSize(20, 20));
     clear->setEnabled(!obs_key_combination_is_empty(combo));
 
     QObject::connect(
@@ -489,20 +498,20 @@ void AFHotkeyWidget::_AddEdit(obs_key_combination combo, int idx)
         });
 
     auto add = new QPushButton;
-    add->setProperty("themeID", "addIconHotkey");
+    add->setObjectName("addButton");
     add->setToolTip(QT_UTF8("Add"));
-    add->setFixedSize(QSize(18, 18));
+    add->setFixedSize(QSize(24, 24));
 
     auto remove = new QPushButton;
-    remove->setProperty("themeID", "removeIconHotkey");
+    remove->setObjectName("removeButton");
     remove->setToolTip(QT_UTF8("Remove"));
-    remove->setFixedSize(QSize(18, 18));
-    remove->setEnabled(m_RemoveButtons.size() > 0);
-
+    remove->setFixedSize(QSize(24, 24));
+    remove->setEnabled(m_removeButtons.size() > 0);
+    
     auto CurrentIndex = [&, remove] {
-        auto res = std::find(begin(m_RemoveButtons), end(m_RemoveButtons),
+        auto res = std::find(begin(m_removeButtons), end(m_removeButtons),
             remove);
-        return std::distance(begin(m_RemoveButtons), res);
+        return std::distance(begin(m_removeButtons), res);
     };
 
     QObject::connect(add, &QPushButton::clicked, [&, CurrentIndex] {
@@ -528,18 +537,24 @@ void AFHotkeyWidget::_AddEdit(obs_key_combination combo, int idx)
     subLayout->addWidget(remove);
     SubWidget->setLayout(subLayout);
 
-    if (m_RemoveButtons.size() == 1)
-        m_RemoveButtons.front()->setEnabled(true);
+    if (MAINFRAME->IsSmallResolution())
+    {
+        subLayout->addSpacerItem(new QSpacerItem(10, 10, QSizePolicy::Expanding, QSizePolicy::Minimum));
+        SubWidget->setFixedWidth(305);
+    }
+
+    if (m_removeButtons.size() == 1)
+        m_removeButtons.front()->setEnabled(true);
 
     if (idx != -1) {
-        //m_RevertButtons.insert(begin(m_RevertButtons) + idx, revert);
-        m_RemoveButtons.insert(begin(m_RemoveButtons) + idx, remove);
-        m_Edits.insert(begin(m_Edits) + idx, edit);
+        //m_revertButtons.insert(begin(m_revertButtons) + idx, revert);
+        m_removeButtons.insert(begin(m_removeButtons) + idx, remove);
+        m_edits.insert(begin(m_edits) + idx, edit);
     }
     else {
-        //m_RevertButtons.emplace_back(revert);
-        m_RemoveButtons.emplace_back(remove);
-        m_Edits.emplace_back(edit);
+        //m_revertButtons.emplace_back(revert);
+        m_removeButtons.emplace_back(remove);
+        m_edits.emplace_back(edit);
     }
 
     _Layout()->insertWidget(idx, SubWidget);
@@ -559,14 +574,14 @@ void AFHotkeyWidget::_AddEdit(obs_key_combination combo, int idx)
 
 void AFHotkeyWidget::_RemoveEdit(size_t idx, bool signal)
 {
-    auto& edit = *(begin(m_Edits) + idx);
+    auto& edit = *(begin(m_edits) + idx);
     if (!obs_key_combination_is_empty(edit->original) && signal) {
-        m_bChanged = true;
+        m_changed = true;
     }
 
-    //m_RevertButtons.erase(begin(m_RevertButtons) + idx);
-    m_RemoveButtons.erase(begin(m_RemoveButtons) + idx);
-    m_Edits.erase(begin(m_Edits) + idx);
+    //m_revertButtons.erase(begin(m_revertButtons) + idx);
+    m_removeButtons.erase(begin(m_removeButtons) + idx);
+    m_edits.erase(begin(m_edits) + idx);
 
     auto item = _Layout()->itemAt(static_cast<int>(idx))->widget();
     QLayoutItem* child = nullptr;
@@ -576,8 +591,8 @@ void AFHotkeyWidget::_RemoveEdit(size_t idx, bool signal)
     }
     delete item;
 
-    if (m_RemoveButtons.size() == 1)
-        m_RemoveButtons.front()->setEnabled(false);
+    if (m_removeButtons.size() == 1)
+        m_removeButtons.front()->setEnabled(false);
 
     emit qsignalKeyChanged();
 }
@@ -589,4 +604,42 @@ void AFHotkeyWidget::_BindingsChanged(void* data, calldata_t* param)
 
     QMetaObject::invokeMethod(widget, "HandleChangedBindings",
         Q_ARG(obs_hotkey_id, obs_hotkey_get_id(key)));
+}
+
+void AFHotkeyWidget::_Default()
+{
+    auto activeConfig = ACTIVECONFIG;
+    //
+    do
+    {
+        size_t firstDot = m_name.find('.');
+        if (firstDot == std::string::npos)
+            break;
+
+        std::string remaining = m_name.substr(firstDot + 1); // section.name
+
+        size_t secondDot = remaining.find('.');
+        if (secondDot == std::string::npos)
+            break;
+
+        // section
+        std::string section = remaining.substr(0, secondDot);
+        
+        // name
+        std::string name = remaining.substr(secondDot + 1);
+        name += ".Hotkey"; // "name.Hotkey"
+
+        auto has = config_has_user_value(activeConfig, section.c_str(), name.c_str()); // [section] name.Hotkey=default
+        if (has == false)
+            break;
+
+        // default
+        auto def = config_get_string(activeConfig, section.c_str(), name.c_str());
+        config_set_string(activeConfig, "Hotkeys", m_name.c_str(), def); // [Hotkeys] OBSBasic.section.name=default
+        config_save_safe(activeConfig, "tmp", nullptr);
+
+        OBSDataAutoRelease data = obs_data_create_from_json(def);
+        OBSDataArrayAutoRelease array = obs_data_get_array(data.Get(), "bindings");
+        obs_hotkey_load(m_hotkeyId, array);
+    } while (false);
 }

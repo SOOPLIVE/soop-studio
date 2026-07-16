@@ -25,6 +25,6 @@ protected:
     
 #pragma region private member var
 private:
-    QColor              m_LineColor = QColor(0, 224, 255);
+    QColor              m_lineColor = QColor(0, 224, 255);
 #pragma endregion private member var
 };

@@ -22,8 +22,6 @@
  * such as references to sources/etc from getting stuck in the Qt event queue
  * with no way of controlling when they'll be released. */
 
-// [item-widget-helpers.hpp]
-
 class QListWidget;
 class QListWidgetItem;
 

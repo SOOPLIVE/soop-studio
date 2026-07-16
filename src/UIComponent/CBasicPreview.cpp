@@ -1,28 +1,28 @@
 ﻿#include "CBasicPreview.h"
 
-
 #include <QMouseEvent>
+#include <QShortcut>
 
+#include "display-helpers.hpp"
 
 #include "Application/CApplication.h"
+#include "MainFrame/SceneSource/CMainSceneSource.h"
 #include "MainFrame/DynamicCompose/CMainDynamicComposit.h"
 
-#include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Config/CStateAppContext.h"
 #include "CoreModel/Graphics/CGraphicsContext.h"
 #include "CoreModel/Scene/CSceneContext.h"
 #include "CoreModel/Source/CSource.h"
 
-
-#include "ViewModel/MainWindow/CMainWindowAccesser.h"
+#include "ViewModel/MainWindow/CMainWindowRenderModel.h"
 
 // 
 #include "Blocks/SceneSourceDock/CSourceListView.h"
 
+#include "platform/platform.hpp"
 /// 
 /// </summary>
 
-#include <QShortcut>
 
 static inline QColor color_from_int(long long val)
 {
@@ -30,53 +30,46 @@ static inline QColor color_from_int(long long val)
         (val >> 24) & 0xff);
 }
 
-AFBasicPreview::AFBasicPreview(QWidget* parent, Qt::WindowFlags flags)
+CBasicPreview::CBasicPreview(QWidget* parent, Qt::WindowFlags flags)
 {
     ResetScrollingOffset();
     
 	setMouseTracking(true);
 
-	m_pInitedContextGraphics = &AFGraphicsContext::GetSingletonInstance();
-	AFSceneContext* tmpSceneContext = &AFSceneContext::GetSingletonInstance();
-
-	m_DrawPreview.SetUnsafeAccessContext(m_pInitedContextGraphics, tmpSceneContext);
-	m_PreviewModel.SetUnsafeAccessContext(m_pInitedContextGraphics, tmpSceneContext);
-    m_DrawPreview.SetModelPreview(&m_PreviewModel);
-
+    drawlinePreview.SetModelPreview(&previewModel);
 
 	this->setContextMenuPolicy(Qt::CustomContextMenu);
 
 	connect(this, SIGNAL(customContextMenuRequested(QPoint)),
-			this, SLOT(qSlotShowContextMenu(QPoint)));
+			this, SLOT(ShowCustomContextMenu(QPoint)));
 
 	setFocusPolicy(Qt::StrongFocus);
 
     SetSourceBorderColor();
 }
 
-AFBasicPreview::~AFBasicPreview()
+CBasicPreview::~CBasicPreview()
 {
 
 }
 
-AFBasicPreview* AFBasicPreview::Get()
+CBasicPreview* CBasicPreview::Get()
 {
-	return App()->GetMainView()->GetMainWindow()->GetMainPreview();
+	return DYNAMIC_COMPOSIT->GetMainPreview();
 }
 
-void AFBasicPreview::qSlotShowContextMenu(const QPoint& pos)
+void CBasicPreview::ShowCustomContextMenu(const QPoint& pos)
 {
-	AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-	AFQSourceListView* sourceListView = sceneContext.GetSourceListViewPtr();
+	AFQSourceListView* sourceListView = SCENE_CONTEXT.GetSourceListViewPtr();
 	if (!sourceListView)
 		return;
 
-	App()->GetMainView()->CreateSourcePopupMenu(sourceListView->GetTopSelectedSourceItem(), true);
+	MAIN_SCENESOURCE->CreateSourcePopupMenu(sourceListView->GetTopSelectedSourceItem(), true);
 }
 
-void AFBasicPreview::keyPressEvent(QKeyEvent *event)
+void CBasicPreview::keyPressEvent(QKeyEvent *event)
 {
-    if (IsFixedScaling()/*m_MouseState.GetStateFixedScaling()*/ == false ||
+    if (IsFixedScaling()/*m_mouseState.GetStateFixedScaling()*/ == false ||
         event->isAutoRepeat())
     {
         AFQTDisplay::keyPressEvent(event);
@@ -87,15 +80,15 @@ void AFBasicPreview::keyPressEvent(QKeyEvent *event)
     {
     case Qt::Key_Space:
         setCursor(Qt::OpenHandCursor);
-        m_MouseState.SetStateScrollMode(true);
-        m_isScrollMode = true; 
+        mouseState.SetStateScrollMode(true);
+        scrollMode = true;
         break;
     }
 
     AFQTDisplay::keyPressEvent(event);
 }
 
-void AFBasicPreview::keyReleaseEvent(QKeyEvent *event)
+void CBasicPreview::keyReleaseEvent(QKeyEvent *event)
 {
     if (event->isAutoRepeat()) {
         AFQTDisplay::keyReleaseEvent(event);
@@ -105,8 +98,8 @@ void AFBasicPreview::keyReleaseEvent(QKeyEvent *event)
     switch (event->key()) 
     {
     case Qt::Key_Space:
-        m_isScrollMode = false;
-        m_MouseState.SetStateScrollMode(false);
+        scrollMode = false;
+        mouseState.SetStateScrollMode(false);
         setCursor(Qt::ArrowCursor);
         break;
     }
@@ -114,18 +107,18 @@ void AFBasicPreview::keyReleaseEvent(QKeyEvent *event)
     AFQTDisplay::keyReleaseEvent(event);
 }
 
-void AFBasicPreview::wheelEvent(QWheelEvent *event)
+void CBasicPreview::wheelEvent(QWheelEvent *event)
 {
-    if (/*m_MouseState.GetStateScrollMode()*/m_isScrollMode == true &&
-        /*m_MouseState.GetStateFixedScaling()*/IsFixedScaling() == true)
+    if (/*mouseState.GetStateScrollMode()*/scrollMode == true &&
+        /*mouseState.GetStateFixedScaling()*/IsFixedScaling() == true)
     {
         const int delta = event->angleDelta().y();
         if (delta != 0)
         {
             if (delta > 0)
-                SetScalingLevel(m_scalingLevel + 1);
+                SetScalingLevel(scalingLevel + 1);
             else
-                SetScalingLevel(m_scalingLevel - 1);
+                SetScalingLevel(scalingLevel - 1);
             
             emit qsignalDisplayResized();
         }
@@ -134,47 +127,134 @@ void AFBasicPreview::wheelEvent(QWheelEvent *event)
     AFQTDisplay::wheelEvent(event);
 }
 
-void AFBasicPreview::mousePressEvent(QMouseEvent* event)
+static bool FindSelectedPainterSources(obs_scene_t*, obs_sceneitem_t* item, void* param)
 {
-	auto& contextDisplay = AFGraphicsContext::GetSingletonInstance();
-    //auto& configManager = AFConfigManager::GetSingletonInstance();
+    auto sources = reinterpret_cast<std::vector<OBSSource>*>(param);
 
-	QPointF pos = event->position();
+    if(!item)
+        return true;
 
-    if (m_isScrollMode && IsFixedScaling() &&
+    if(false == obs_sceneitem_selected(item)) {
+        return true;
+    }
+
+    if(false == obs_sceneitem_visible(item)) {
+        return true;
+    }
+
+    obs_source_t* source = obs_sceneitem_get_source(item);
+    if(!source) {
+        return true;
+    }
+
+    std::string id = obs_source_get_id(source);
+    if(0 == id.compare("painter_source")) {
+        sources->push_back(obs_sceneitem_get_source(item));
+    }
+
+    return true;
+};
+
+QCursor GetPainterCursor(int toolType, int r, int g, int b, int thickness, float pixelRatio, float previewScale)
+{
+    const qreal outline = 1.0;
+    const qreal penSize = qMax<qreal>(thickness * previewScale, 2.0);
+
+    auto makePenCursor = [&]() -> QCursor {
+        int sizePx = (int)qCeil(penSize * pixelRatio + outline * pixelRatio + 2);
+        if(sizePx % 2 == 1) sizePx++;
+
+        QPixmap img(sizePx, sizePx);
+        img.setDevicePixelRatio(pixelRatio);
+        img.fill(Qt::transparent);
+
+        QPainter painter(&img);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        QPen pen(QColor(255, 255, 255, 255));
+        pen.setWidthF(outline * pixelRatio);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter.setPen(pen);
+
+        const qreal inset = (outline * pixelRatio) / 2.0;
+        const qreal w = sizePx - outline * pixelRatio;
+        const qreal h = sizePx - outline * pixelRatio;
+
+        painter.setBrush(QColor(r, g, b, 255));
+        painter.drawEllipse(QRectF(inset, inset, w, h));
+        painter.end();
+
+        return QCursor(img, sizePx / 2, sizePx / 2);
+    };
+
+    auto makeImageCursor = [&](const QString& filePath) -> QCursor {
+        QPixmap img(filePath);
+        if(img.isNull())
+            return QCursor(Qt::ArrowCursor);
+
+        img.setDevicePixelRatio(pixelRatio);
+
+        const QPoint centerPx(img.width() / 2, img.height() / 2);
+
+        const int hx = qRound(centerPx.x() * pixelRatio);
+        const int hy = qRound(centerPx.y() * pixelRatio);
+
+        return QCursor(img, hx, hy);
+    };
+
+    if(toolType == 0)
+        return makePenCursor();
+
+    std::string absPath;
+    GetDataFilePath("assets", absPath);
+    const QString previewDir = QString::fromUtf8(absPath.c_str()) + "/preview/";
+
+    if(toolType == 1) {
+        return makeImageCursor(previewDir + "painter_eraser_cursor.png");
+    }
+
+    if(toolType == 2 || toolType == 3) {
+        return makeImageCursor(previewDir + "painter_diagram_cursor.png");
+    }
+
+    return QCursor(Qt::ArrowCursor);
+}
+
+void CBasicPreview::mousePressEvent(QMouseEvent* event)
+{
+    QPointF pos = event->position();
+
+    if (scrollMode && IsFixedScaling() &&
         event->button() == Qt::LeftButton) 
     {
         setCursor(Qt::ClosedHandCursor);
-        m_vec2scrollingFrom.x = pos.x();
-        m_vec2scrollingFrom.y = pos.y();
+        scrollingFrom.x = pos.x();
+        scrollingFrom.y = pos.y();
         return;
     }
     
     if (event->button() == Qt::RightButton) 
     {
-        m_isScrollMode = false;
+        scrollMode = false;
         setCursor(Qt::ArrowCursor);
     }
     
-    if (m_isLocked) {
+    if (locked) {
         AFQTDisplay::mousePressEvent(event);
         return;
     }
 
-	int32_t previewX = contextDisplay.GetMainPreviewX();
-    int32_t previewY = contextDisplay.GetMainPreviewY();
-	float previewScale = contextDisplay.GetMainPreviewScale();
+	int32_t previewX = GRAPHIC_CONTEXT.GetMainPreviewX();
+    int32_t previewY = GRAPHIC_CONTEXT.GetMainPreviewY();
+	float previewScale = GRAPHIC_CONTEXT.GetMainPreviewScale();
     
 //    if (configManager.GetStates()->IsPreviewProgramMode())
 //        previewY = 0;
     
-    auto* mainWindowViewModel = g_ViewModelsDynamic.UnSafeGetInstace();
-    float pixelRatio = mainWindowViewModel->m_RenderModel.GetDPIValue();
+    float pixelRatio = devicePixelRatioF();
     
 	float x = pos.x() - previewX / pixelRatio;
 	float y = pos.y() - previewY / pixelRatio;
-
-    AFQTDisplay::mousePressEvent(event);
 
 	if (event->button() != Qt::LeftButton &&
 		event->button() != Qt::RightButton)
@@ -182,10 +262,10 @@ void AFBasicPreview::mousePressEvent(QMouseEvent* event)
 
 
 	if (event->button() == Qt::LeftButton)
-		m_MouseState.SetMouseDown();
+        mouseState.SetMouseDown();
     
     
-    m_PreviewModel.ClearSelectedItems();
+    previewModel.ClearSelectedItems();
 
     
     Qt::KeyboardModifiers modifiers = QGuiApplication::keyboardModifiers();
@@ -194,53 +274,88 @@ void AFBasicPreview::mousePressEvent(QMouseEvent* event)
     bool ctrlDown = (modifiers & Qt::ControlModifier);
     
     if (altDown)
-        m_MouseState.SetStateCropping(true);
+        mouseState.SetStateCropping(true);
 
     if (altDown || shiftDown || ctrlDown)
-        m_PreviewModel.SetSelectedItems();
+        previewModel.SetSelectedItems();
     
     
-	vec2_set(&m_vec2StartPos, x, y);
-	m_PreviewModel.GetStretchHandleData(m_vec2StartPos, false, m_MouseState, pixelRatio);
+	vec2_set(&startPos, x, y);
+    previewModel.GetStretchHandleData(startPos, false, mouseState, pixelRatio);
 
-	vec2_divf(&m_vec2StartPos, &m_vec2StartPos, previewScale / pixelRatio);
-	m_vec2StartPos.x = std::round(m_vec2StartPos.x);
-	m_vec2StartPos.y = std::round(m_vec2StartPos.y);
+	vec2_divf(&startPos, &startPos, previewScale / pixelRatio);
+    startPos.x = std::round(startPos.x);
+    startPos.y = std::round(startPos.y);
 
-	if (m_PreviewModel.SelectedAtPos(m_vec2StartPos))
-		m_MouseState.SetMouseOverItems();
+	if (previewModel.SelectedAtPos(startPos))
+        mouseState.SetMouseOverItems();
 	else
-		m_MouseState.ResetMouseOverItems();
+        mouseState.ResetMouseOverItems();
 
-	vec2_zero(&m_vec2LastMoveOffset);
+	vec2_zero(&lastMoveOffset);
 
-	m_vec2MousePos = m_vec2StartPos;
+	mousePos = startPos;
+
+    std::vector<OBSSource> painter_sources;
+    obs_scene_enum_items(SCENE_CONTEXT.GetCurrentScene(), FindSelectedPainterSources, &painter_sources);
+
+    if(1 == painter_sources.size()) {
+        OBSSource painter_source = painter_sources.at(0);
+        if(painter_source) {
+            if(event->buttons() == Qt::LeftButton) {
+                struct obs_mouse_event mouseEvent = {};
+                mouseEvent.modifiers = INTERACT_MOUSE_LEFT;
+                mouseEvent.x = startPos.x;
+                mouseEvent.y = startPos.y;
+
+                obs_source_send_mouse_click(painter_source, &mouseEvent, MOUSE_LEFT, false, 1);
+            }
+        }
+    }
     
-    m_wrapper = obs_scene_save_transform_states(AFSourceUtil::GetCurrentScene(), true);
-    m_changed = false;
+    wrapper = obs_scene_save_transform_states(SCENE_CONTEXT.GetCurrentScene(), true);
+    changed = false;
 }
 
-void AFBasicPreview::mouseReleaseEvent(QMouseEvent* event)
+void CBasicPreview::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (m_isScrollMode)
+    if (scrollMode)
         setCursor(Qt::OpenHandCursor);
 
-    if (m_isLocked) {
+    if (locked) {
         AFQTDisplay::mouseReleaseEvent(event);
         return;
     }
     
-	if (m_MouseState.IsMouseDown())
+	if (mouseState.IsMouseDown())
 	{
-        auto* mainWindowViewModel = g_ViewModelsDynamic.UnSafeGetInstace();
-        float pixelRatio = mainWindowViewModel->m_RenderModel.GetDPIValue();
-        
-		vec2 pos = _GetMouseEventPos(event, pixelRatio);
+        float pixelRatio = devicePixelRatioF();
 
-		if (m_MouseState.IsMouseMoved() == false)
-			_ProcessClick(pos);
+        bool isPainterSeleceted = false;
+        std::vector<OBSSource> painter_sources;
+        obs_scene_enum_items(SCENE_CONTEXT.GetCurrentScene(), FindSelectedPainterSources, &painter_sources);
+        if(1 == painter_sources.size()) {
+            isPainterSeleceted = true;
+        }
+
+        if(1 == painter_sources.size()) {
+            OBSSource painter_source = painter_sources.at(0);
+            if(painter_source) {
+                struct obs_mouse_event mouseEvent = {};
+                mouseEvent.modifiers = INTERACT_MOUSE_LEFT;
+                mouseEvent.x = mousePos.x;
+                mouseEvent.y = mousePos.y;
+
+                obs_source_send_mouse_click(painter_source, &mouseEvent, MOUSE_LEFT, true, 1);
+            }
+        }
         
-        if (m_MouseState.GetStateSelectionBox())
+		vec2 pos = GetMouseEventPos(event, pixelRatio);
+
+		if (mouseState.IsMouseMoved() == false)
+			ProcessClick(pos);
+        
+        if (mouseState.GetStateSelectionBox())
         {
             Qt::KeyboardModifiers modifiers =
                 QGuiApplication::keyboardModifiers();
@@ -249,92 +364,98 @@ void AFBasicPreview::mouseReleaseEvent(QMouseEvent* event)
             bool shiftDown = modifiers & Qt::ShiftModifier;
             bool ctrlDown = modifiers & Qt::ControlModifier;
 
-            m_PreviewModel.EnumSelecedHoveredItems(altDown, shiftDown, ctrlDown);
+            previewModel.EnumSelecedHoveredItems(altDown, shiftDown, ctrlDown);
         }
 
-		m_PreviewModel.Reset();
-		m_MouseState.ResetMouseDown();
-		m_MouseState.ResetMouseMoved();
-        m_MouseState.SetStateCropping(false);
-        m_MouseState.SetStateSelectionBox(false);
+		previewModel.Reset();
+		mouseState.ResetMouseDown();
+		mouseState.ResetMouseMoved();
+        mouseState.SetStateCropping(false);
+        mouseState.SetStateSelectionBox(false);
 
 		unsetCursor();
-        
-        m_PreviewModel.MakeLastHoveredItem(pos);
+        previewModel.MakeLastHoveredItem(pos);
 	}
 
 	AFQTDisplay::mouseReleaseEvent(event);
     
-    AFMainFrame* main = App()->GetMainView();
-    AFMainDynamicComposit* maincomposit = main->GetMainWindow();
-    OBSDataAutoRelease rwrapper = obs_scene_save_transform_states(AFSourceUtil::GetCurrentScene(), true);
-    auto undo_redo = [maincomposit](const std::string& data) {
+    OBSDataAutoRelease rwrapper = obs_scene_save_transform_states(SCENE_CONTEXT.GetCurrentScene(), true);
+    auto undo_redo = [](const std::string& data) {
         OBSDataAutoRelease dat = obs_data_create_from_json(data.c_str());
         OBSSourceAutoRelease source = obs_get_source_by_uuid(obs_data_get_string(dat, "scene_uuid"));
-        maincomposit->SetCurrentScene(source.Get(), true);
+        DYNAMIC_COMPOSIT->SetCurrentScene(source.Get(), true);
 
         obs_scene_load_transform_states(data.c_str());
     };
 
-    if(m_wrapper && rwrapper)
+    if(wrapper && rwrapper)
     {
-        std::string undo_data(obs_data_get_json(m_wrapper));
+        std::string undo_data(obs_data_get_json(wrapper));
         std::string redo_data(obs_data_get_json(rwrapper));
-        if(m_changed && undo_data.compare(redo_data) != 0) {
-            main->m_undo_s.AddAction(QTStr("Undo.Transform").arg(obs_source_get_name(AFSourceUtil::GetCurrentSource())),
-                                     undo_redo, undo_redo, undo_data, redo_data);
+        if(changed && undo_data.compare(redo_data) != 0) {
+            UNDO_STACK.AddAction(QTStr("Undo.Transform").arg(obs_source_get_name(SCENE_CONTEXT.GetCurrentSceneSource())),
+                                 undo_redo, undo_redo, undo_data, redo_data);
         }
     }
 
-    m_wrapper = nullptr;
+    wrapper = nullptr;
 }
 
-void AFBasicPreview::mouseMoveEvent(QMouseEvent* event)
+void CBasicPreview::mouseMoveEvent(QMouseEvent* event)
 {
-
-    m_changed = true;
+    changed = true;
     
 	QPointF qtPos = event->position();
     
-    if (_CheckHoverAreaShowBlock(qtPos) == false)
+    if (CheckHoverAreaShowBlock(qtPos) == false)
     {
-        m_IsEnterHoverAreaShowBlock = false;
-        if (m_bSignaledShowBlock == true)
-            m_bSignaledShowBlock = false;
+        enterHoverAreaShowBlock = false;
+        if (signaledShowBlock == true)
+            signaledShowBlock = false;
     }
     
 
 	bool updateCursor = false;
 
-	ItemHandle stretchHandle = m_MouseState.GetCurrStateHandle();
+	ItemHandle stretchHandle = mouseState.GetCurrStateHandle();
 
-    auto* mainWindowViewModel = g_ViewModelsDynamic.UnSafeGetInstace();
-    float pixelRatio = mainWindowViewModel->m_RenderModel.GetDPIValue();
+    float pixelRatio = devicePixelRatioF();
     
-    if (m_isScrollMode && event->buttons() == Qt::LeftButton) {
-        m_vec2ScrollingOffset.x += pixelRatio * (qtPos.x() - m_vec2scrollingFrom.x);
-        m_vec2ScrollingOffset.y += pixelRatio * (qtPos.y() - m_vec2scrollingFrom.y);
-        m_vec2scrollingFrom.x = qtPos.x();
-        m_vec2scrollingFrom.y = qtPos.y();
+    if (scrollMode && event->buttons() == Qt::LeftButton) {
+        scrollingOffset.x += pixelRatio * (qtPos.x() - scrollingFrom.x);
+        scrollingOffset.y += pixelRatio * (qtPos.y() - scrollingFrom.y);
+        scrollingFrom.x = qtPos.x();
+        scrollingFrom.y = qtPos.y();
         emit qsignalDisplayResized();
         return;
     }
-    
-    
-	if (m_MouseState.IsMouseDown())
-	{
-		vec2 pos = _GetMouseEventPos(event, pixelRatio);
 
-		if (m_MouseState.IsMouseMoved() == false &&
-			m_MouseState.IsMouseOverItems() == false &&
+    bool isPainterSeleceted = false;
+    OBSSource selectedPainterSource;
+    std::vector<OBSSource> painter_sources;
+    obs_scene_enum_items(SCENE_CONTEXT.GetCurrentScene(), FindSelectedPainterSources, &painter_sources);
+    if(1 == painter_sources.size()) {
+        selectedPainterSource = painter_sources.at(0);
+        isPainterSeleceted = true;
+    }
+
+    vec2 pos = GetMouseEventPos(event, pixelRatio);
+        
+	if (mouseState.IsMouseDown())
+	{
+        if(isPainterSeleceted && !mouseState.IsMouseMoved())
+            previewModel.ClearHoveredItems(mouseState.GetStateSelectionBox());
+
+		if (mouseState.IsMouseMoved() == false &&
+			mouseState.IsMouseOverItems() == false &&
             stretchHandle == ItemHandle::None)
         {
-			_ProcessClick(m_vec2StartPos);
+			ProcessClick(startPos);
 
-			if (m_PreviewModel.SelectedAtPos(m_vec2StartPos))
-				m_MouseState.SetMouseOverItems();
+			if (previewModel.SelectedAtPos(startPos))
+				mouseState.SetMouseOverItems();
 			else
-				m_MouseState.ResetMouseOverItems();
+				mouseState.ResetMouseOverItems();
 		}
 
 		pos.x = std::round(pos.x);
@@ -347,10 +468,10 @@ void AFBasicPreview::mouseMoveEvent(QMouseEvent* event)
 
 		if (stretchHandle != ItemHandle::None)
 		{
-            if (m_PreviewModel.IsLocked())
+            if (previewModel.IsLocked())
                 return;
             
-            m_MouseState.SetStateSelectionBox(false);
+            mouseState.SetStateSelectionBox(false);
             
 //            OBSScene scene = main->GetCurrentScene();
 //            obs_sceneitem_t *group =
@@ -367,154 +488,168 @@ void AFBasicPreview::mouseMoveEvent(QMouseEvent* event)
             
             if (stretchHandle == ItemHandle::Rot) 
             {
-                m_PreviewModel.RotateItem(pos, IsShift, IsCntrl);
+                previewModel.RotateItem(pos, IsShift, IsCntrl);
                 setCursor(Qt::ClosedHandCursor);
             } 
-            else if (m_MouseState.GetStateCropping())
-                m_PreviewModel.CropItem(pos, m_MouseState);
+            else if (mouseState.GetStateCropping())
+                previewModel.CropItem(pos, mouseState);
             else
-                m_PreviewModel.StretchItem(pos, m_MouseState, IsShift, IsCntrl);
+                previewModel.StretchItem(pos, mouseState, IsShift, IsCntrl);
 		}
-		else if (m_MouseState.IsMouseOverItems())
+		else if (mouseState.IsMouseOverItems())
 		{
-            if (cursor().shape() != Qt::SizeAllCursor)
-                setCursor(Qt::SizeAllCursor);
+            if(!isPainterSeleceted) {
+                if (cursor().shape() != Qt::SizeAllCursor)
+                    setCursor(Qt::SizeAllCursor);
+            }
             
-            m_MouseState.SetStateSelectionBox(false);
-			m_PreviewModel.MoveItems(pos, m_vec2LastMoveOffset, m_vec2StartPos, IsCntrl);
+            mouseState.SetStateSelectionBox(false);
+			previewModel.MoveItems(pos, lastMoveOffset, startPos, IsCntrl);
 		}
 		else 
 		{
-            m_MouseState.SetStateSelectionBox(true);
-            if (m_MouseState.IsMouseMoved() == false)
-                m_PreviewModel.DoSelect(m_vec2StartPos);
-            
-            
-            OBSScene scene = AFSceneContext::GetSingletonInstance().
-                                GetCurrOBSScene();
+            mouseState.SetStateSelectionBox(true);
+            if (mouseState.IsMouseMoved() == false)
+                previewModel.DoSelect(startPos);
+                        
+            OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
             if (scene != nullptr)
             {
                 if (cursor().shape() != Qt::CrossCursor)
                     setCursor(Qt::CrossCursor);
                 
-                m_PreviewModel.BoxItems(scene, m_vec2StartPos, pos);
+                previewModel.BoxItems(scene, startPos, pos);
             }
 		}
 
-		m_MouseState.SetMouseMoved();
-		m_vec2MousePos = pos;
+		mouseState.SetMouseMoved();
+		mousePos = pos;
+
+        if(isPainterSeleceted && selectedPainterSource) {
+            struct obs_mouse_event mouseEvent = {};
+            mouseEvent.modifiers = INTERACT_MOUSE_LEFT;
+            mouseEvent.x = mousePos.x;
+            mouseEvent.y = mousePos.y;
+
+            obs_source_send_mouse_move(selectedPainterSource, &mouseEvent, false);
+        }
 	}
 	else 
 	{
-		vec2 pos = _GetMouseEventPos(event, pixelRatio);
-		uint32_t cntHover = m_PreviewModel.MakeHoveredItem(pos);
-
-		if (m_MouseState.IsMouseMoved() == false &&
-            cntHover > 0)
+		uint32_t cntHover = previewModel.MakeHoveredItem(pos);
+        if(mouseState.IsMouseMoved() == false && cntHover > 0)
 		{
-			m_vec2MousePos = pos;
+			mousePos = pos;
 
-            auto& contextDisplay = AFGraphicsContext::GetSingletonInstance();
-//            auto& configManager = AFConfigManager::GetSingletonInstance();
-
-			int32_t previewX = contextDisplay.GetMainPreviewX();
-			int32_t previewY = contextDisplay.GetMainPreviewY();
+			int32_t previewX = GRAPHIC_CONTEXT.GetMainPreviewX();
+			int32_t previewY = GRAPHIC_CONTEXT.GetMainPreviewY();
             
-//            if (configManager.GetStates()->JustCheckPreviewProgramMode())
+//            if (CEFMANAGER.GetStates()->JustCheckPreviewProgramMode())
 //                previewY = 0;
             
 
 			float scale = pixelRatio;
 			float x = qtPos.x() - previewX / scale;
 			float y = qtPos.y() - previewY / scale;
-			vec2_set(&m_vec2StartPos, x, y);
+			vec2_set(&startPos, x, y);
 
 			updateCursor = true;
 		}
         
         
-        if (_CheckHoverAreaShowBlock(qtPos))
+        if (CheckHoverAreaShowBlock(qtPos))
         {
-            if (m_IsEnterHoverAreaShowBlock == false &&
-                m_bSignaledShowBlock == false)
+            if (enterHoverAreaShowBlock == false &&
+                signaledShowBlock == false)
             {
-                m_bSignaledShowBlock = true;
+                signaledShowBlock = true;
                 
-                auto& configManager = AFConfigManager::GetSingletonInstance();
-                
-                if (configManager.GetStates()->JustCheckPreviewProgramMode() == false)
-                    emit App()->GetMainView()->GetMainWindow()->qsignalShowBlock();
+                if (STATEAPP.JustCheckPreviewProgramMode() == false)
+                    emit DYNAMIC_COMPOSIT->BlockShowRequested();
             }
             
-            m_IsEnterHoverAreaShowBlock = true;
-        }
-        
+            enterHoverAreaShowBlock = true;
+        }        
 	}
 
+    if(isPainterSeleceted && selectedPainterSource) {
+
+        float previewScale = GRAPHIC_CONTEXT.GetMainPreviewScale();
+        float pixelRatio = devicePixelRatioF();
+
+        OBSDataAutoRelease settings = obs_source_get_settings(selectedPainterSource);
+        int r = obs_data_get_int(settings, "line_color_r");
+        int g = obs_data_get_int(settings, "line_color_g");
+        int b = obs_data_get_int(settings, "line_color_b");
+        int thickness = obs_data_get_int(settings, "thickness");
+        int toolType = obs_data_get_int(settings, "tool");
+
+        QString paintInfo = QString("paintInfo|%1|%2|%3|%4|%5|%6|%7|")
+            .arg(previewScale).arg(pixelRatio)
+            .arg(r).arg(g).arg(b).arg(thickness).arg(toolType);
+
+        if(0 != cachedpaintSourceInfo.compare(paintInfo)) {
+            cachedPaintSourceCursor = GetPainterCursor(toolType, r, g, b, thickness, pixelRatio, previewScale);
+            cachedpaintSourceInfo = paintInfo;
+        }
+
+        setCursor(cachedPaintSourceCursor);
+        updateCursor = false;
+    }
+
 	if (updateCursor)
-	{
-        auto* mainWindowViewModel = g_ViewModelsDynamic.UnSafeGetInstace();
-        float pixelRatio = mainWindowViewModel->m_RenderModel.GetDPIValue();
-        
-		m_PreviewModel.GetStretchHandleData(m_vec2StartPos, true, m_MouseState, pixelRatio);
+	{   
+		previewModel.GetStretchHandleData(startPos, true, mouseState, pixelRatio);
 		uint32_t stretchFlags = (uint32_t)stretchHandle;
 		UpdateCursor(stretchFlags);
 	}
 }
-void AFBasicPreview::leaveEvent(QEvent* event)
+void CBasicPreview::leaveEvent(QEvent* event)
 {
-    m_IsEnterHoverAreaShowBlock = false;
-    if (m_bSignaledShowBlock == true)
-        m_bSignaledShowBlock = false;
+    enterHoverAreaShowBlock = false;
+    if (signaledShowBlock == true)
+        signaledShowBlock = false;
     
-    m_PreviewModel.ClearHoveredItems(m_MouseState.GetStateSelectionBox());
+    previewModel.ClearHoveredItems(mouseState.GetStateSelectionBox());
 }
 
-void AFBasicPreview::DrawOverflow()
+void CBasicPreview::DrawOverflow()
 {
-    if (m_isLocked)
+    if (locked)
         return;
 
-	m_DrawPreview.DrawOverflow();
+    drawlinePreview.DrawOverflow();
 }
 
-void AFBasicPreview::DrawSceneEditing(float dpiValue/* = 1.f*/)
+void CBasicPreview::DrawSceneEditing(float dpiValue/* = 1.f*/)
 {
-    if (m_isLocked)
+    if (locked)
         return;
 
-	m_DrawPreview.DrawSceneEditing(m_vec2StartPos, m_vec2MousePos, 
-                                   m_MouseState.GetStateSelectionBox(), dpiValue);
+    drawlinePreview.DrawSceneEditing(startPos, mousePos,
+                                   mouseState.GetStateSelectionBox(), dpiValue);
 }
 
-void AFBasicPreview::DrawSpacingHelpers(float dpiValue/* = 1.f*/)
+void CBasicPreview::DrawSpacingHelpers(float dpiValue/* = 1.f*/)
 {
-    if (m_isLocked)
+    if (locked)
         return;
 
-	m_DrawPreview.DrawSpacingHelpers(dpiValue);
+    drawlinePreview.DrawSpacingHelpers(dpiValue);
 }
 
-void AFBasicPreview::SetSourceBorderColor()
+void CBasicPreview::SetSourceBorderColor()
 {
-    config_t* globalConfig = AFConfigManager::GetSingletonInstance().GetGlobal();
+    QColor selectColor = color_from_int(config_get_int(USERCONFIG, "Accessibility", "SelectRed"));
+    QColor cropColor = color_from_int(config_get_int(USERCONFIG, "Accessibility", "SelectGreen"));
+    QColor hoverColor = color_from_int(config_get_int(USERCONFIG, "Accessibility", "SelectBlue"));
 
-    QColor selectColor = color_from_int(config_get_int(globalConfig, "Accessibility", "SelectRed"));
-    QColor cropColor = color_from_int(config_get_int(globalConfig, "Accessibility", "SelectGreen"));
-    QColor hoverColor = color_from_int(config_get_int(globalConfig, "Accessibility", "SelectBlue"));
-
-    m_DrawPreview.SetSelectColor(selectColor);
-    m_DrawPreview.SetCropColor(cropColor);
-    m_DrawPreview.SetHoverColor(hoverColor);
+    drawlinePreview.SetSelectColor(selectColor);
+    drawlinePreview.SetCropColor(cropColor);
+    drawlinePreview.SetHoverColor(hoverColor);
 }
 
-void AFBasicPreview::RegisterShortCutAction(QAction* actionShortcut)
-{
-	if (actionShortcut)
-		addAction(actionShortcut);
-}
-
-void AFBasicPreview::InitSetNugeEventAction()
+void CBasicPreview::InitSetNugeEventAction()
 {
     auto addNudge = [this](const QKeySequence &seq, MoveDir direction,
                        int distance) {
@@ -524,7 +659,7 @@ void AFBasicPreview::InitSetNugeEventAction()
         addAction(nudge);
         connect(nudge, &QAction::triggered,
             [this, distance, direction]() {
-                _Nudge(distance, direction);
+                Nudge(distance, direction);
             });
     };
 
@@ -538,29 +673,29 @@ void AFBasicPreview::InitSetNugeEventAction()
     addNudge(Qt::SHIFT | Qt::Key_Right, MoveDir::Right, 10);
 }
 
-void AFBasicPreview::SetScalingLevel(int32_t newScalingLevelVal)
+void CBasicPreview::SetScalingLevel(int32_t newScalingLevelVal)
 {
     newScalingLevelVal = std::clamp(newScalingLevelVal, -MAX_SCALING_LEVEL,
                     MAX_SCALING_LEVEL);
     float newScalingAmountVal =
         pow(ZOOM_SENSITIVITY, float(newScalingLevelVal));
-    m_scalingLevel = newScalingLevelVal;
+    scalingLevel = newScalingLevelVal;
     SetScalingAmount(newScalingAmountVal);
 }
 
-void AFBasicPreview::SetScalingAmount(float newScalingAmountVal)
+void CBasicPreview::SetScalingAmount(float newScalingAmountVal)
 {
-    m_vec2ScrollingOffset.x *= newScalingAmountVal / m_scalingAmount;
-    m_vec2ScrollingOffset.y *= newScalingAmountVal / m_scalingAmount;
-    m_scalingAmount = newScalingAmountVal;
+    scrollingOffset.x *= newScalingAmountVal / scalingAmount;
+    scrollingOffset.y *= newScalingAmountVal / scalingAmount;
+    scalingAmount = newScalingAmountVal;
 }
 
-void AFBasicPreview::ResetScrollingOffset()
+void CBasicPreview::ResetScrollingOffset()
 {
-    vec2_zero(&m_vec2ScrollingOffset);
+    vec2_zero(&scrollingOffset);
 }
 
-void AFBasicPreview::ClampScrollingOffsets()
+void CBasicPreview::ClampScrollingOffsets()
 {
     obs_video_info ovi;
     obs_get_video_info(&ovi);
@@ -572,26 +707,26 @@ void AFBasicPreview::ClampScrollingOffsets()
          1.0f);
 
     vec3_set(&offset, (float)ovi.base_width, (float)ovi.base_height, 1.0f);
-    vec3_mulf(&offset, &offset, m_scalingAmount);
+    vec3_mulf(&offset, &offset, scalingAmount);
 
     vec3_sub(&offset, &offset, &target);
 
     vec3_mulf(&offset, &offset, 0.5f);
     vec3_maxf(&offset, &offset, 0.0f);
 
-    m_vec2ScrollingOffset.x = std::clamp(m_vec2ScrollingOffset.x, -offset.x, offset.x);
-    m_vec2ScrollingOffset.y = std::clamp(m_vec2ScrollingOffset.y, -offset.y, offset.y);
+    scrollingOffset.x = std::clamp(scrollingOffset.x, -offset.x, offset.x);
+    scrollingOffset.y = std::clamp(scrollingOffset.y, -offset.y, offset.y);
 }
 
-void AFBasicPreview::UpdateCursor(uint32_t& flags)
+void CBasicPreview::UpdateCursor(uint32_t& flags)
 {
-	if (m_PreviewModel.IsLocked())
+	if (previewModel.IsLocked())
 	{
 		unsetCursor();
 		return;
 	}
 
-	if (!flags && (cursor().shape() != Qt::OpenHandCursor || !m_isScrollMode) )
+	if (!flags && (cursor().shape() != Qt::OpenHandCursor || !scrollMode) )
 		unsetCursor();
 	if (cursor().shape() != Qt::ArrowCursor)
 		return;
@@ -610,16 +745,13 @@ void AFBasicPreview::UpdateCursor(uint32_t& flags)
 		setCursor(Qt::OpenHandCursor);
 }
 
-vec2 AFBasicPreview::_GetMouseEventPos(QMouseEvent* event, float dpiValue/* = 1.f*/)
+vec2 CBasicPreview::GetMouseEventPos(QMouseEvent* event, float dpiValue/* = 1.f*/)
 {
-    auto& contextDisplay = AFGraphicsContext::GetSingletonInstance();
-    //auto& configManager = AFConfigManager::GetSingletonInstance();
+	int32_t previewX = GRAPHIC_CONTEXT.GetMainPreviewX();
+    int32_t previewY = GRAPHIC_CONTEXT.GetMainPreviewY();
+	float previewScale = GRAPHIC_CONTEXT.GetMainPreviewScale();
 
-	int32_t previewX = contextDisplay.GetMainPreviewX();
-    int32_t previewY = contextDisplay.GetMainPreviewY();
-	float previewScale = contextDisplay.GetMainPreviewScale();
-
-//    if (configManager.GetStates()->JustCheckPreviewProgramMode())
+//    if (STATEAPP.JustCheckPreviewProgramMode())
 //        previewY = 0;
     
 	float pixelRatio = dpiValue;
@@ -632,19 +764,19 @@ vec2 AFBasicPreview::_GetMouseEventPos(QMouseEvent* event, float dpiValue/* = 1.
 	return pos;
 }
 
-void AFBasicPreview::_ProcessClick(const vec2& pos)
+void CBasicPreview::ProcessClick(const vec2& pos)
 {
 	Qt::KeyboardModifiers modifiers = QGuiApplication::keyboardModifiers();
 
 	if (modifiers & Qt::ControlModifier)
-        m_PreviewModel.DoCtrlSelect(pos);
+        previewModel.DoCtrlSelect(pos);
 	else
-        m_PreviewModel.DoSelect(pos);
+        previewModel.DoSelect(pos);
 }
 
-void AFBasicPreview::_Nudge(int dist, MoveDir dir)
+void CBasicPreview::Nudge(int dist, MoveDir dir)
 {
-    if (m_MouseState.GetStateLocked())
+    if (mouseState.GetStateLocked())
         return;
 
     struct vec2 offset;
@@ -665,23 +797,21 @@ void AFBasicPreview::_Nudge(int dist, MoveDir dir)
         break;
     }
 
-    
     if (!recent_nudge) {
         recent_nudge = true;
-        OBSDataAutoRelease wrapper = obs_scene_save_transform_states(AFSourceUtil::GetCurrentScene(), true);
+        OBSDataAutoRelease wrapper = obs_scene_save_transform_states(SCENE_CONTEXT.GetCurrentScene(), true);
         std::string undo_data(obs_data_get_json(wrapper));
 
         nudge_timer = new QTimer;
         QObject::connect(
             nudge_timer, &QTimer::timeout,
             [this, &recent_nudge = recent_nudge, undo_data]() {
-            OBSDataAutoRelease rwrapper = obs_scene_save_transform_states(AFSourceUtil::GetCurrentScene(), true);
+            OBSDataAutoRelease rwrapper = obs_scene_save_transform_states(SCENE_CONTEXT.GetCurrentScene(), true);
                 std::string redo_data(obs_data_get_json(rwrapper));
 
-                AFMainFrame* main = App()->GetMainView();
-                main->m_undo_s.AddAction(QTStr("Undo.Transform").
-                                         arg(obs_source_get_name(AFSourceUtil::GetCurrentSource())),
-                                         undo_redo, undo_redo, undo_data, redo_data);
+                UNDO_STACK.AddAction(QTStr("Undo.Transform").
+                                     arg(obs_source_get_name(SCENE_CONTEXT.GetCurrentSceneSource())),
+                                     undo_redo, undo_redo, undo_data, redo_data);
 
                 recent_nudge = false;
             });
@@ -696,6 +826,5 @@ void AFBasicPreview::_Nudge(int dist, MoveDir dir)
         blog(LOG_ERROR, "No nudge timer!");
     }
 
-    auto& tmpSceneContext = AFSceneContext::GetSingletonInstance();
-    obs_scene_enum_items(tmpSceneContext.GetCurrOBSScene(), AFModelPreview::NudgeCallBack, &offset);
+    obs_scene_enum_items(SCENE_CONTEXT.GetCurrentScene(), CModelPreview::NudgeCallBack, &offset);
 }

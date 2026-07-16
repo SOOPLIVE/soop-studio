@@ -23,7 +23,7 @@ public:
 #pragma region public func
 public:
 	void SetOutputHandler(AFBasicOutputHandler* handler);
-	AFBasicOutputHandler* GetOutputHandler() { return outputHandler; }
+	AFBasicOutputHandler* GetOutputHandler() { return m_pOutputHandler; }
 	void StreamDelayStarting(int sec);
 	void StreamDelayStopping(int sec);
 	void StreamStarted(obs_output_t* output);
@@ -36,9 +36,6 @@ public:
 	void ClearAllSignals();
 	void ReconnectClear();
 
-public slots:
-	void qslotShowMessage(const QString& message, int timeout = 0);
-	void qslotClearMessage();
 #pragma endregion public func
 
 #pragma region protected func
@@ -67,40 +64,42 @@ private slots:
 	void UpdateCurrentFPS();
 	void UpdateIcons();
 
+	void qslotBroadStartAPIResponse_Reconnect(const QByteArray& responseData);
 	void qslotShowSystemAlert(QString channelID, QString alertText);
 
 #pragma endregion private func
 
 #pragma region private member var
 private:
-	AFBasicOutputHandler* outputHandler = nullptr;
-	obs_output_t* streamOutput = nullptr;
-	std::vector<OBSSignal> streamSigs;
-	obs_output_t* recordOutput = nullptr;
+	AFBasicOutputHandler* m_pOutputHandler = nullptr;
+	obs_output_t* m_pStreamOutput = nullptr;
+	std::vector<OBSSignal> m_streamSigs;
+	obs_output_t* m_pRecordOutput = nullptr;
 	//
-	bool active = false;
-	bool overloadedNotify = true;
-	bool streamPauseIconToggle = false;
-	bool disconnected = false;
-	bool firstCongestionUpdate = false;
+	bool m_active = false;
+	bool m_overloadedNotify = true;
+	bool m_streamPauseIconToggle = false;
+	bool m_disconnected = false;
+	bool m_firstCongestionUpdate = false;
 
-	int retries = 0;
-	int totalStreamSeconds = 0;
-	int totalRecordSeconds = 0;
+	int m_retries = 0;
+	int m_totalStreamSeconds = 0;
+	int m_totalRecordSeconds = 0;
 
-	int reconnectTimeout = 0;
+	int m_reconnectTimeout = 0;
 
-	int delaySecTotal = 0;
-	int delaySecStarting = 0;
-	int delaySecStopping = 0;
+	int m_delaySecTotal = 0;
+	int m_delaySecStarting = 0;
+	int m_delaySecStopping = 0;
 
-	int startSkippedFrameCount = 0;
-	int startTotalFrameCount = 0;
-	int lastSkippedFrameCount = 0;
+	int m_startSkippedFrameCount = 0;
+	int m_startTotalFrameCount = 0;
+	int m_lastSkippedFrameCount = 0;
 
-	int seconds = 0;
-	uint64_t lastBytesSent = 0;
-	uint64_t lastBytesSentTime = 0;
+	int m_seconds = 0;
+	uint64_t m_lastBytesSent = 0;
+	uint64_t m_lastBytesSentTime = 0;
+    //
 
 	QPointer<QTimer> m_refreshTimer;
 #pragma endregion private member var

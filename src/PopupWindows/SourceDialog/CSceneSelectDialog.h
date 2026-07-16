@@ -1,18 +1,17 @@
 ﻿#pragma once
 
 #include <QDialog>
+#include <QStyledItemDelegate>
+#include <QPainter>
 
 #include "ui_scene-select-dialog.h"
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 namespace Ui {
     class AFQSceneSelectDialog;
 }
 
-// exist : delete focus QStyledItemDelegate
-#include <QStyledItemDelegate>
-#include <QPainter>
 class NoFocusListTempDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -24,9 +23,8 @@ public:
     }
 };
 
-class AFQSceneSelectDialog : public AFQRoundedDialogBase
+class AFQSceneSelectDialog : public AFTTopBaseDialog
 {
-#pragma region QT Field, CTOR/DTOR
     Q_OBJECT
 
 public:
@@ -37,16 +35,9 @@ private slots:
     void qSlotButtonBoxClicked(QAbstractButton* button);
     void qSlotCloseButtonClicked();
 
-#pragma endregion QT Field
-
-#pragma region public member var
 public:
     QString m_sourceName;
-#pragma endregion public member var
 
-#pragma region private member var
 private:
     std::unique_ptr<Ui::AFQSceneSelectDialog> ui;
-#pragma endregion private member var
-
 };

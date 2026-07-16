@@ -1,19 +1,24 @@
-# SOOP Studio
-![LOGO](./res-readme/soop_mark.png)
+# FreecShot Plus
+![LOGO](./res-readme/icon.svg)
 
-**[SOOP](https://www.sooplive.com/) can be downloaded and installed through the service site**.
+FreecShot Plus is available for download from the **[SOOP](https://www.sooplive.com/)** website.
 
-## About SOOP Studio
-SOOP Studio PC version was developed so that beginners can easily set up broadcasting.
-This is a desktop application that allows you to broadcast live. You can configure the screen with a simple first operation,
-Stable transmission is possible on various broadcasting platforms
+## About FreecShot Plus
+FreecShot Plus is a desktop application for creators who broadcast live on SOOP.
+It helps streamers set up a broadcast environment, configure scenes, and start live streaming with a simple workflow.
 
-SOOP Studio used the OBS engine as the core module. We would thank all the developers with their wonderful work of OBS project.
+FreecShot Plus is designed to make live broadcasting easier for beginners while providing the stability and flexibility needed for advanced broadcasts.
+It supports scene composition, source management, and reliable live transmission for SOOP broadcasts.
+
+FreecShot Plus uses the OBS engine as its core module.
+We sincerely thank all contributors to the OBS Project for their wonderful work.
+
+**Note:** SOOP Studio has been renamed to FreecShot Plus.
 
 ## Overview
-![SOOP studio](./res-readme/soop_studio.png)
+![SOOP studio](./res-readme/overview.png)
 
-This application currently only supports windows 10,11 and macOS 11.0 and newer.
+This application currently supports Windows 10, Windows 11.
 
 ## Community
 
@@ -22,6 +27,6 @@ This application currently only supports windows 10,11 and macOS 11.0 and newer.
 
 ## License
 
-Copyright SOOP CO., LTD..
+Copyright SOOP CO., LTD.
 
 Licensed under the [GPL-2.0 license](LICENSE)

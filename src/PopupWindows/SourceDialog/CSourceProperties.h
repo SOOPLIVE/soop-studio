@@ -7,86 +7,76 @@
 
 #include "obs.hpp"
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
-class AFQPropertiesView;
+class OBSPropertiesView;
 
 namespace Ui {
-class AFQSourceProperties;
+    class AFQSourceProperties;
 }
 
-//class AFQSourceProperties : public QDialog
-class AFQSourceProperties : public AFQRoundedDialogBase
+class AFQSourceProperties : public AFTTopBaseDialog
 {
-#pragma region QT Field, CTOR/DTOR
     Q_OBJECT
 
 public:
-    explicit AFQSourceProperties(QWidget *parent, OBSSource source_);
+    explicit AFQSourceProperties(QWidget *parent, OBSSource source);
     ~AFQSourceProperties();
 
 private slots:
-    void qSlotButtonBoxClicked(QAbstractButton* button);
-    void qSlotCloseButtonClicked();
-
-    void qSlotAddPreviewButton();
-    void qSlotStartTransPreview();
-
+    void qslotButtonBoxClicked(QAbstractButton* button);
+    void qslotCloseButtonClicked();
+    void qslotAddPreviewButton();
+    void qslotStartTransPreview();
     void qslotSetWindowTitle(QString title);
 
-#pragma endregion QT Field
+    void qslotAddDrawCallback();
+    void qslotAddTransitionDrawCallback();
+    void qslotUpdatePropsCallback();
 
-#pragma region public func
+private:
+    static void _SourceRemoved(void* data, calldata_t* params);
+    static void _SourceRenamed(void* data, calldata_t* params);
+    static void _UpdateProperties(void* data, calldata_t*);
+    static void _DrawPreview(void* data, uint32_t cx, uint32_t cy);
+    static void _DrawTransitionPreview(void* data, uint32_t cx, uint32_t cy);
+
+    void _Cleanup();
+
 public:
-    OBSSource GetOBSSource() { return source; }
-#pragma endregion public func
+    OBSSource GetOBSSource() { return m_obsSource; }
+    enum obs_source_type GetSourceType() { return m_sourceType; }
+    void CloseSourcePropertise();
 
-#pragma region protected func
 protected:
     virtual bool nativeEvent(const QByteArray& eventType, void* message,
                              qintptr* result) override;
 
     virtual void closeEvent(QCloseEvent* event) override;
     virtual void reject() override;
-
-#pragma endregion protected func
-
-
-#pragma region private member var
+    virtual void showEvent(QShowEvent* event) override;
 
 private:
     Ui::AFQSourceProperties *ui = nullptr;
+
     bool m_acceptClicked = false;
     bool m_direction = true;
 
-    OBSSource source;
+    // For OBS Data 
+    OBSSource m_obsSource;
     OBSSignal m_signalRemoved;
     OBSSignal m_signalRenamed;
     OBSSignal m_signalUpdateProperties;
-    OBSData oldSettings;
-    AFQPropertiesView* view = nullptr;
-    QScrollArea* viewTest = nullptr;
+    OBSSignal m_signalMediaStop;
+    OBSData   m_dataOldSetting;
+    OBSSourceAutoRelease m_obsSourceA;
+    OBSSourceAutoRelease m_obsSourceB;
+    OBSSourceAutoRelease m_obsSourceClone;
 
-    OBSSourceAutoRelease sourceA;
-    OBSSourceAutoRelease sourceB;
-    OBSSourceAutoRelease sourceClone;
+    enum obs_source_type m_sourceType;
 
-    static void SourceRemoved(void* data, calldata_t* params);
-    static void SourceRenamed(void* data, calldata_t* params);
-    static void UpdateProperties(void* data, calldata_t*);
-    static void DrawPreview(void* data, uint32_t cx, uint32_t cy);
-    static void DrawTransitionPreview(void* data, uint32_t cx, uint32_t cy);
-
-
-    void        Cleanup();
-    // UI
-private:
-    QPushButton* m_buttonOK = nullptr;
-    QPushButton* m_buttonCancel = nullptr;
-    QPushButton* m_buttonRestore = nullptr;
-
-#pragma endregion private member var
-
+    // For Props UI
+    OBSPropertiesView* m_pViewProps = nullptr;
 };
 
 #endif // CSOURCEPROPERTIES_H

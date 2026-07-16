@@ -3,103 +3,145 @@
 
 #include <Application/CApplication.h>
 #include <json11.hpp>
-#include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
 
-#include "include/qt-wrapper.h"
+#include "UIComponent/CBorderPopupBaseWidget.h"
 
 void AFQCustomList::qslotTextChanged()
 {
-    if (!m_qNameLineEdit->text().isEmpty() && !m_qUrlLineEdit->text().isEmpty())
+    if (!m_pNameLineEdit->text().isEmpty() && !m_pUrlLineEdit->text().isEmpty())
     {
-        disconnect(m_qNameLineEdit, &QLineEdit::textEdited,
+        disconnect(m_pNameLineEdit, &QLineEdit::textEdited,
             this, &AFQCustomList::qslotTextChanged);
 
-        disconnect(m_qUrlLineEdit, &QLineEdit::textEdited,
+        disconnect(m_pUrlLineEdit, &QLineEdit::textEdited,
             this, &AFQCustomList::qslotTextChanged);
         emit qsignalAllEditFilled();
     }
 }
 
+
 void AFQCustomList::CustomListInit(bool newList)
 {
-    auto& localeTextManager = AFLocaleTextManager::GetSingletonInstance();
+    QWidget* checkBoxWidget = new QWidget(this);
+    checkBoxWidget->setFixedWidth(52);
+    QHBoxLayout* cLayout = new QHBoxLayout();
+    cLayout->setContentsMargins(17, 0, 0, 0);
 
-    m_qNameLineEdit = new AFQRememberLineEdit(this);
-    m_qNameLineEdit->setFixedSize(QSize(200, 40));
+    m_showPopupCheckBox = new QCheckBox(checkBoxWidget);
+    m_showPopupCheckBox->setText("");
+    m_showPopupCheckBox->setChecked(false);
+    cLayout->addWidget(m_showPopupCheckBox);
+    checkBoxWidget->setLayout(cLayout);
 
-    m_qUrlLineEdit = new AFQRememberLineEdit(this);
-    m_qUrlLineEdit->setFixedHeight(40);
+    m_pNameLineEdit = new AFQBasicLineEdit(this);
+    m_pNameLineEdit->setFixedSize(QSize(148, 40));
+
+    m_pUrlLineEdit = new AFQBasicLineEdit(this);
+    m_pUrlLineEdit->setFixedHeight(40);
 
     if (newList)
     {
-        m_sUuid = "";
-        connect(m_qNameLineEdit, &QLineEdit::textEdited,
+        m_uuid = "";
+        connect(m_pNameLineEdit, &QLineEdit::textEdited,
             this, &AFQCustomList::qslotTextChanged);
 
-        connect(m_qUrlLineEdit, &QLineEdit::textEdited,
+        connect(m_pUrlLineEdit, &QLineEdit::textEdited,
             this, &AFQCustomList::qslotTextChanged);
     }
 
-    m_qClearButton = new QPushButton(this);
-    m_qClearButton->setFixedSize(66, 40);
-    m_qClearButton->setEnabled(false);
-    m_qClearButton->setObjectName("pushButton_ClearCustomBrowser");
+    m_pClearButton = new QPushButton(this);
+    m_pClearButton->setFixedSize(66, 40);
+    m_pClearButton->setEnabled(false);
+    m_pClearButton->setObjectName("pushButton_ClearCustomBrowser");
 
-    m_qClearButton->setText(QTStr(localeTextManager.Str("Clear")));
-    connect(m_qClearButton, &QPushButton::clicked,
+    m_pClearButton->setText(QTStr("Clear"));
+    connect(m_pClearButton, &QPushButton::clicked,
         this, &AFQCustomList::qsignalClear);
 
     QHBoxLayout* hLayout = new QHBoxLayout();
     hLayout->setContentsMargins(0, 0, 0, 0);
     hLayout->setSpacing(10);
 
-    hLayout->addWidget(m_qNameLineEdit);
-    hLayout->addWidget(m_qUrlLineEdit);
-    hLayout->addWidget(m_qClearButton);
+    hLayout->addWidget(checkBoxWidget);
+    hLayout->addWidget(m_pNameLineEdit);
+    hLayout->addWidget(m_pUrlLineEdit);
+    hLayout->addWidget(m_pClearButton);
 
     setLayout(hLayout);
 }
 
-void AFQCustomList::InsertCustomList(QString name, QString path, QString uuid)
+void AFQCustomList::InsertCustomList(QString name, QString path, QString uuid, bool isOpen)
 {
-    m_qNameLineEdit->setText(name);
-    m_qUrlLineEdit->setText(path);
-    m_sUuid = uuid;
+    if(m_pNameLineEdit)
+        m_pNameLineEdit->setText(name);
+    if (m_pUrlLineEdit)
+        m_pUrlLineEdit->setText(path);
+    if (m_showPopupCheckBox)
+        m_showPopupCheckBox->setChecked(isOpen);
+    m_uuid = uuid;
 }
 
 void AFQCustomList::SetDeleteButtonEnable(bool enable)
 {
-    if (m_qClearButton)
-        m_qClearButton->setEnabled(enable);
+    if (m_pClearButton)
+        m_pClearButton->setEnabled(enable);
 }
 
 QString AFQCustomList::GetName()
 {
-    return m_qNameLineEdit->text();
+    return m_pNameLineEdit->text();
 }
 
 QString AFQCustomList::GetUrl()
 {
-    return m_qUrlLineEdit->text();
+    return m_pUrlLineEdit->text();
+}
+
+bool AFQCustomList::IsOpen()
+{
+    if (m_showPopupCheckBox)
+        return m_showPopupCheckBox->isChecked();
+    else
+        return false;
 }
 
 AFQCustomBrowserCollection::AFQCustomBrowserCollection(QWidget *parent) :
-    AFCQMainBaseWidget(parent),
+    QWidget(parent),
     ui(new Ui::AFQCustomBrowserCollection)
 {
     ui->setupUi(this);
-
-    setWindowFlags(Qt::Window | Qt::FramelessWindowHint);    
-    setAttribute(Qt::WA_TranslucentBackground);
-
-    setAttribute(Qt::WA_DeleteOnClose);
-
 }
 
 AFQCustomBrowserCollection::~AFQCustomBrowserCollection()
 {
     delete ui;
+}
+
+
+void AFQCustomBrowserCollection::qslotShowCheckChanged(bool checked)
+{
+    QCheckBox* senderWidget = qobject_cast<QCheckBox*>(sender());
+
+    if (checked)
+    {
+        QList<AFQCustomList*> customList = findChildren<AFQCustomList*>();
+        int count = 0;
+        for (AFQCustomList* custom : customList)
+        {
+            if (custom && custom->IsOpen())
+                count++;
+        }
+
+        if (count > 10)
+        {
+            AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+                "", QTStr("CustomBrowser.Open.Denied"));
+
+            senderWidget->setChecked(false);
+        }
+
+    }
 }
 
 void AFQCustomBrowserCollection::qslotDeleteCustomBrowser()
@@ -108,30 +150,26 @@ void AFQCustomBrowserCollection::qslotDeleteCustomBrowser()
     senderwidget->close();
     delete senderwidget;
     senderwidget = nullptr;
+    if (m_loadedCustomBrowser == CUSTOM_MAX_COUNT)
+        _AddNewCustomBrowser();
+    m_loadedCustomBrowser--;
 }
 
 void AFQCustomBrowserCollection::qslotTextFilled()
 {
-    m_qNewLineWidget->SetDeleteButtonEnable(true);
-    _AddNewCustomBrowser();
+    m_loadedCustomBrowser++;
+    m_pNewLineWidget->SetDeleteButtonEnable(true);
+    if (m_loadedCustomBrowser < CUSTOM_MAX_COUNT)
+        _AddNewCustomBrowser();
+    else
+        m_pNewLineWidget = nullptr;
 }
 
 void AFQCustomBrowserCollection::qslotApplyTriggered()
 {
     QList<QString> deleted = _SaveCustomBrowserList();
-    App()->GetMainView()->GetMainWindow()->ReloadCustomBrowserList(m_qInfoVec,
-                                                                   deleted);
-    App()->GetMainView()->ReloadCustomBrowserMenu();
-}
-
-void AFQCustomBrowserCollection::ReloadCustomBrowserList(
-    QVector<AFQCustomBrowserCollection::CustomBrowserInfo> vec)
-{
-    QList<AFQCustomList*> customList = findChildren<AFQCustomList*>();
-    for (AFQCustomList* custom : customList)
-    {
-        
-    }
+    MAIN_BLOCKMANAGER->ReloadCustomBrowserList(m_infoVec, deleted);
+    MAINFRAME->ReloadCustomBrowserMenu();
 }
 
 void AFQCustomBrowserCollection::CustomBrowserCollectionInit(
@@ -139,8 +177,6 @@ void AFQCustomBrowserCollection::CustomBrowserCollectionInit(
 {
     setWindowTitle(QTStr("Basic.MainMenu.Addon.CustomBrowserDocks"));
 
-    connect(ui->pushButton_Close, &QPushButton::clicked,
-        this, &AFQCustomBrowserCollection::close);
     connect(ui->pushButton_Cancel, &QPushButton::clicked,
         this, &AFQCustomBrowserCollection::close);
     connect(ui->pushButton_Apply, &QPushButton::clicked,
@@ -149,22 +185,31 @@ void AFQCustomBrowserCollection::CustomBrowserCollectionInit(
     _LoadCustomBrowserList(vec);
 }
 
+void AFQCustomBrowserCollection::closeEvent(QCloseEvent* event)
+{
+    emit qsignalCloseTriggered(ENUM_WINDOW_TYPE::CustomBrowserCollection);
+}
+
 void AFQCustomBrowserCollection::_AddNewCustomBrowser()
 {
     AFQCustomList* newList = new AFQCustomList(this);
+
     newList->CustomListInit(true);
+    connect(newList->getCheckBox(), &QCheckBox::toggled, this, &AFQCustomBrowserCollection::qslotShowCheckChanged);
+
     connect(newList, &AFQCustomList::qsignalAllEditFilled, 
         this, &AFQCustomBrowserCollection::qslotTextFilled);
     connect(newList, &AFQCustomList::qsignalClear,
         this, &AFQCustomBrowserCollection::qslotDeleteCustomBrowser);
     ui->widget_Contents->layout()->addWidget(newList);
-    m_qNewLineWidget = newList;
+    m_pNewLineWidget = newList;
 }
 
-void AFQCustomBrowserCollection::_LoadCustomBrowser(QString name, QString path, QString uuid)
+void AFQCustomBrowserCollection::_LoadCustomBrowser(QString name, QString path, QString uuid, bool isOpen)
 {
     AFQCustomList* newList = new AFQCustomList(this);
     newList->CustomListInit(false);
+
     newList->SetDeleteButtonEnable(true);
     connect(newList, &AFQCustomList::qsignalAllEditFilled,
         this, &AFQCustomBrowserCollection::qslotTextFilled);
@@ -172,23 +217,26 @@ void AFQCustomBrowserCollection::_LoadCustomBrowser(QString name, QString path, 
         this, &AFQCustomBrowserCollection::qslotDeleteCustomBrowser);
     ui->widget_Contents->layout()->addWidget(newList);
 
-    newList->InsertCustomList(name, path, uuid);
-
+    newList->InsertCustomList(name, path, uuid, isOpen);
 }
 
 void AFQCustomBrowserCollection::_LoadCustomBrowserList(
     QVector<AFQCustomBrowserCollection::CustomBrowserInfo> vec)
 {
-    m_LoadedCustomBrowser = 0;
-    m_qInfoVec = vec;
+    m_loadedCustomBrowser = 0;
+    m_infoVec = vec;
 
-    for (AFQCustomBrowserCollection::CustomBrowserInfo info : m_qInfoVec)
+    for (AFQCustomBrowserCollection::CustomBrowserInfo info : m_infoVec)
     {
-        _LoadCustomBrowser(info.Name, info.Url, info.Uuid);
-        m_LoadedCustomBrowser++;
+        _LoadCustomBrowser(info.Name, info.Url, info.Uuid, info.isOpen);
+        m_loadedCustomBrowser++;
     }
 
-    _AddNewCustomBrowser();
+    if(m_loadedCustomBrowser < 20)
+        _AddNewCustomBrowser();
+
+
+    _ConnectSignal();
 }
 
 QList<QString> AFQCustomBrowserCollection::_SaveCustomBrowserList()
@@ -201,22 +249,23 @@ QList<QString> AFQCustomBrowserCollection::_SaveCustomBrowserList()
 
     for (AFQCustomList* custom : customList)
     {
-        if (custom == m_qNewLineWidget)
-            continue;
+        if(m_pNewLineWidget)
+            if (custom == m_pNewLineWidget)
+                continue;
 
         AFQCustomBrowserCollection::CustomBrowserInfo info;
 
         info.Name = custom->GetName();
         info.Url = custom->GetUrl();
+        info.isOpen = custom->IsOpen();
 
         QString uuid = custom->GetUuid();
-        if (uuid == "")
+        if (uuid.isEmpty())
         {
-            QString uuid = QUuid::createUuid().toString();
+            uuid = QUuid::createUuid().toString();
             uuid.replace(QRegularExpression("[{}-]"), "");
             info.Uuid = uuid;
-            info.newCustom = true;
-            custom->InsertCustomList(info.Name, info.Url, info.Uuid);
+            custom->InsertCustomList(info.Name, info.Url, info.Uuid, info.isOpen);
         }
         else
         {
@@ -226,10 +275,10 @@ QList<QString> AFQCustomBrowserCollection::_SaveCustomBrowserList()
         newVec.push_back(info);
     }
 
-    for (AFQCustomBrowserCollection::CustomBrowserInfo info: m_qInfoVec)
+    foreach (AFQCustomBrowserCollection::CustomBrowserInfo info, m_infoVec)
     {
         bool notfound = true;
-        for (AFQCustomBrowserCollection::CustomBrowserInfo newInfo: m_qInfoVec) {
+        for (AFQCustomBrowserCollection::CustomBrowserInfo newInfo: newVec) {
             if (info.Uuid == newInfo.Uuid)
             {
                 notfound = false;
@@ -243,7 +292,17 @@ QList<QString> AFQCustomBrowserCollection::_SaveCustomBrowserList()
         }
     }
 
-    m_qInfoVec = newVec;
+    m_infoVec = newVec;
 
     return retVal;
+}
+
+void AFQCustomBrowserCollection::_ConnectSignal()
+{
+    QList<AFQCustomList*> customList = findChildren<AFQCustomList*>();
+
+    for (AFQCustomList* custom : customList)
+    {
+        connect(custom->getCheckBox(), &QCheckBox::toggled, this, &AFQCustomBrowserCollection::qslotShowCheckChanged);
+    }
 }

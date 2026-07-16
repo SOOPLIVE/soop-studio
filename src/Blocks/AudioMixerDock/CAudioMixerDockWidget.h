@@ -1,34 +1,36 @@
 ﻿#pragma once
 
-#include "Blocks/CBaseDockWidget.h"
-#include <QButtonGroup>
+#include <QWidget>
+
+#include <obs.hpp>
 
 namespace Ui
 {
-class AFAudioMixerDockWidget;
+class AFAudioMixerWidget;
 }
 
-class AFAudioMixerDockWidget : public AFQBaseDockWidget
+class AFAudioMixerWidget : public QWidget
 {
-#pragma region QT Field, CTOR/DTOR
 	Q_OBJECT
-#pragma endregion QT Field, CTOR/DTOR
 
-#pragma region class initializer, destructor
 public:
-	explicit AFAudioMixerDockWidget(QWidget* parent = nullptr);
-	~AFAudioMixerDockWidget();
-#pragma endregion class initializer, destructor
+	explicit AFAudioMixerWidget(QWidget* parent = nullptr);
+	~AFAudioMixerWidget();
 
-
-#pragma region public func
 public:
-	Ui::AFAudioMixerDockWidget* GetUIPtr() { return ui; }
-#pragma endregion public func
+	void ActivateAudioSource(OBSSource source);
+	void SetMixerLayout(bool vertical);
 
-#pragma region private member var
+protected:
+	void enterEvent(QEnterEvent* event) override;
+	void leaveEvent(QEvent* event) override;
+	void resizeEvent(QResizeEvent* event) override;
+
 private:
-	Ui::AFAudioMixerDockWidget* ui;
-#pragma endregion private member var
+	void Init();
+	void SetScrollBarVisibility(bool transparent);
+
+private:
+	Ui::AFAudioMixerWidget* ui = nullptr;
 };
 

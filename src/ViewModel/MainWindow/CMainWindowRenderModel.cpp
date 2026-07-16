@@ -3,6 +3,7 @@
 
 #include <obs.hpp>
 
+#include "display-helpers.hpp"
 
 #include "Application/CApplication.h"
 #include "MainFrame/CMainFrame.h"
@@ -10,20 +11,10 @@
 
 #include "Common/MathMiscUtils.h"
 #include "UIComponent/CBasicPreview.h"
-#include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Config/CStateAppContext.h"
 #include "CoreModel/Graphics/CGraphicsContext.h"
-#include "CoreModel/Scene/CScene.h"
 #include "CoreModel/Scene/CSceneContext.h"
 #include "ViewModel/MainWindow/CMainWindowAccesser.h"
-
-
-
-// Fast Access Context
-AFConfigManager*                            AFMainWindowRenderModel::m_pInitedConfigManager = nullptr;
-AFGraphicsContext*                          AFMainWindowRenderModel::m_pInitedContextGraphics = nullptr;
-AFSceneContext*                             AFMainWindowRenderModel::m_pInitedContextScene = nullptr;
-//
 
 
 #define PREVIEW_EDGE_SIZE 0
@@ -33,21 +24,19 @@ void AFMainWindowRenderModel::RenderMain(void* data, uint32_t, uint32_t)
 {
     AFMainWindowRenderModel* caller = static_cast<AFMainWindowRenderModel*>(data);
     
-    if (m_pInitedConfigManager == nullptr ||
-        m_pInitedContextGraphics == nullptr ||
-        m_pInitedContextScene == nullptr ||
-        caller->m_pMainPreview == nullptr)
+    if (caller->m_pMainPreview == nullptr)
         return;
-    
-    
+        
     GS_DEBUG_MARKER_BEGIN(GS_DEBUG_COLOR_DEFAULT, "RenderMain");
-    
+
+    auto& graphicContext = GRAPHIC_CONTEXT;
+    //    
     obs_video_info ovi;
     obs_get_video_info(&ovi);
 
-    float previewScale = m_pInitedContextGraphics->GetMainPreviewScale();
-    m_pInitedContextGraphics->SetMainPreviewCX(int(previewScale * float(ovi.base_width)));
-    m_pInitedContextGraphics->SetMainPreviewCY(int(previewScale * float(ovi.base_height)));
+    float previewScale = graphicContext.GetMainPreviewScale();
+    graphicContext.SetMainPreviewCX(int(previewScale * float(ovi.base_width)));
+    graphicContext.SetMainPreviewCY(int(previewScale * float(ovi.base_height)));
 
 
     gs_viewport_push();
@@ -55,14 +44,8 @@ void AFMainWindowRenderModel::RenderMain(void* data, uint32_t, uint32_t)
 
     obs_display_t* display = caller->m_pMainPreview->GetDisplay();
     uint32_t width, height;
-    int32_t previewX = m_pInitedContextGraphics->GetMainPreviewX();
-    int32_t previewY = m_pInitedContextGraphics->GetMainPreviewY();
-    
-
-    AFStateAppContext* tmpStateApp = m_pInitedConfigManager->GetStates();
-//    if (tmpStateApp->JustCheckPreviewProgramMode())
-//        previewY = 0;
-    
+    int32_t previewX = graphicContext.GetMainPreviewX();
+    int32_t previewY = graphicContext.GetMainPreviewY();
 
     obs_display_size(display, &width, &height);
     float right = float(width) - previewX;
@@ -78,15 +61,15 @@ void AFMainWindowRenderModel::RenderMain(void* data, uint32_t, uint32_t)
         -100.0f, 100.0f);
 
     gs_set_viewport(previewX, previewY,
-                    m_pInitedContextGraphics->GetMainPreviewCX(),
-                    m_pInitedContextGraphics->GetMainPreviewCY());
+                    graphicContext.GetMainPreviewCX(),
+                    graphicContext.GetMainPreviewCY());
 
-    if (tmpStateApp->JustCheckPreviewProgramMode())
+    if (STATEAPP.JustCheckPreviewProgramMode())
     {
         _DrawBackdrop(float(ovi.base_width),
                       float(ovi.base_height));
         
-        OBSScene scene = m_pInitedContextScene->GetCurrOBSScene();
+        OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
         obs_source_t *source = obs_scene_get_source(scene);
         if (source)
             obs_source_video_render(source);
@@ -102,32 +85,27 @@ void AFMainWindowRenderModel::RenderMain(void* data, uint32_t, uint32_t)
         100.0f);
     gs_reset_viewport();
 
-    int32_t targetCX = m_pInitedContextGraphics->GetMainPreviewCX();
-    int32_t targetCY = m_pInitedContextGraphics->GetMainPreviewCY();
+    //Safe Area Function Need Check
+    int32_t targetCX = graphicContext.GetMainPreviewCX();
+    int32_t targetCY = graphicContext.GetMainPreviewCY();
 
     if (caller->m_pMainPreview->GetShowSafeAreas()) {
-        m_pInitedContextGraphics->RenderSafeAreas(m_pInitedContextGraphics->GetActionSafeMargin(), 
-            targetCX, targetCY);
-        m_pInitedContextGraphics->RenderSafeAreas(m_pInitedContextGraphics->GetGraphicsSafeMargin(),
-            targetCX, targetCY);
-        m_pInitedContextGraphics->RenderSafeAreas(m_pInitedContextGraphics->GetFourByThreeSafeMargin(),
-            targetCX, targetCY);
-        m_pInitedContextGraphics->RenderSafeAreas(m_pInitedContextGraphics->GetLeftLine(), 
-            targetCX, targetCY);
-        m_pInitedContextGraphics->RenderSafeAreas(m_pInitedContextGraphics->GetTopLine(), 
-            targetCX, targetCY);
-        m_pInitedContextGraphics->RenderSafeAreas(m_pInitedContextGraphics->GetRightLine(), 
-            targetCX, targetCY);
+        RenderSafeAreas(graphicContext.GetActionSafeMargin(), targetCX, targetCY);
+        RenderSafeAreas(graphicContext.GetGraphicsSafeMargin(), targetCX, targetCY);
+        RenderSafeAreas(graphicContext.GetFourByThreeSafeMargin(), targetCX, targetCY);
+        RenderSafeAreas(graphicContext.GetLeftLine(), targetCX, targetCY);
+        RenderSafeAreas(graphicContext.GetTopLine(), targetCX, targetCY);
+        RenderSafeAreas(graphicContext.GetRightLine(), targetCX, targetCY);
     }
+    //Safe Area Function Need Check
     
-    auto* mainWindowViewModels = g_ViewModelsDynamic.UnSafeGetInstace();
+    auto* mainWindowViewModels = g_viewModelsDynamic.UnSafeGetInstace();
     float tmpDPI = 1.f;
     if (mainWindowViewModels != nullptr)
-        tmpDPI = mainWindowViewModels->m_RenderModel.GetDPIValue();
+        tmpDPI = mainWindowViewModels->m_renderModel.GetDPIValue();
     
     caller->m_pMainPreview->DrawSceneEditing(tmpDPI);
 
-    // need check Helpers
     if (caller->m_pMainPreview->GetDrawSpacingHelpers())
         caller->m_pMainPreview->DrawSpacingHelpers(tmpDPI);
 
@@ -141,42 +119,33 @@ void AFMainWindowRenderModel::RenderProgram(void *data, uint32_t, uint32_t)
 {
     AFMainWindowRenderModel* caller = static_cast<AFMainWindowRenderModel*>(data);
     
-    if (m_pInitedContextGraphics == nullptr ||
-        caller->m_ProgramDisplay == nullptr)
+    if (caller->m_programDisplay == nullptr)
         return;
     
     
     GS_DEBUG_MARKER_BEGIN(GS_DEBUG_COLOR_DEFAULT, "RenderProgram");
 
+    auto& graphicContext = GRAPHIC_CONTEXT;
+    //
     obs_video_info ovi;
-
     obs_get_video_info(&ovi);
 
-    float programScale = m_pInitedContextGraphics->GetProgramPreviewScale();
-    m_pInitedContextGraphics->SetProgramPreviewCX(int(programScale * float(ovi.base_width)));
-    m_pInitedContextGraphics->SetProgramPreviewCY(int(programScale * float(ovi.base_height)));
-    
-    
-    int32_t previewY = m_pInitedContextGraphics->GetProgramPreviewY();
-    if (m_pInitedConfigManager != nullptr)
-    {
-        AFStateAppContext* tmpStateApp = m_pInitedConfigManager->GetStates();
-//        if (tmpStateApp->JustCheckPreviewProgramMode())
-//            previewY = 0;
-    }
-
+    float programScale = graphicContext.GetProgramPreviewScale();
+    graphicContext.SetProgramPreviewCX(int(programScale * float(ovi.base_width)));
+    graphicContext.SetProgramPreviewCY(int(programScale * float(ovi.base_height)));
+        
+    int32_t previewY = graphicContext.GetProgramPreviewY();
     
     gs_viewport_push();
     gs_projection_push();
 
     /* --------------------------------------- */
 
-    gs_ortho(0.0f, float(ovi.base_width), 0.0f, float(ovi.base_height),
-         -100.0f, 100.0f);
-    gs_set_viewport(m_pInitedContextGraphics->GetProgramPreviewX(),
+    gs_ortho(0.0f, float(ovi.base_width), 0.0f, float(ovi.base_height), -100.0f, 100.0f);
+    gs_set_viewport(graphicContext.GetProgramPreviewX(),
                     previewY,
-                    m_pInitedContextGraphics->GetProgramPreviewCX(),
-                    m_pInitedContextGraphics->GetProgramPreviewCY());
+                    graphicContext.GetProgramPreviewCX(),
+                    graphicContext.GetProgramPreviewCY());
 
     obs_render_main_texture_src_color_only();
     gs_load_vertexbuffer(nullptr);
@@ -191,8 +160,7 @@ void AFMainWindowRenderModel::RenderProgram(void *data, uint32_t, uint32_t)
 
 void AFMainWindowRenderModel::ResizePreview(uint32_t cx, uint32_t cy)
 {
-    if (m_pInitedContextGraphics == nullptr ||
-        m_pMainPreview == nullptr)
+    if (m_pMainPreview == nullptr)
         return;
     
     
@@ -202,25 +170,24 @@ void AFMainWindowRenderModel::ResizePreview(uint32_t cx, uint32_t cy)
     /* resize preview panel to fix to the top section of the window */
     targetSize = GetPixelSize(m_pMainPreview);
 
-
+    auto& graphicContext = GRAPHIC_CONTEXT;
+    //
     obs_video_info ovi;
     obs_get_video_info(&ovi);
 
-
-    int32_t previewX = m_pInitedContextGraphics->GetMainPreviewX();
-    int32_t previewY = m_pInitedContextGraphics->GetMainPreviewY();
-    float previewScale = m_pInitedContextGraphics->GetMainPreviewScale();
+    int32_t previewX = graphicContext.GetMainPreviewX();
+    int32_t previewY = graphicContext.GetMainPreviewY();
+    float previewScale = graphicContext.GetMainPreviewScale();
 
 
     if (isFixedScaling)
     {
         m_pMainPreview->ClampScrollingOffsets();
         previewScale = m_pMainPreview->GetScalingAmount();
-        GetCenterPosFromFixedScale(
-            int(cx), int(cy),
-            targetSize.width() - PREVIEW_EDGE_SIZE * 2,
-            targetSize.height() - PREVIEW_EDGE_SIZE * 2, previewX,
-            previewY, previewScale);
+        GetCenterPosFromFixedScale(int(cx), int(cy),
+                                   targetSize.width() - PREVIEW_EDGE_SIZE * 2,
+                                   targetSize.height() - PREVIEW_EDGE_SIZE * 2,
+                                   previewX, previewY, previewScale);
         previewX += m_pMainPreview->GetScrollX();
         previewY += m_pMainPreview->GetScrollY();
     }
@@ -228,18 +195,18 @@ void AFMainWindowRenderModel::ResizePreview(uint32_t cx, uint32_t cy)
     {
         GetScaleAndCenterPos(int(cx), int(cy),
                             targetSize.width() - PREVIEW_EDGE_SIZE * 2,
-                            targetSize.height() -
-                            PREVIEW_EDGE_SIZE * 2,
+                            targetSize.height() - PREVIEW_EDGE_SIZE * 2,
                             previewX, previewY, previewScale);
     }
 
     previewX += float(PREVIEW_EDGE_SIZE);
     previewY += float(PREVIEW_EDGE_SIZE);
+    
+    //m_pMainPreview->SetScalingAmount(previewScale);
 
-
-    m_pInitedContextGraphics->SetMainPreviewX(previewX);
-    m_pInitedContextGraphics->SetMainPreviewY(previewY);
-    m_pInitedContextGraphics->SetMainPreviewScale(previewScale);
+    graphicContext.SetMainPreviewX(previewX);
+    graphicContext.SetMainPreviewY(previewY);
+    graphicContext.SetMainPreviewScale(previewScale);
 }
 
 void AFMainWindowRenderModel::RemoveCallbackMainDisplay()
@@ -253,17 +220,15 @@ void AFMainWindowRenderModel::RemoveCallbackMainDisplay()
 
 void AFMainWindowRenderModel::CreateProgramDisplay()
 {
-    m_ProgramDisplay = new AFQTDisplay();
+    m_programDisplay = new AFQTDisplay();
 }
 
 void AFMainWindowRenderModel::ReleaseProgramDisplay()
 {
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
+    auto& sceneContext = SCENE_CONTEXT;
+    OBSWeakSource lastScene = sceneContext.GetLastScene();
     
-    
-    OBSWeakSource lastScene = sceneContext.GetLastOBSScene();
-    
-    delete m_ProgramDisplay;
+    delete m_programDisplay;
     
     if (lastScene) 
     {
@@ -271,62 +236,54 @@ void AFMainWindowRenderModel::ReleaseProgramDisplay()
         if (actualLastScene)
             obs_source_dec_showing(actualLastScene);
         lastScene = nullptr;
-        sceneContext.SetLastOBSScene(nullptr);
+        sceneContext.SetLastScene(nullptr);
     }
 
-    sceneContext.SetProgramOBSScene(nullptr);
-    sceneContext.SetSwapOBSScene(nullptr);
+    sceneContext.SetProgramScene(nullptr);
+    sceneContext.SetSwapScene(nullptr);
 
 //    prevFTBSource = nullptr;
 }
 
 void AFMainWindowRenderModel::ResizeProgram(uint32_t cx, uint32_t cy)
 {
-    if (m_pInitedContextGraphics == nullptr ||
-        m_ProgramDisplay == nullptr)
+    if (m_programDisplay == nullptr)
         return;
-    
-    QSize targetSize;
 
-    int32_t programX = m_pInitedContextGraphics->GetProgramPreviewX();
-    int32_t programY = m_pInitedContextGraphics->GetProgramPreviewY();
-    float programScale = m_pInitedContextGraphics->GetProgramPreviewScale();
+    auto& graphicContext = GRAPHIC_CONTEXT;
+    //
+    QSize targetSize;
+    int32_t programX = graphicContext.GetProgramPreviewX();
+    int32_t programY = graphicContext.GetProgramPreviewY();
+    float programScale = graphicContext.GetProgramPreviewScale();
     
     /* resize program panel to fix to the top section of the window */
-    targetSize = GetPixelSize(m_ProgramDisplay);
+    targetSize = GetPixelSize(m_programDisplay);
     GetScaleAndCenterPos(int(cx), int(cy),
-                 targetSize.width() - PREVIEW_EDGE_SIZE * 2,
-                 targetSize.height() - PREVIEW_EDGE_SIZE * 2,
-                 programX, programY, programScale);
+                         targetSize.width() - PREVIEW_EDGE_SIZE * 2,
+                         targetSize.height() - PREVIEW_EDGE_SIZE * 2,
+                         programX, programY, programScale);
 
     programX += float(PREVIEW_EDGE_SIZE);
     programY += float(PREVIEW_EDGE_SIZE);
-    
-    
-    m_pInitedContextGraphics->SetProgramPreviewX(programX);
-    m_pInitedContextGraphics->SetProgramPreviewY(programY);
-    m_pInitedContextGraphics->SetProgramPreviewScale(programScale);
+        
+    graphicContext.SetProgramPreviewX(programX);
+    graphicContext.SetProgramPreviewY(programY);
+    graphicContext.SetProgramPreviewScale(programScale);
 }
 
 void AFMainWindowRenderModel::SetProgramScene()
 {
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    auto* tmpStateApp = confManager.GetStates();
-    
-    
-    OBSScene curScene = sceneContext.GetCurrOBSScene();
+    OBSScene curScene = SCENE_CONTEXT.GetCurrentScene();
 
     OBSSceneAutoRelease dup;
-    if (tmpStateApp->GetSceneDuplicationMode() == true)
+    if (STATEAPP.GetSceneDuplicationMode() == true)
     {
-        dup = obs_scene_duplicate(
-            curScene,
-            obs_source_get_name(
-                obs_scene_get_source(curScene)),
-                tmpStateApp->GetEditPropertiesMode()
-                ? OBS_SCENE_DUP_PRIVATE_COPY
-                : OBS_SCENE_DUP_PRIVATE_REFS);
+        dup = obs_scene_duplicate(curScene,
+                                  obs_source_get_name(obs_scene_get_source(curScene)),
+                                  STATEAPP.GetEditPropertiesMode()
+                                  ? OBS_SCENE_DUP_PRIVATE_COPY
+                                  : OBS_SCENE_DUP_PRIVATE_REFS);
     } 
     else
         dup = std::move(OBSScene(curScene));
@@ -338,30 +295,25 @@ void AFMainWindowRenderModel::SetProgramScene()
 
     if (curScene) 
     {
-        //
         obs_source_t *source = obs_scene_get_source(curScene);
         obs_source_inc_showing(source);
-        sceneContext.SetLastOBSScene(source);
-        sceneContext.SetProgramOBSScene(source);
+        SCENE_CONTEXT.SetLastScene(source);
+        SCENE_CONTEXT.SetProgramScene(source);
     }
 }
 
 void AFMainWindowRenderModel::ResetProgramScene()
 {
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
-    OBSSource actualProgramScene = OBSGetStrongRef(sceneContext.GetProgramOBSScene());
+    OBSSource actualProgramScene = OBSGetStrongRef(SCENE_CONTEXT.GetProgramScene());
     if (!actualProgramScene)
-        actualProgramScene = AFSceneUtil::CnvtToOBSSource(sceneContext.GetCurrOBSScene());
+        actualProgramScene = AFSceneUtil::CnvtToOBSSource(SCENE_CONTEXT.GetCurrentScene());
     else
-        App()->GetMainView()->GetMainWindow()->SetCurrentScene(actualProgramScene, true);
-    AFSceneUtil::TransitionToScene(actualProgramScene, true);
+        DYNAMIC_COMPOSIT->SetCurrentScene(actualProgramScene, true);
+    SCENE_CONTEXT.TransitionToScene(actualProgramScene, true);
 }
 
 void AFMainWindowRenderModel::_DrawBackdrop(float cx, float cy)
 {
-    if (m_pInitedContextGraphics == nullptr)
-        return;
-    
     GS_DEBUG_MARKER_BEGIN(GS_DEBUG_COLOR_DEFAULT, "DrawBackdrop");
 
     gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
@@ -378,7 +330,7 @@ void AFMainWindowRenderModel::_DrawBackdrop(float cx, float cy)
     gs_matrix_identity();
     gs_matrix_scale3f(float(cx), float(cy), 1.0f);
 
-    gs_load_vertexbuffer(m_pInitedContextGraphics->GetBoxVB());
+    gs_load_vertexbuffer(GRAPHIC_CONTEXT.GetBoxVB());
     gs_draw(GS_TRISTRIP, 0, 0);
 
     gs_matrix_pop();

@@ -42,13 +42,13 @@
     <number>0</number>
    </property>
    <property name="leftMargin">
-    <number>0</number>
+    <number>1</number>
    </property>
    <property name="topMargin">
     <number>0</number>
    </property>
    <property name="rightMargin">
-    <number>0</number>
+    <number>1</number>
    </property>
    <property name="bottomMargin">
     <number>0</number>
@@ -96,7 +96,7 @@
        <number>6</number>
       </property>
       <item>
-       <widget class="QLabel" name="label_Title">
+       <widget class="QLabel" name="titleLabel">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -137,7 +137,7 @@
        </spacer>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton_Close">
+       <widget class="QPushButton" name="closeButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -195,7 +195,7 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>1240</width>
+        <width>1238</width>
         <height>389</height>
        </rect>
       </property>
@@ -233,7 +233,7 @@
           <number>13</number>
          </property>
          <item>
-          <layout class="QGridLayout" name="gridLayout_AdvSettingArea">
+          <layout class="QGridLayout" name="mainLayout">
            <property name="spacing">
             <number>8</number>
            </property>
@@ -279,7 +279,7 @@
                  <number>2</number>
                 </property>
                 <item>
-                 <widget class="QLabel" name="label_Volume">
+                 <widget class="QLabel" name="volume">
                   <property name="sizePolicy">
                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                     <horstretch>0</horstretch>
@@ -309,7 +309,7 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QCheckBox" name="checkBox_UsePercent">
+                 <widget class="QCheckBox" name="usePercent">
                   <property name="minimumSize">
                    <size>
                     <width>0</width>
@@ -354,7 +354,7 @@
             </widget>
            </item>
            <item row="0" column="4">
-            <widget class="QLabel" name="label_Balance">
+            <widget class="QLabel" name="balance">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -384,7 +384,7 @@
             </widget>
            </item>
            <item row="0" column="3">
-            <widget class="QLabel" name="label_Mono">
+            <widget class="QLabel" name="mono">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -420,7 +420,7 @@
             </widget>
            </item>
            <item row="0" column="0">
-            <widget class="QLabel" name="label_Name">
+            <widget class="QLabel" name="name">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -450,7 +450,7 @@
             </widget>
            </item>
            <item row="0" column="6">
-            <widget class="QLabel" name="label_Monitoring">
+            <widget class="QLabel" name="monitoring">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -480,7 +480,7 @@
             </widget>
            </item>
            <item row="0" column="7">
-            <widget class="QLabel" name="label_AudioTracks">
+            <widget class="QLabel" name="audioTracks">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -510,7 +510,7 @@
             </widget>
            </item>
            <item row="0" column="5">
-            <widget class="QLabel" name="label_SyncOffset">
+            <widget class="QLabel" name="syncOffset">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -540,7 +540,7 @@
             </widget>
            </item>
            <item row="0" column="1">
-            <widget class="QLabel" name="label_Status">
+            <widget class="QLabel" name="status">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -633,7 +633,7 @@
        <number>26</number>
       </property>
       <item alignment="Qt::AlignBottom">
-       <widget class="QCheckBox" name="checkBox_ShowActiveOnly">
+       <widget class="QCheckBox" name="activeOnly">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
           <horstretch>0</horstretch>

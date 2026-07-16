@@ -2,8 +2,9 @@
 #define AFQAPPSTYLING_H
 
 #include <string>
-#include "CApplication.h"
-#include <util/util.hpp>
+
+#include <obs.hpp>
+#include <qwidget.h>
 
 struct AFThemeMeta {
     bool dark;
@@ -11,54 +12,30 @@ struct AFThemeMeta {
     std::string author;
 };
 
-class AFQAppStyling final
+class CAppStyling final
 {
-#pragma region QT Field, CTOR/DTOR
 public:
-    static AFQAppStyling& GetSingletonInstance()
-    {
-        static AFQAppStyling* instance = nullptr;
-        if (instance == nullptr)
-            instance = new AFQAppStyling;
-        return *instance;
-    };
-    ~AFQAppStyling() = default;
-private:
-    // singleton constructor
-    AFQAppStyling() = default;
-    AFQAppStyling(const AFQAppStyling&) = delete;
-    AFQAppStyling(/* rValue */AFQAppStyling&& other) noexcept = delete;
-    AFQAppStyling& operator=(const AFQAppStyling&) = delete;
-    //
-#pragma endregion QT Field, CTOR/DTOR
+    CAppStyling() {}
+    ~CAppStyling() {}
 
-#pragma region public func
 public:
-    bool InitStyle(QPalette palette);
-    inline const char* CurrentTheme() const { return m_CurrentTheme.c_str(); }
-    std::string GetTheme(std::string name, std::string path);
-    std::string SetParentTheme(std::string name);
-    void ParseExtraThemeData(const char* path);
-    bool SetTheme(std::string name, std::string path = "");
+    bool                InitStyle(QPalette palette);
+    inline const char*  CurrentTheme() const { return m_currentTheme.c_str(); }
+    std::string         GetTheme(std::string name, std::string path);
+    std::string         SetParentTheme(std::string name);
+    void                ParseExtraThemeData(const char* path);
+    bool                SetTheme(std::string name, std::string path = "");
     static AFThemeMeta* ParseThemeMeta(const char* path);
-    void AddExtraThemeColor(QPalette& pal, int group, const char* name,
-        uint32_t color);
-    void SetStyle(QWidget* widget);
-#pragma endregion public func
+    void                AddExtraThemeColor(QPalette& pal, int group, const char* name,
+                                           uint32_t color, bool colorAlpha = false);
+    void                AssignColorPalette(QPalette& pal, QPalette::ColorRole role, uint color,
+                                           QPalette::ColorGroup group, bool colorAlpha = false);
+    void                SetStyle(QWidget* widget);
 
-#pragma region private func
 private:
-
-#pragma endregion private func
-#pragma region public member var
-
-#pragma endregion public member var
-#pragma region private member var
-private:
-    std::string m_CurrentTheme;
-    QPalette m_DefaultPalette;
-    bool m_ThemeDarkMode = true;
-#pragma endregion private member var
+    std::string         m_currentTheme;
+    QPalette            m_defaultPalette;
+    bool                m_themeDarkMode = true;
 
 public:
 };

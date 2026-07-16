@@ -6,6 +6,14 @@ class AFQCustomSpinbox : public QSpinBox
 {
 #pragma region QT Field
     Q_OBJECT
+public slots:
+	void qslotSetValueSilently(int val)
+	{
+		bool blocked = blockSignals(true);
+		setValue(val);
+		blockSignals(blocked);
+	}
+
 public:
     explicit AFQCustomSpinbox(QWidget* parent = nullptr);
 

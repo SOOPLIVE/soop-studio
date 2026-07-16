@@ -6,13 +6,10 @@
 #include <string>
 
 #include "ViewModel/Auth/COAuthLogin.hpp"
+#include "Common/StudioDefine.h"
 
-
-
-#define YOUTUBE_CLIENTID            ""
-#define YOUTUBE_SECRETID            ""
-
-
+#define YOUTUBE_CLIENTID ""
+#define YOUTUBE_SECRETID ""
 
 class AFAddStreamWidget;
 class AFAuthListener;
@@ -34,8 +31,10 @@ public:
 
 	virtual void GetAuthInfo(AFAddStreamWidget* widget) {}
 
-	void SetChatId(const QString &chat_id, const std::string &api_chat_id);
+	void SetChatId(const QString &chat_id);
 	void ResetChat();
+	void ReloadChat();
+
     
     QString GenerateState();
 
@@ -50,14 +49,15 @@ private slots:
 	void qslotClose();
 
 private:
-	AFAddStreamWidget* m_widget = nullptr;
-	bool uiLoaded = false;
-	std::string section;
+	AFAddStreamWidget* m_pWidget = nullptr;
+	bool m_uiLoaded = false;
+	std::string m_section;
 
-	QString m_redirect_uri;
+	QString m_redirectUri;
 
-	AFAuthListener* m_authListner = nullptr;
+	AFAuthListener* m_pAuthListner = nullptr;
 
+	QString m_youtubeChatUrl;
 	//#ifdef BROWSER_AVAILABLE
 	//	YoutubeChatDock *chat = nullptr;
 	//#endif

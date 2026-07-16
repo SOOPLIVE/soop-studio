@@ -10,19 +10,18 @@
 #include <QDirIterator>
 #include <QDropEvent>
 
+#include "utils/importers/importers.hpp"
 
-#include "qt-wrapper.h"
+#include "qt-wrappers.hpp"
 
-
-#include <importers/importers.hpp>
-
+#include "Common/StudioDefine.h"
 
 #include "MainFrame/CMainFrame.h"
-
 
 #include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
 #include "CoreModel/OBSData/CLoadSaveManager.h"
+
 #include "UIComponent/CMessageBox.h"
 
 
@@ -170,8 +169,6 @@ enum ImporterEntryRole {
 //
 //void ImporterEntryPathItemDelegate::handleBrowse(QWidget *container)
 //{
-//    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-//    
 //    QString Pattern = "(*.json *.bpres *.xml *.xconfig)";
 //
 //    QLineEdit *text = container->findChild<QLineEdit *>();
@@ -180,8 +177,8 @@ enum ImporterEntryRole {
 //
 //    bool isSet = false;
 //    QStringList paths = OpenFiles(
-//        container, QT_UTF8(localeManager.Str("Importer.SelectCollection")), currentPath,
-//        QT_UTF8(localeManager.Str("Importer.Collection")) + QString(" ") + Pattern);
+//        container, QT_UTF8(Str("Importer.SelectCollection")), currentPath,
+//        QT_UTF8(Str("Importer.Collection")) + QString(" ") + Pattern);
 //
 //    if (!paths.empty()) {
 //        container->setProperty(PATH_LIST_PROP, paths);
@@ -292,13 +289,10 @@ enum ImporterEntryRole {
 //        entry.selected = false;
 //        entry.name = "";
 //    } else {
-//        auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-//        
-//        
 //        entry.empty = false;
 //
 //        std::string program = DetectProgram(entry.path.toStdString());
-//        entry.program = QT_UTF8(localeManager.Str(program.c_str()));
+//        entry.program = QT_UTF8(Str(program.c_str()));
 //
 //        if (program.empty()) {
 //            entry.selected = false;
@@ -389,26 +383,21 @@ enum ImporterEntryRole {
 //    return true;
 //}
 //
-//QVariant ImporterModel::headerData(int section, Qt::Orientation orientation,
-//                   int role) const
+//QVariant ImporterModel::headerData(int section, Qt::Orientation orientation, int role) const
 //{
-//    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-//    
-//    
-//    
 //    QVariant result = QVariant();
 //
 //    if (role == Qt::DisplayRole &&
 //        orientation == Qt::Orientation::Horizontal) {
 //        switch (section) {
 //        case ImporterColumn::Path:
-//            result = QT_UTF8(localeManager.Str("Importer.Path"));
+//            result = QT_UTF8(Str("Importer.Path"));
 //            break;
 //        case ImporterColumn::Program:
-//            result = QT_UTF8(localeManager.Str("Importer.Program"));
+//            result = QT_UTF8(Str("Importer.Program"));
 //            break;
 //        case ImporterColumn::Name:
-//            result = QT_UTF8(localeManager.Str("Importer.Name"));
+//            result = QT_UTF8(Str("Importer.Name"));
 //        }
 //    }
 //
@@ -420,27 +409,49 @@ enum ImporterEntryRole {
 **/
 
 AFQImporterDialog::AFQImporterDialog(QWidget *parent)
-    : AFQRoundedDialogBase(parent),
+    : AFTTopBaseDialog(parent),
     ui(new Ui::AFQImporterDialog)
     //  optionsModel(new ImporterModel),
 {
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    
     setAcceptDrops(true);
 
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
     ui->setupUi(this);
+    
+#ifdef __APPLE__
+    setWindowFlags(Qt::Window|Qt::WindowCloseButtonHint|Qt::CustomizeWindowHint);
+    ui->titleWidget->hide();
+#endif
 
-    ui->label_Name->setText(QT_UTF8(localeManager.Str("Name")));
-    ui->label_Path->setText(QT_UTF8(localeManager.Str("Importer.Path")));
-    ui->label_Platform->setText(QT_UTF8(localeManager.Str("Importer.Program")));
+    ui->label_Name->setText(QTStr("Name"));
+    ui->label_Path->setText(QTStr("Importer.Path"));
+    ui->label_Platform->setText(QTStr("Importer.Program"));
     ui->pushButton_Close->setProperty("buttonType", "closeButton");
     ui->labelTitle->setProperty("labelType", "labelTitle");
 
-    ui->buttonBox->button(QDialogButtonBox::Ok)->setText(QT_UTF8(localeManager.Str("OK")));
-    ui->buttonBox->button(QDialogButtonBox::Open)->setText(QT_UTF8(localeManager.Str("Add")));
+    //RIP TableView
+    //ui->tableView->setModel(optionsModel);
+    //ui->tableView->horizontalHeader()->setFixedHeight(IMPORTER_ITEM_HEIGHT);
+    //ui->tableView->verticalHeader()->setDefaultSectionSize(IMPORTER_ITEM_HEIGHT);
+    //ui->tableView->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    //ui->tableView->setItemDelegateForColumn(
+    //    ImporterColumn::Path, new ImporterEntryPathItemDelegate());
+    //ui->tableView->horizontalHeader()->setSectionResizeMode(
+    //    QHeaderView::ResizeMode::ResizeToContents);
+    //ui->tableView->horizontalHeader()->setSectionResizeMode(
+    //    ImporterColumn::Path, QHeaderView::ResizeMode::Stretch);
+    //ui->tableView->horizontalHeader()->setSectionResizeMode(
+    //    ImporterColumn::Name, QHeaderView::ResizeMode::Stretch);
+
+    //connect(optionsModel, &ImporterModel::dataChanged, this,
+    //    &AFQImporterDialog::dataChanged);
+
+    //ui->tableView->setEditTriggers(
+    //    QAbstractItemView::EditTrigger::CurrentChanged);
+    //RIP TableView
+
+    ui->buttonBox->button(QDialogButtonBox::Ok)->setText(QTStr("OK"));
+    ui->buttonBox->button(QDialogButtonBox::Open)->setText(QTStr("Add"));
 
     connect(ui->buttonBox->button(QDialogButtonBox::Ok),
         &QPushButton::clicked, this, &AFQImporterDialog::importCollections);
@@ -452,25 +463,74 @@ AFQImporterDialog::AFQImporterDialog(QWidget *parent)
 
     ImportersInit();
 
+    //config_t* userConfig = USERCONFIG;
+    //
+    //Auto Scene Collection Hide
+    //bool autoSearchPrompt = config_get_bool(userConfig,  "General", "AutoSearchPrompt");
+
+    //if (!autoSearchPrompt) {
+    //    // Need Check Alert Box
+
+    //    bool result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+    //        QT_UTF8(""),
+    //        localeManager.Str("Importer.AutomaticCollectionText"));
+
+    //    if (result == QDialog::Accepted)
+    //    {
+    //        config_set_bool(userConfig, "General", "AutomaticCollectionSearch", true);
+    //    }
+    //    else
+    //    {
+    //        config_set_bool(userConfig, "General", "AutomaticCollectionSearch", false);
+    //    }
+
+    //    config_set_bool(userConfig, "General", "AutoSearchPrompt", true);
+    //}
+
+    //bool autoSearch = config_get_bool(userConfig, "General", "AutomaticCollectionSearch");
+
+    //OBSImporterFiles f;
+    //if (autoSearch)
+    //    f = ImportersFindFiles();
+
+    //for (size_t i = 0; i < f.size(); i++) {
+    //    QString path = f[i].c_str();
+    //    path.replace("\\", "/");
+    //    AddImportOption(path, true, nullptr);
+    //}
+    //Auto Scene Collection Hide
+
+    //f.clear();
+    //Auto Scene Collection Hide
 
     qslotMakeNewRow();
 
+    //RIP TableView
+    //ui->tableView->resizeColumnsToContents();
+    /*ui->tableView->setColumnWidth(ImporterColumn::Selected, 20 + IMPORTER_ITEM_MARGIN);
+    ui->tableView->setColumnWidth(ImporterColumn::Name, 140 + IMPORTER_ITEM_MARGIN);
+    ui->tableView->setColumnWidth(ImporterColumn::Path, 344 + IMPORTER_ITEM_MARGIN);
+    ui->tableView->setColumnWidth(ImporterColumn::Program, 130);
+    
+    QModelIndex index =
+        optionsModel->createIndex(optionsModel->rowCount() - 1, 2);
+    QMetaObject::invokeMethod(ui->tableView, "setCurrentIndex",
+                  Qt::QueuedConnection,
+                  Q_ARG(const QModelIndex &, index));*/
+    //RIP TableView
 }
 
 void AFQImporterDialog::AddImportOption(QString path, bool automatic, AFQImporterRowWidget* addRow)
 {
 /*  QStringList list;
-
     list.append(path);*/
 
     ImporterEntryInfo entry;
     entry.path = path;
     entry.selected = automatic ?  ImporterEntryRole::AutoPath : ImporterEntryRole::NewPath;
-    
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
 
     std::string program = DetectProgram(entry.path.toStdString());
-    entry.program = QT_UTF8(localeManager.Str(program.c_str()));
+    entry.program = QTStr(program.c_str());
 
     if (program.empty()) {
         entry.selected = false;
@@ -490,12 +550,23 @@ void AFQImporterDialog::AddImportOption(QString path, bool automatic, AFQImporte
         connect(row, &AFQImporterRowWidget::qsignalDeleteRow, this, &AFQImporterDialog::qslotDeleteRow);
         connect(row, &AFQImporterRowWidget::qsignalBrowseImport, this, &AFQImporterDialog::qslotBrowseSingleImport);
         ui->widget_Table->layout()->addWidget(row);
-        m_qImportEntryWidget.append(row);
+        m_importEntryWidget.append(row);
     }
     else
     {
         addRow->AddInfoRow(entry.name, entry.path, entry.program);
     }
+    
+
+    //RIP TableView
+    /*QModelIndex insertIndex = optionsModel->index(
+        optionsModel->rowCount() - 1, ImporterColumn::Path);
+
+    optionsModel->setData(insertIndex, list,
+                  automatic ? ImporterEntryRole::AutoPath
+                    : ImporterEntryRole::NewPath);*/
+
+     //RIP TableView
 }
 
 void AFQImporterDialog::dropEvent(QDropEvent *ev)
@@ -524,33 +595,34 @@ void AFQImporterDialog::dragEnterEvent(QDragEnterEvent *ev)
 
 
 
-bool GetUnusedName(std::string &name)
-{
-    if (!AFLoadSaveManager::SceneCollectionExists(name.c_str()))
-        return false;
-
-    std::string newName;
-    int inc = 2;
-    do {
-        newName = name;
-        newName += " ";
-        newName += std::to_string(inc++);
-    } while (AFLoadSaveManager::SceneCollectionExists(newName.c_str()));
-
-    name = newName;
-    return true;
-}
+//bool GetUnusedName(std::string &name)
+//{
+//    if (!LoadSaveUtil::SceneCollectionExists(name.c_str()))
+//        return false;
+//
+//    std::string newName;
+//    int inc = 2;
+//    do {
+//        newName = name;
+//        newName += " ";
+//        newName += std::to_string(inc++);
+//    } while (LoadSaveUtil::SceneCollectionExists(newName.c_str()));
+//
+//    name = newName;
+//    return true;
+//}
 
 void AFQImporterDialog::importCollections()
-{
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    
+{    
     setEnabled(false);
 
-    char dst[512];
-    confManager.GetConfigPath(dst, 512, "SOOPStudio/basic/scenes/");
+    const std::string OBSSceneCollectionPath = "/basic/scenes/";
 
-    foreach (AFQImporterRowWidget* widget, m_qImportEntryWidget) 
+    std::filesystem::path path1 = USERSCENES_PATH;
+    const std::filesystem::path sceneCollectionLocation =
+        USERSCENES_PATH / std::filesystem::u8path(OBSSceneCollectionPath);
+
+    foreach (AFQImporterRowWidget* widget, m_importEntryWidget) 
     {
         bool check = widget->GetChecked();
         if (!check)
@@ -558,39 +630,6 @@ void AFQImporterDialog::importCollections()
 
         std::string pathStr = widget->GetPath();
         std::string nameStr = widget->GetName();
-
-        json11::Json res;
-        ImportSC(pathStr, nameStr, res);
-
-        if (res != json11::Json()) {
-            json11::Json::object out = res.object_items();
-            std::string name = res["name"].string_value();
-            std::string file;
-
-            if (GetUnusedName(name)) {
-                json11::Json::object newOut = out;
-                newOut["name"] = name;
-                out = newOut;
-            }
-
-            confManager.GetUnusedSceneCollectionFile(name, file);
-
-            std::string save = dst;
-            save += "/";
-            save += file;
-            save += ".json";
-
-            std::string out_str = json11::Json(out).dump();
-
-            bool success = os_quick_write_utf8_file(save.c_str(),
-                                out_str.c_str(),
-                                out_str.size(),
-                                false);
-
-            blog(LOG_INFO, "Import Scene Collection: %s (%s) - %s",
-                 name.c_str(), file.c_str(),
-                 success ? "SUCCESS" : "FAILURE");
-        }
     }
 
     close();
@@ -611,8 +650,8 @@ void AFQImporterDialog::qslotMakeNewRow()
     connect(newrow, &AFQImporterRowWidget::qsignalDeleteRow, this, &AFQImporterDialog::qslotDeleteRow);
     connect(newrow, &AFQImporterRowWidget::qsignalBrowseImport, this, &AFQImporterDialog::qslotBrowseSingleImport);
     newrow->AddNewRow();
-    m_qNewRow = newrow;
-    m_qImportEntryWidget.append(newrow);
+    m_pNewRow = newrow;
+    m_importEntryWidget.append(newrow);
     ui->widget_Table->layout()->addWidget(newrow);
 }
 
@@ -624,14 +663,10 @@ void AFQImporterDialog::qslotDeleteRow()
 
 void AFQImporterDialog::qslotBrowseSingleImport()
 {
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-
-
     QString Pattern = "(*.json *.bpres *.xml *.xconfig)";
 
-    QString path = OpenFile(
-        this, QT_UTF8(localeManager.Str("Importer.SelectCollection")), "",
-        QT_UTF8(localeManager.Str("Importer.Collection")) + QString(" ") + Pattern);
+    QString path = OpenFile(this, QTStr("Importer.SelectCollection"), "",
+                            QTStr("Importer.Collection") + QString(" ") + Pattern);
 
     if (!path.isEmpty()) {
         AFQImporterRowWidget* row = reinterpret_cast<AFQImporterRowWidget*>(sender());
@@ -641,18 +676,16 @@ void AFQImporterDialog::qslotBrowseSingleImport()
 
 void AFQImporterDialog::qslotBrowseImport()
 {
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-
     QString Pattern = "(*.json *.bpres *.xml *.xconfig)";
 
     QStringList paths = OpenFiles(
-        this, QT_UTF8(localeManager.Str("Importer.SelectCollection")), "",
-        QT_UTF8(localeManager.Str("Importer.Collection")) + QString(" ") + Pattern);
+        this, QTStr("Importer.SelectCollection"), "",
+        QTStr("Importer.Collection") + QString(" ") + Pattern);
 
     if (!paths.empty()) {
 
-        m_qNewRow->close();
-        m_qImportEntryWidget.removeOne(m_qNewRow);
+        m_pNewRow->close();
+        m_importEntryWidget.removeOne(m_pNewRow);
         for (int i = 0; i < paths.count(); i++) {
             AddImportOption(paths[i], false, nullptr);
         }
@@ -662,13 +695,13 @@ void AFQImporterDialog::qslotBrowseImport()
 
 void AFQImporterRowWidget::qslotEditPathFinished()
 {
-    if (!m_qPathEdit->text().isEmpty())
+    if (!m_pPathEdit->text().isEmpty())
     {
-        m_qNameEdit->setEnabled(true);
-        m_qCheckBox->setEnabled(true);
-        m_qCheckBox->setChecked(true);
-        m_qDeleteButton->setEnabled(true);
-        disconnect(m_qPathEdit, &QLineEdit::textChanged, this, &AFQImporterRowWidget::qslotEditPathFinished);
+        m_pNameEdit->setEnabled(true);
+        m_pCheckBox->setEnabled(true);
+        m_pCheckBox->setChecked(true);
+        m_pDeleteButton->setEnabled(true);
+        disconnect(m_pPathEdit, &QLineEdit::textChanged, this, &AFQImporterRowWidget::qslotEditPathFinished);
         emit qsignalNeedNewRow();
     }
 }
@@ -679,25 +712,25 @@ void AFQImporterRowWidget::AddNewRow()
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(IMPORTER_ITEM_MARGIN);
 
-    m_qCheckBox = new QCheckBox(this);
-    m_qCheckBox->setText("");
-    m_qCheckBox->setFixedSize(18, 18);
-    m_qCheckBox->setEnabled(false);
+    m_pCheckBox = new QCheckBox(this);
+    m_pCheckBox->setText("");
+    m_pCheckBox->setFixedSize(18, 18);
+    m_pCheckBox->setEnabled(false);
 
-    m_qNameEdit = new QLineEdit(this);
-    m_qNameEdit->setFixedSize(140, 40);
-    m_qNameEdit->setEnabled(false);
-    m_qNameEdit->setObjectName("lineEdit_Name");
+    m_pNameEdit = new QLineEdit(this);
+    m_pNameEdit->setFixedSize(140, 40);
+    m_pNameEdit->setEnabled(false);
+    m_pNameEdit->setObjectName("lineEdit_Name");
 
     /////// Path Widget 
     QWidget* pathWidget = new QWidget(this);
     pathWidget->setFixedSize(344, 40);
     pathWidget->setObjectName("widget_PathWidget");
 
-    m_qPathEdit = new QLineEdit(this);
-    m_qPathEdit->setFixedSize(284, 40);
-    m_qPathEdit->setObjectName("lineEdit_Path");
-    connect(m_qPathEdit, &QLineEdit::textChanged, this, &AFQImporterRowWidget::qslotEditPathFinished);
+    m_pPathEdit = new QLineEdit(this);
+    m_pPathEdit->setFixedSize(284, 40);
+    m_pPathEdit->setObjectName("lineEdit_Path");
+    connect(m_pPathEdit, &QLineEdit::textChanged, this, &AFQImporterRowWidget::qslotEditPathFinished);
 
     QPushButton* pathButton = new QPushButton(this);
     pathButton->setObjectName("pushButton_Browser");
@@ -705,72 +738,72 @@ void AFQImporterRowWidget::AddNewRow()
     pathButton->setFixedSize(30, 30);
     connect(pathButton, &QPushButton::clicked, this, &AFQImporterRowWidget::qsignalBrowseImport);
 
-    m_qDeleteButton = new QPushButton(this);
-    m_qDeleteButton->setObjectName("pushButton_Delete");
-    m_qDeleteButton->setFixedSize(30, 30);
-    m_qDeleteButton->setEnabled(false);
-    connect(m_qDeleteButton, &QPushButton::clicked, this, &AFQImporterRowWidget::qsignalDeleteRow);
+    m_pDeleteButton = new QPushButton(this);
+    m_pDeleteButton->setObjectName("pushButton_Delete");
+    m_pDeleteButton->setFixedSize(30, 30);
+    m_pDeleteButton->setEnabled(false);
+    connect(m_pDeleteButton, &QPushButton::clicked, this, &AFQImporterRowWidget::qsignalDeleteRow);
 
     QHBoxLayout* pathlayout = new QHBoxLayout();
     pathlayout->setContentsMargins(0, 0, 0, 0);
     pathlayout->setSpacing(0);
 
-    pathlayout->addWidget(m_qPathEdit);
+    pathlayout->addWidget(m_pPathEdit);
     pathlayout->addWidget(pathButton);
-    pathlayout->addWidget(m_qDeleteButton);
+    pathlayout->addWidget(m_pDeleteButton);
 
     pathWidget->setLayout(pathlayout);
 
     /////// Path Widget 
 
-    m_qProgramEdit = new QLineEdit(this);
-    m_qProgramEdit->setFixedSize(130, 40);
-    m_qProgramEdit->setEnabled(false);
-    m_qProgramEdit->setObjectName("lineEdit_Program");
+    m_pProgramEdit = new QLineEdit(this);
+    m_pProgramEdit->setFixedSize(130, 40);
+    m_pProgramEdit->setEnabled(false);
+    m_pProgramEdit->setObjectName("lineEdit_Program");
 
-    layout->addWidget(m_qCheckBox);
-    layout->addWidget(m_qNameEdit);
+    layout->addWidget(m_pCheckBox);
+    layout->addWidget(m_pNameEdit);
     layout->addWidget(pathWidget);
-    layout->addWidget(m_qProgramEdit);
+    layout->addWidget(m_pProgramEdit);
 
     setLayout(layout);
-    m_bInit = true;
+    m_init = true;
 }
 
 void AFQImporterRowWidget::AddInfoRow(QString name, QString path, QString program)
 {
-    if (m_bInit)
+    if (m_init)
     {
-        m_qCheckBox->setEnabled(true);
-        m_qNameEdit->setText(name);
-        m_qNameEdit->setEnabled(true);
-        m_qPathEdit->setText(path);
-        m_qProgramEdit->setText(program);
-        m_qDeleteButton->setEnabled(true);
+        m_pCheckBox->setEnabled(true);
+        m_pNameEdit->setText(name);
+        m_pNameEdit->setEnabled(true);
+        m_pPathEdit->setText(path);
+        m_pProgramEdit->setText(program);
+        m_pDeleteButton->setEnabled(true);
     }
 }
 
 void AFQImporterRowWidget::SetCheckBoxChecked(bool checked)
 {
-    m_qCheckBox->setChecked(!checked);
+    m_pCheckBox->setChecked(!checked);
 }
 
 bool AFQImporterRowWidget::GetChecked()
 {
-    return m_qCheckBox->isChecked();
+    return m_pCheckBox->isChecked();
 }
 
 std::string AFQImporterRowWidget::GetName()
 {
-    return m_qNameEdit->text().toStdString();
+    return m_pNameEdit->text().toStdString();
 }
 
 std::string AFQImporterRowWidget::GetPath()
 {
-    return m_qPathEdit->text().toStdString();
+    return m_pPathEdit->text().toStdString();
 }
 
 std::string AFQImporterRowWidget::GetProgram()
 {
-    return m_qProgramEdit->text().toStdString();
+    return m_pProgramEdit->text().toStdString();
 }

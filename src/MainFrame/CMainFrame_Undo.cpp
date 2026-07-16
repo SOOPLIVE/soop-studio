@@ -1,33 +1,31 @@
 ﻿#include "CMainFrame.h"
 #include "ui_aneta-main-frame.h"
 
+#include "CoreModel/Scene/CSceneContext.h"
 #include "CoreModel/UndoStack/CUndoStack.h"
 
+#include "Blocks/SceneSourceDock/CSourceListView.h"
 
-static bool save_undo_source_enum(obs_scene_t* /*scene*/, obs_sceneitem_t* item, void* p)
+#include "MainFrame/SceneSource/CMainSceneSource.h"
+
+
+void AFMainFrame::_RegisterUndoRedoShortCut()
 {
-    obs_source_t* source = obs_sceneitem_get_source(item);
-    if(obs_obj_is_private(source) && !obs_source_removed(source))
-        return true;
+    // Register shortcuts for Undo/Redo
+    m_undo_s.m_pActionMainUndo->setShortcut(Qt::CTRL | Qt::Key_Z);
+    m_undo_s.m_pActionMainUndo->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(m_undo_s.m_pActionMainUndo);
+    connect(m_undo_s.m_pActionMainUndo, &QAction::triggered, this, &AFMainFrame::qSlotUndo);
 
-    obs_data_array_t* array = (obs_data_array_t*)p;
-
-    /* check if the source is already stored in the array */
-    const char* name = obs_source_get_name(source);
-    const size_t count = obs_data_array_count(array);
-    for(size_t i = 0; i < count; i++) {
-        OBSDataAutoRelease sourceData = obs_data_array_item(array, i);
-        if(strcmp(name, obs_data_get_string(sourceData, "name")) == 0)
-            return true;
-    }
-
-    if(obs_source_is_group(source))
-        obs_scene_enum_items(obs_group_from_source(source), save_undo_source_enum, p);
-
-    OBSDataAutoRelease source_data = obs_save_source(source);
-    obs_data_array_push_back(array, source_data);
-    return true;
+    QList<QKeySequence> shrt;
+    shrt << QKeySequence((Qt::CTRL | Qt::SHIFT) | Qt::Key_Z)
+        << QKeySequence(Qt::CTRL | Qt::Key_Y);
+    m_undo_s.m_pActionMainRedo->setShortcuts(shrt);
+    m_undo_s.m_pActionMainRedo->setShortcutContext(Qt::ApplicationShortcut);
+    addAction(m_undo_s.m_pActionMainRedo);
+    connect(m_undo_s.m_pActionMainRedo, &QAction::triggered, this, &AFMainFrame::qSlotRedo);
 }
+
 OBSData AFMainFrame::BackupScene(obs_scene_t* scene, std::vector<obs_source_t*>* sources)
 {
     OBSDataArrayAutoRelease undo_array = obs_data_array_create();
@@ -56,10 +54,7 @@ static bool add_source_enum(obs_scene_t*, obs_sceneitem_t* item, void* p)
     return true;
 }
 
-#include "CoreModel/Scene/CSceneContext.h"
-#include "Blocks/SceneSourceDock/CSourceListView.h"
-void AFMainFrame::CreateSceneUndoRedoAction(const QString& action_name,
-                                            OBSData undo_data, OBSData redo_data)
+void AFMainFrame::CreateSceneUndoRedoAction(const QString& action_name, OBSData undo_data, OBSData redo_data)
 {
 
     auto undo_redo = [this](const std::string& json) {
@@ -85,8 +80,7 @@ void AFMainFrame::CreateSceneUndoRedoAction(const QString& action_name,
 
             /* update scene/group settings to restore their
              * contents to their saved settings */
-            obs_scene_t* scene =
-                obs_group_or_scene_from_source(source);
+            obs_scene_t* scene = obs_group_or_scene_from_source(source);
             if(scene) {
                 obs_scene_enum_items(scene, add_source_enum, &old_sources);
                 OBSDataAutoRelease scene_settings = obs_data_get_obj(data, "settings");
@@ -98,10 +92,10 @@ void AFMainFrame::CreateSceneUndoRedoAction(const QString& action_name,
         for(obs_source_t* source : sources)
             obs_source_load2(source);
 
-        AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-        AFQSourceListView* sourceListView = sceneContext.GetSourceListViewPtr();
+        AFQSourceListView* sourceListView = m_scene->GetSourceListViewPtr();
         if (sourceListView)
             sourceListView->RefreshSourceItem();
+        //        ui->sources->RefreshItems();
     };
 
     const char* undo_json = obs_data_get_last_json(undo_data);
@@ -123,8 +117,8 @@ void AFMainFrame::CreateFilterPasteUndoRedoAction(const QString& text,
 
         obs_source_restore_filters(source, array);
 
-        if(m_dialogFilters)
-            m_dialogFilters->UpdateSource(source);
+        if(m_sourceFilters)
+            m_sourceFilters->UpdateSource(source);
     };
 
     const char* uuid = obs_source_get_uuid(source);

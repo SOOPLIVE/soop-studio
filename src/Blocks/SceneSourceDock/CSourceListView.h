@@ -11,8 +11,6 @@
 #include <QStaticText>
 #include <QTimer>
 
-#include <qt-wrapper.h>
-
 #include "CoreModel/Source/CSource.h"
 
 #include "Blocks/SceneSourceDock/CSceneSourceDockWidget.h"
@@ -20,25 +18,6 @@
 #include "UIComponent/CCustomMenu.h"
 
 // --
-class AFQVisibleCheckBox : public QCheckBox
-{
-    Q_OBJECT
-public:
-    explicit AFQVisibleCheckBox(QWidget* parent = nullptr) : QCheckBox(parent) {};
-};
-
-class AFQLockedCheckBox : public QCheckBox
-{
-    Q_OBJECT
-public:
-    explicit AFQLockedCheckBox(QWidget *parent = nullptr) : QCheckBox(parent) {};
-};
-
-class SourceTreeSubItemCheckBox : public QCheckBox {
-    Q_OBJECT
-};
-
-
 class AFQSourceListView;
 
 class AFQSourceViewItem : public QWidget
@@ -59,10 +38,6 @@ class AFQSourceViewItem : public QWidget
 public:
     explicit AFQSourceViewItem(AFQSourceListView* sourceListView, OBSSceneItem sceneItem);
 
-signals:
-
-public slots:
-
 private slots:
     void Clear();
 
@@ -78,6 +53,8 @@ private slots:
 
     void Select();
     void DeSelect();
+
+    void Renamed(QString name);
 
 public:
     void DisconnectSignals();
@@ -103,8 +80,8 @@ protected:
 private:
     QLabel* _CreateIconLabel(const char* id);
     QLabel* _CreateNameLabel(const char* name);
-    AFQVisibleCheckBox* _CreateVisibleCheckBox();
-    AFQLockedCheckBox*  _CreateLockedCheckBox();
+    QCheckBox* _CreateVisibleCheckBox();
+    QCheckBox* _CreateLockedCheckBox();
 
     void ExitEditModeInternal(bool save);
 
@@ -120,22 +97,22 @@ private:
 
 private:
     // UI Widget
-    QHBoxLayout* m_layoutBox = nullptr;
+    QHBoxLayout* m_pLayoutBox = nullptr;
 
-    QSpacerItem* groupSpacer = nullptr;
-    QCheckBox*   groupExpand = nullptr;
-    QLabel* m_labelIcon = nullptr;
-    QLabel* m_labelName = nullptr;
-    AFQVisibleCheckBox* m_checkBoxVisible = nullptr;
-    AFQLockedCheckBox*  m_checkBoxLocked = nullptr;
+    QSpacerItem* m_pGroupSpacer = nullptr;
+    QCheckBox* m_groupExpend = nullptr;
+    QLabel* m_pLabelIcon = nullptr;
+    QLabel* m_pLabelName = nullptr;
+    QCheckBox* m_visibleCheckBox = nullptr;
+    QCheckBox* m_lockCheckBox = nullptr;
 
-    QLineEdit* m_editorName = nullptr;
+    QLineEdit* m_pEditorName = nullptr;
 
-    AFQSourceListView*  m_sourceListView;
+    AFQSourceListView* m_pSourceListView = nullptr;
 
     // var
-    Type m_type;
-    std::string m_strNewName;
+    Type m_type = Type::Unknown;
+    std::string m_newName;
     OBSSceneItem m_sceneItem;
 
     OBSSignal m_signalSceneRemove;
@@ -148,16 +125,16 @@ private:
     OBSSignal m_signalRename;
     OBSSignal m_signalRemove;
 
-    QIcon   m_iconSource;
-    QIcon   m_iconVisible;
-    QIcon   m_iconLocked;
+    QIcon m_iconSource;
+    QIcon m_iconVisible;
+    QIcon m_iconLocked;
+           
+    QColor m_colorFont = QColor(255, 255, 255, 255);
+    QColor m_colorBackground = QColor(24,27,32,84);
 
-    QColor  m_colorFont = QColor(255, 255, 255, 255);
-    QColor  m_colorBackground = QColor(24,27,32,84);
-
-    bool    m_isVisible = true;
-    bool    m_isSelected = false;
-    bool    m_isHovered = false;
+    bool m_isVisible = true;
+    bool m_isSelected = false;
+    bool m_isHovered = false;
 };
 
 class AFQSourceViewModel : public QAbstractListModel
@@ -195,8 +172,8 @@ public:
     void UpdateGroupState(bool update);
 
 private:
-    QVector<OBSSceneItem>   m_vSourceList;
-    AFQSourceListView*      m_sourceListView = nullptr;
+    QVector<OBSSceneItem>   m_sourceList;
+    AFQSourceListView*      m_pSourceListView = nullptr;
 
     bool m_hasGroups = false;
 };
@@ -221,20 +198,18 @@ public:
 
 class AFQSourceListView : public QListView
 {
-#pragma region QT Field
     Q_OBJECT
 
 signals:
-    void            qsignalClickedSource(unsigned int, unsigned int);
-    void            qsignalDisClickedSource(unsigned int, unsigned int);
-    void            qsignalSwapSourceSignal(uint, uint, uint);
-    void            qsignalHoverLayoutSignal(uint, uint);
-    void            qsignalLeaveLayoutSignal(uint, uint);
+    void qsignalClickedSource(unsigned int, unsigned int);
+    void qsignalDisClickedSource(unsigned int, unsigned int);
+    void qsignalSwapSourceSignal(uint, uint, uint);
+    void qsignalHoverLayoutSignal(uint, uint);
+    void qsignalLeaveLayoutSignal(uint, uint);
 
-    void            qSignalCheckSourceClicked(bool clicked);
+    //void qSignalCheckSourceClicked(bool clicked);
 
 public slots:
-
     inline void ReorderItems() { GetStm()->ReorderItems(); }
     inline void RefreshItems() { GetStm()->SceneChanged(); }
 
@@ -252,16 +227,9 @@ public slots:
 private slots:
     void qSlotHideScrollBar();
 
-#pragma endregion QT Field
-
-
-#pragma region class initializer, destructor
 public:
     explicit AFQSourceListView(QWidget* parent = nullptr);
-#pragma endregion class initializer, destructor
 
-
-#pragma region public func
 public:
     inline void Add(obs_sceneitem_t* item) { GetStm()->Add(item); }
     inline OBSSceneItem Get(int idx) { return GetStm()->Get(idx); }
@@ -280,15 +248,11 @@ public:
 
     bool IgnoreReorder() { return m_isIgnoreReorder; }
 
-    // front_api
     void RefreshSourceItem();
 
-#pragma endregion public func
-
-#pragma region private func
 private:
     void _ShowVerticalScrollBar();
-#pragma endregion private func
+    void _HideVeritcalScrollBar();
 
 public:
     inline AFQSourceViewItem* GetItemWidget(int idx)
@@ -325,8 +289,6 @@ public:
         return -1;
     }
 
-    void   RegisterShortCut(QAction* removeSourceAction);
-
 private:
     inline AFQSourceViewModel* GetStm() const { return reinterpret_cast<AFQSourceViewModel*>(model()); }
 
@@ -337,16 +299,11 @@ protected:
     virtual void selectionChanged(const QItemSelection& selected, const QItemSelection& deselected) override;
     virtual void paintEvent(QPaintEvent* event);
     virtual void wheelEvent(QWheelEvent* event) override;
+    virtual void enterEvent(QEnterEvent* event) override;
+    virtual void leaveEvent(QEvent* event) override;
 
-#pragma region public member var
-public:
-#pragma endregion public member var
-
-#pragma region private member var
 private:
     QVector<AFQSourceViewItem*> m_prevSelectedSourceItem;
-
-    AFQCustomMenu* m_contextMenu = nullptr;
 
     bool m_textPrepared = false;
     QStaticText m_textNoSources;
@@ -355,9 +312,7 @@ private:
 
     QTimer* m_timerScrollVisible = nullptr;
 
-    bool    m_isIgnoreReorder = false;
-
-#pragma endregion private member var
+    bool m_isIgnoreReorder = false;
 
 private:
     friend class AFQSourceViewModel;

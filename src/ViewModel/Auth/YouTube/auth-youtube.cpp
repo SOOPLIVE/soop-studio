@@ -17,18 +17,13 @@
 #pragma comment(lib, "shell32")
 #endif
 
-
-
-
+#include "qt-wrappers.hpp"
 #include "Application/CApplication.h"
-#include "qt-wrapper.h"
-
 
 #include "Utils/OBF/obf.h"
 
 #include "ViewModel/Auth/CAuthListener.hpp"
 
-#include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
 
 #include "youtube-api-wrappers.hpp"
@@ -47,33 +42,32 @@ using namespace json11;
 #define YOUTUBE_API_STATE_LENGTH	32
 #define SECTION_NAME				"YouTube"
 
-#define YOUTUBE_CHAT_PLACEHOLDER_URL \
-	"https://obsproject.com/placeholders/youtube-chat"
-#define YOUTUBE_CHAT_POPOUT_URL \
-	"https://www.youtube.com/live_chat?is_popout=1&dark_theme=1&v=%1"
+#define YOUTUBE_CHAT_PLACEHOLDER_URL	"https://obsproject.com/placeholders/youtube-chat"
+//#define YOUTUBE_CHAT_POPOUT_URL			"https://www.youtube.com/live_chat?is_popout=1&dark_theme=1&v=%1"
+
+
 
 #define YOUTUBE_CHAT_DOCK_NAME "ytChat"
 
-static const char allowedChars[] =
-	"null";
+static const char allowedChars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 static const int allowedCount = static_cast<int>(sizeof(allowedChars) - 1);
 /* ------------------------------------------------------------------------- */
 
 YoutubeAuth::YoutubeAuth(const Def &d, AFAddStreamWidget* widget)
 	: AFOAuthStreamKey(d),
-	m_widget(widget),
-	section(SECTION_NAME)
+	m_pWidget(widget),
+	m_section(SECTION_NAME)
 {
 }
 
 YoutubeAuth::~YoutubeAuth()
 {
-	if (!uiLoaded)
+	if (!m_uiLoaded)
 		return;
 
-	if(m_authListner) {
-		delete m_authListner;
-		m_authListner = nullptr;
+	if(m_pAuthListner) {
+		delete m_pAuthListner;
+		m_pAuthListner = nullptr;
 	}
 
 //#ifdef BROWSER_AVAILABLE
@@ -86,22 +80,22 @@ YoutubeAuth::~YoutubeAuth()
 
 bool YoutubeAuth::Login()
 {
-	DeleteCookies();
+	//DeleteCookies();
 	//
-	if(!m_widget)
+	if(!m_pWidget)
 		return false;
 
-	m_authListner = new AFAuthListener;
-	if(!m_authListner)
+	m_pAuthListner = new AFAuthListener;
+	if(!m_pAuthListner)
 		return false;
 
-	m_redirect_uri = QString("http://127.0.0.1:%1").arg(m_authListner->GetPort());
+	m_redirectUri = QString("http://127.0.0.1:%1").arg(m_pAuthListner->GetPort());
 
 	QString state = GenerateState();
-	m_authListner->SetState(state);
+	m_pAuthListner->SetState(state);
 
-	connect(m_authListner, SIGNAL(ok(const QString&)), this, SLOT(qslotRedirect(const QString&)));
-	connect(m_authListner, &AFAuthListener::fail, this, &YoutubeAuth::qslotClose);
+	connect(m_pAuthListner, SIGNAL(ok(const QString&)), this, SLOT(qslotRedirect(const QString&)));
+	connect(m_pAuthListner, &AFAuthListener::fail, this, &YoutubeAuth::qslotClose);
 
 	QString url_template;
 	url_template += "%1";
@@ -110,9 +104,9 @@ bool YoutubeAuth::Login()
 	url_template += "&redirect_uri=%3";
 	url_template += "&state=%4";
 	url_template += "&scope=https://www.googleapis.com/auth/youtube";
-	QString url = url_template.arg(YOUTUBE_AUTH_URL, YOUTUBE_CLIENTID, m_redirect_uri, state);
+	QString url = url_template.arg(YOUTUBE_AUTH_URL, YOUTUBE_CLIENTID, m_redirectUri, state);
 
-	QCefWidget* cefWidget = m_widget->GetLoginCefWidget(nullptr, url.toStdString());
+	QCefWidget* cefWidget = m_pWidget->GetLoginCefWidget(nullptr, url.toStdString());
 	if(!cefWidget)
 		return false;
 	//
@@ -120,27 +114,25 @@ bool YoutubeAuth::Login()
 }
 void YoutubeAuth::DeleteCookies()
 {
-	auto& cefManager = AFCefManager::GetSingletonInstance();
-	cefManager.InitPanelCookieManager();
-	QCefCookieManager* panel_cookies = cefManager.GetCefCookieManager();
-
+	CEFMANAGER.InitPanelCookieManager();
+	QCefCookieManager* panel_cookies = CEFMANAGER.GetCefCookieManager();
 	if(panel_cookies) {
 		panel_cookies->DeleteCookies(service(), std::string());
 	}
 }
 
-void YoutubeAuth::SetChatId(const QString &chat_id, const std::string &api_chat_id)
+void YoutubeAuth::SetChatId(const QString &chat_id)
 {
+	m_youtubeChatUrl = QString(YOUTUBE_CHAT_POPOUT_URL).arg(chat_id);
+
 //#ifdef BROWSER_AVAILABLE
 //	QString chat_url = QString(YOUTUBE_CHAT_POPOUT_URL).arg(chat_id);
 //
 //	if (chat && chat->cefWidget) {
 //		chat->cefWidget->setURL(chat_url.toStdString());
-//		chat->SetApiChatId(api_chat_id);
 //	}
 //#else
 //	UNUSED_PARAMETER(chat_id);
-//	UNUSED_PARAMETER(api_chat_id);
 //#endif
 }
 
@@ -149,6 +141,15 @@ void YoutubeAuth::ResetChat()
 //#ifdef BROWSER_AVAILABLE
 //	if (chat && chat->cefWidget) {
 //		chat->cefWidget->setURL(YOUTUBE_CHAT_PLACEHOLDER_URL);
+//	}
+//#endif
+}
+
+void YoutubeAuth::ReloadChat()
+{
+//#ifdef BROWSER_AVAILABLE
+//	if(chat && chat->cefWidget) {
+//		chat->cefWidget->reloadPage();
 //	}
 //#endif
 }
@@ -166,7 +167,6 @@ QString YoutubeAuth::GenerateState()
 	return state;
 }
 
-// abstract func
 bool YoutubeAuth::RetryLogin()
 {
 	return true;
@@ -174,56 +174,36 @@ bool YoutubeAuth::RetryLogin()
 
 void YoutubeAuth::SaveInternal()
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
+	auto activeConfig = ACTIVECONFIG;
 
-//	config_set_string(confManager.GetBasic(), service(), "DockState",
-//                      main->saveState().toBase64().constData());
-
-	const char* section_name = section.c_str();
-	config_set_string(confManager.GetBasic(), section_name, "RefreshToken",
-					  refresh_token.c_str());
-	config_set_string(confManager.GetBasic(), section_name, "Token", token.c_str());
-	config_set_uint(confManager.GetBasic(), section_name, "ExpireTime",
-					expire_time);
-	config_set_int(confManager.GetBasic(), section_name, "ScopeVer",
-				   currentScopeVer);
+	const char* section_name = m_section.c_str();
+	config_set_string(activeConfig, section_name, "RefreshToken", m_refreshToken.c_str());
+	config_set_string(activeConfig, section_name, "Token", m_token.c_str());
+	config_set_uint(activeConfig, section_name, "ExpireTime", m_expireTime);
+	config_set_int(activeConfig, section_name, "ScopeVer", m_currentScopeVer);
 }
 
 static inline std::string get_config_str(const char* section,
 										 const char* name)
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-
-	const char* val = config_get_string(confManager.GetBasic(), section, name);
+	const char* val = config_get_string(ACTIVECONFIG, section, name);
 	return val ? val : "";
 }
 
 bool YoutubeAuth::LoadInternal()
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-
-	const char* section_name = section.c_str();
-	refresh_token = get_config_str(section_name, "RefreshToken");
-	token = get_config_str(section_name, "Token");
-	expire_time =
-		config_get_uint(confManager.GetBasic(), section_name, "ExpireTime");
-	currentScopeVer =
-		(int)config_get_int(confManager.GetBasic(), section_name, "ScopeVer");
+	const char* section_name = m_section.c_str();
+    m_refreshToken = get_config_str(section_name, "RefreshToken");
+    m_token = get_config_str(section_name, "Token");
+    m_expireTime = config_get_uint(ACTIVECONFIG, section_name, "ExpireTime");
+    m_currentScopeVer = (int)config_get_int(ACTIVECONFIG, section_name, "ScopeVer");
 	m_firstLoad = false;
-	return implicit ? !token.empty() : !refresh_token.empty();
+	return m_implicit ? !m_token.empty() : !m_refreshToken.empty();
 }
-
-#ifdef BROWSER_AVAILABLE
-static const char* ytchat_script = "\
-const obsCSS = document.createElement('style');\
-obsCSS.innerHTML = \"#panel-pages.yt-live-chat-renderer {display: none;}\
-yt-live-chat-viewer-engagement-message-renderer {display: none;}\";\
-document.querySelector('head').appendChild(obsCSS);";
-#endif
 
 void YoutubeAuth::LoadUI()
 {
-	if(uiLoaded)
+	if(m_uiLoaded)
 		return;
 
 	//#ifdef BROWSER_AVAILABLE
@@ -244,9 +224,7 @@ void YoutubeAuth::LoadUI()
 	//	chat->setMinimumSize(200, 300);
 	//	chat->setAllowedAreas(Qt::AllDockWidgetAreas);
 	//
-	//	browser = cef->create_widget(chat, YOUTUBE_CHAT_PLACEHOLDER_URL,
-	//				     panel_cookies);
-	//	browser->setStartupScript(ytchat_script);
+	//	browser = cef->create_widget(chat, YOUTUBE_CHAT_PLACEHOLDER_URL, panel_cookies);
 	//
 	//	chat->SetWidget(browser);
 	//	main->AddDockWidget(chat, Qt::RightDockWidgetArea);
@@ -262,37 +240,35 @@ void YoutubeAuth::LoadUI()
 	//	main->NewYouTubeAppDock();
 
 	//	if (!firstLoad) {
-	//		const char *dockStateStr = config_get_string(
-	//			main->Config(), service(), "DockState");
-	//		QByteArray dockState =
-	//			QByteArray::fromBase64(QByteArray(dockStateStr));
+	//		const char *dockStateStr = config_get_string(ACTIVECONFIG, service(), "DockState");
+	//		QByteArray dockState = QByteArray::fromBase64(QByteArray(dockStateStr));
 	//
 	//		if (main->isVisible() || !main->isMaximized())
 	//			main->restoreState(dockState);
 	//	}
 
-	uiLoaded = true;
+	m_uiLoaded = true;
 }
 void YoutubeAuth::qslotRedirect(QString code)
 {
-	if(!m_widget)
+	if(!m_pWidget)
 		return;
 
 	bool res = GetToken(YOUTUBE_TOKEN_URL, YOUTUBE_CLIENTID, YOUTUBE_SECRETID,
-						QT_TO_UTF8(m_redirect_uri), YOUTUBE_SCOPE_VERSION,
+						QT_TO_UTF8(m_redirectUri), YOUTUBE_SCOPE_VERSION,
 						QT_TO_UTF8(code), true);
 	if(res) {
-		GetAuthInfo(m_widget);
+		GetAuthInfo(m_pWidget);
 	} else {
-		m_widget->close();
+		m_pWidget->close();
 	}
 }
 void YoutubeAuth::qslotClose()
 {
-	if(!m_widget)
+	if(!m_pWidget)
 		return;
 
-	m_widget->close();
+	m_pWidget->close();
 }
 
 //#ifdef BROWSER_AVAILABLE

@@ -3,6 +3,8 @@
 #include <util/util.hpp>
 #include "Application/CApplication.h"
 
+#include "MainFrame/CMainFrame.h"
+
 #define MAX_STACK_SIZE  (5000)
 
 //
@@ -10,16 +12,16 @@ void AFUndoStack::EnableInternal()
 {
     m_lastIsRepeatable = false;
 
-    m_actionMainUndo->setDisabled(false);
+    m_pActionMainUndo->setDisabled(false);
     if(!m_redoList.empty()) {
-        m_actionMainRedo->setDisabled(false);
+        m_pActionMainRedo->setDisabled(false);
     }
 }
 void AFUndoStack::DisableInternal()
 {
     m_lastIsRepeatable = false;
-    m_actionMainUndo->setDisabled(true);
-    m_actionMainRedo->setDisabled(true);
+    m_pActionMainUndo->setDisabled(true);
+    m_pActionMainRedo->setDisabled(true);
 }
 void AFUndoStack::ClearRedo()
 {
@@ -29,11 +31,11 @@ void AFUndoStack::ClearRedo()
 
 AFUndoStack::AFUndoStack(AFMainFrame* main)
 {
-    m_actionMainUndo = new QAction(main);
-    m_actionMainRedo = new QAction(main);
+    m_pActionMainUndo = new QAction(main);
+    m_pActionMainRedo = new QAction(main);
     //
     QObject::connect(&m_repeatResetTimer, &QTimer::timeout, this,
-                     &AFUndoStack::qSlotResetRepeatableState);
+                     &AFUndoStack::qslotResetRepeatableState);
     m_repeatResetTimer.setSingleShot(true);
     m_repeatResetTimer.setInterval(3000);
 }
@@ -74,11 +76,11 @@ void AFUndoStack::Clear()
     m_redoList.clear();
     m_lastIsRepeatable = false;
 
-    //actionMainUndo->setText(QTStr("Undo.Undo"));
-    //actionMainRedo->setText(QTStr("Undo.Redo"));
+    //m_pActionMainUndo->setText(QTStr("Undo.Undo"));
+    //m_pActionMainRedo->setText(QTStr("Undo.Redo"));
 
-    m_actionMainUndo->setDisabled(true);
-    m_actionMainRedo->setDisabled(true);
+    m_pActionMainUndo->setDisabled(true);
+    m_pActionMainRedo->setDisabled(true);
 }
 void AFUndoStack::AddAction(const QString& name,
                             const undo_redo_cb& undoCallback,
@@ -109,11 +111,11 @@ void AFUndoStack::AddAction(const QString& name,
     m_undoList.push_front(newItem);
     ClearRedo();
 
-    //actionMainUndo->setText(QTStr("Undo.Item.Undo").arg(name));
-    m_actionMainUndo->setEnabled(true);
+    //m_pActionMainUndo->setText(QTStr("Undo.Item.Undo").arg(name));
+    m_pActionMainUndo->setEnabled(true);
 
-    //actionMainRedo->setText(QTStr("Undo.Item.Redo"));
-    m_actionMainRedo->setEnabled(true);
+    //m_pActionMainRedo->setText(QTStr("Undo.Item.Redo"));
+    m_pActionMainRedo->setEnabled(true);
 }
 void AFUndoStack::Undo()
 {
@@ -127,14 +129,14 @@ void AFUndoStack::Undo()
     m_redoList.push_front(item);
     m_undoList.pop_front();
 
-    //actionMainRedo->setText(QTStr("Undo.Item.Redo").arg(item.name));
-    m_actionMainRedo->setEnabled(true);
+    //m_pActionMainRedo->setText(QTStr("Undo.Item.Redo").arg(item.name));
+    m_pActionMainRedo->setEnabled(true);
 
     if(m_undoList.empty()) {
-        m_actionMainUndo->setDisabled(true);
-        //actionMainUndo->setText(QTStr("Undo.Undo"));
+        m_pActionMainUndo->setDisabled(true);
+        //m_pActionMainUndo->setText(QTStr("Undo.Undo"));
     } else {
-        //actionMainUndo->setText(QTStr("Undo.Item.Undo").arg(m_undoList.front().name));
+        //m_pActionMainUndo->setText(QTStr("Undo.Item.Undo").arg(m_undoList.front().name));
     }
 }
 void AFUndoStack::Redo()
@@ -149,19 +151,70 @@ void AFUndoStack::Redo()
     m_undoList.push_front(item);
     m_redoList.pop_front();
 
-    //actionMainUndo->setText(QTStr("Undo.Item.Undo").arg(item.name));
-    m_actionMainUndo->setEnabled(true);
+    //m_pActionMainUndo->setText(QTStr("Undo.Item.Undo").arg(item.name));
+    m_pActionMainUndo->setEnabled(true);
 
     if(m_redoList.empty()) {
-        m_actionMainRedo->setDisabled(true);
-        //actionMainRedo->setText(QTStr("Undo.Redo"));
+        m_pActionMainRedo->setDisabled(true);
+        //m_pActionMainRedo->setText(QTStr("Undo.Redo"));
     } else {
-        //actionMainRedo->setText(QTStr("Undo.Item.Redo").arg(m_redoList.front().name));
+        //m_pActionMainRedo->setText(QTStr("Undo.Item.Redo").arg(m_redoList.front().name));
     }
 }
 //
 
-void AFUndoStack::qSlotResetRepeatableState()
+void AFUndoStack::AddActionRename(std::string& prevName, std::string& newName, obs_source_t* source)
+{
+    std::string scene_uuid = obs_source_get_uuid(source);
+	auto undo = [scene_uuid, prevName](const std::string& data) {
+		OBSSourceAutoRelease source = obs_get_source_by_uuid(data.c_str());
+		obs_source_set_name(source, prevName.c_str());
+		};
+
+    auto redo = [newName](const std::string& data) {
+        OBSSourceAutoRelease source = obs_get_source_by_uuid(data.c_str());
+        obs_source_set_name(source, newName.c_str());
+        };
+
+    std::string source_uuid(obs_source_get_uuid(source));
+    AddAction(QTStr("Undo.Rename").arg(newName.c_str()),
+        undo, redo, source_uuid, source_uuid);
+}
+
+void AFUndoStack::qslotResetRepeatableState()
 {
     m_lastIsRepeatable = false;
+}
+
+//
+bool save_undo_source_enum(obs_scene_t* /*scene*/, obs_sceneitem_t* item, void* p)
+{
+    obs_source_t* source = obs_sceneitem_get_source(item);
+    if(obs_obj_is_private(source) && !obs_source_removed(source))
+        return true;
+
+    obs_data_array_t* array = (obs_data_array_t*)p;
+
+    /* check if the source is already stored in the array */
+    const char* name = obs_source_get_name(source);
+    const size_t count = obs_data_array_count(array);
+    for(size_t i = 0; i < count; i++) {
+        OBSDataAutoRelease sourceData = obs_data_array_item(array, i);
+        if(strcmp(name, obs_data_get_string(sourceData, "name")) == 0)
+            return true;
+    }
+
+    if(obs_source_is_group(source))
+        obs_scene_enum_items(obs_group_from_source(source), save_undo_source_enum, p);
+
+    OBSDataAutoRelease source_data = obs_save_source(source);
+    obs_data_array_push_back(array, source_data);
+    return true;
+}
+void undo_redo(const std::string& data)
+{
+    OBSDataAutoRelease dat = obs_data_create_from_json(data.c_str());
+    OBSSourceAutoRelease source = obs_get_source_by_uuid(obs_data_get_string(dat, "scene_uuid"));
+    DYNAMIC_COMPOSIT->SetCurrentScene(source.Get(), true);
+    obs_scene_load_transform_states(data.c_str());
 }

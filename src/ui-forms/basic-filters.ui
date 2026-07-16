@@ -6,20 +6,20 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>940</width>
-    <height>760</height>
+    <width>720</width>
+    <height>550</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>940</width>
-    <height>760</height>
+    <width>0</width>
+    <height>0</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>940</width>
-    <height>760</height>
+    <width>16777215</width>
+    <height>16777215</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -48,7 +48,7 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QFrame" name="titleFrame">
+    <widget class="AFTransparentMouseEvents" name="titleFrame" native="true">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -129,7 +129,7 @@
     </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,10">
+    <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,10">
      <property name="sizeConstraint">
       <enum>QLayout::SetMinimumSize</enum>
      </property>
@@ -164,6 +164,12 @@
            <height>0</height>
           </size>
          </property>
+         <property name="maximumSize">
+          <size>
+           <width>240</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <layout class="QVBoxLayout" name="verticalLayout_3">
           <property name="spacing">
            <number>10</number>
@@ -188,7 +194,7 @@
            </widget>
           </item>
           <item>
-           <widget class="AFQFocusList" name="asyncFilters">
+           <widget class="FocusList" name="asyncFilters">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
               <horstretch>0</horstretch>
@@ -232,6 +238,12 @@
              </property>
              <item>
               <widget class="QPushButton" name="addAsyncFilter">
+               <property name="minimumSize">
+                <size>
+                 <width>24</width>
+                 <height>24</height>
+                </size>
+               </property>
                <property name="maximumSize">
                 <size>
                  <width>24</width>
@@ -256,16 +268,16 @@
                <property name="flat">
                 <bool>true</bool>
                </property>
-               <property name="themeID" stdset="0">
-                <string>addFilterIcon</string>
-               </property>
-               <property name="buttonType" stdset="0">
-                <string>filterListToolbar</string>
-               </property>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="removeAsyncFilter">
+               <property name="minimumSize">
+                <size>
+                 <width>24</width>
+                 <height>24</height>
+                </size>
+               </property>
                <property name="maximumSize">
                 <size>
                  <width>24</width>
@@ -294,16 +306,16 @@
                <property name="flat">
                 <bool>true</bool>
                </property>
-               <property name="themeID" stdset="0">
-                <string>removeFilterIcon</string>
-               </property>
-               <property name="buttonType" stdset="0">
-                <string>filterListToolbar</string>
-               </property>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="moveAsyncFilterUp">
+               <property name="minimumSize">
+                <size>
+                 <width>24</width>
+                 <height>24</height>
+                </size>
+               </property>
                <property name="maximumSize">
                 <size>
                  <width>24</width>
@@ -328,16 +340,16 @@
                <property name="flat">
                 <bool>true</bool>
                </property>
-               <property name="themeID" stdset="0">
-                <string>upFilterArrowIcon</string>
-               </property>
-               <property name="buttonType" stdset="0">
-                <string>filterListToolbar</string>
-               </property>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="moveAsyncFilterDown">
+               <property name="minimumSize">
+                <size>
+                 <width>24</width>
+                 <height>24</height>
+                </size>
+               </property>
                <property name="maximumSize">
                 <size>
                  <width>24</width>
@@ -361,12 +373,6 @@
                </property>
                <property name="flat">
                 <bool>true</bool>
-               </property>
-               <property name="themeID" stdset="0">
-                <string>downFilterArrowIcon</string>
-               </property>
-               <property name="buttonType" stdset="0">
-                <string>filterListToolbar</string>
                </property>
               </widget>
              </item>
@@ -406,6 +412,12 @@
            <height>0</height>
           </size>
          </property>
+         <property name="maximumSize">
+          <size>
+           <width>240</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <layout class="QVBoxLayout" name="verticalLayout_4">
           <property name="spacing">
            <number>10</number>
@@ -430,7 +442,7 @@
            </widget>
           </item>
           <item>
-           <widget class="AFQFocusList" name="effectFilters">
+           <widget class="FocusList" name="effectFilters">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
               <horstretch>0</horstretch>
@@ -474,6 +486,12 @@
              </property>
              <item>
               <widget class="QPushButton" name="addEffectFilter">
+               <property name="minimumSize">
+                <size>
+                 <width>24</width>
+                 <height>24</height>
+                </size>
+               </property>
                <property name="maximumSize">
                 <size>
                  <width>24</width>
@@ -498,16 +516,16 @@
                <property name="flat">
                 <bool>true</bool>
                </property>
-               <property name="themeID" stdset="0">
-                <string>addFilterIcon</string>
-               </property>
-               <property name="buttonType" stdset="0">
-                <string>filterListToolbar</string>
-               </property>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="removeEffectFilter">
+               <property name="minimumSize">
+                <size>
+                 <width>24</width>
+                 <height>24</height>
+                </size>
+               </property>
                <property name="maximumSize">
                 <size>
                  <width>24</width>
@@ -532,16 +550,16 @@
                <property name="flat">
                 <bool>true</bool>
                </property>
-               <property name="themeID" stdset="0">
-                <string>removeFilterIcon</string>
-               </property>
-               <property name="buttonType" stdset="0">
-                <string>filterListToolbar</string>
-               </property>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="moveEffectFilterUp">
+               <property name="minimumSize">
+                <size>
+                 <width>24</width>
+                 <height>24</height>
+                </size>
+               </property>
                <property name="maximumSize">
                 <size>
                  <width>24</width>
@@ -566,16 +584,16 @@
                <property name="flat">
                 <bool>true</bool>
                </property>
-               <property name="themeID" stdset="0">
-                <string>upFilterArrowIcon</string>
-               </property>
-               <property name="buttonType" stdset="0">
-                <string>filterListToolbar</string>
-               </property>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="moveEffectFilterDown">
+               <property name="minimumSize">
+                <size>
+                 <width>24</width>
+                 <height>24</height>
+                </size>
+               </property>
                <property name="maximumSize">
                 <size>
                  <width>24</width>
@@ -599,12 +617,6 @@
                </property>
                <property name="flat">
                 <bool>true</bool>
-               </property>
-               <property name="themeID" stdset="0">
-                <string>downFilterArrowIcon</string>
-               </property>
-               <property name="buttonType" stdset="0">
-                <string>filterListToolbar</string>
                </property>
               </widget>
              </item>
@@ -673,24 +685,24 @@
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>626</height>
+            <height>0</height>
            </size>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_6">
            <property name="spacing">
-            <number>0</number>
+            <number>20</number>
            </property>
            <property name="leftMargin">
-            <number>0</number>
+            <number>16</number>
            </property>
            <property name="topMargin">
-            <number>0</number>
+            <number>20</number>
            </property>
            <property name="rightMargin">
-            <number>0</number>
+            <number>16</number>
            </property>
            <property name="bottomMargin">
-            <number>0</number>
+            <number>20</number>
            </property>
            <item>
             <widget class="QFrame" name="previewFrame">
@@ -708,19 +720,19 @@
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_7">
               <property name="spacing">
-               <number>6</number>
+               <number>0</number>
               </property>
               <property name="leftMargin">
-               <number>24</number>
+               <number>0</number>
               </property>
               <property name="topMargin">
-               <number>24</number>
+               <number>0</number>
               </property>
               <property name="rightMargin">
-               <number>24</number>
+               <number>0</number>
               </property>
               <property name="bottomMargin">
-               <number>16</number>
+               <number>0</number>
               </property>
               <item>
                <widget class="AFQTDisplay" name="preview" native="true">
@@ -733,7 +745,13 @@
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>150</height>
+                  <height>280</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>280</height>
                  </size>
                 </property>
                </widget>
@@ -756,14 +774,17 @@
               <enum>QFrame::Plain</enum>
              </property>
              <layout class="QVBoxLayout" name="propertiesLayout">
+              <property name="spacing">
+               <number>0</number>
+              </property>
               <property name="leftMargin">
-               <number>24</number>
+               <number>0</number>
               </property>
               <property name="topMargin">
                <number>0</number>
               </property>
               <property name="rightMargin">
-               <number>24</number>
+               <number>0</number>
               </property>
               <property name="bottomMargin">
                <number>0</number>
@@ -820,9 +841,15 @@
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>AFQFocusList</class>
+   <class>FocusList</class>
    <extends>QListWidget</extends>
-   <header>UIComponent/CFocusList.h</header>
+   <header>obs-studio-ui/focus-list.hpp</header>
+  </customwidget>
+  <customwidget>
+   <class>AFTransparentMouseEvents</class>
+   <extends>QWidget</extends>
+   <header>MainFrame/CTransparentMouseEvents.h</header>
+   <container>1</container>
   </customwidget>
  </customwidgets>
  <resources>

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 
@@ -16,24 +16,20 @@ class AFStateAppContext final
 {
 #pragma region QT Field, CTOR/DTOR
 public:
-	AFStateAppContext() = default;
+    AFStateAppContext() = default;
 	~AFStateAppContext() = default;
 #pragma endregion QT Field, CTOR/DTOR
 
 #pragma region public func
 public:
-	bool			GetEnableHotkeysInFocus() { return m_bEnableHotkeysInFocus; };
-	void			SetEnableHotkeysInFocus(bool value) { m_bEnableHotkeysInFocus = value; };
-	bool			GetEnableHotkeysOutOfFocus() { return m_bEnableHotkeysOutOfFocus; };
-	void			SetEnableHotkeysOutOfFocus(bool value) { m_bEnableHotkeysOutOfFocus = value; };
-    bool            GetEditPropertiesMode() { return m_bEditPropertiesMode; };
-    void            SetEditPropertiesMode(bool value) { m_bEditPropertiesMode = value; };
-    bool            GetSceneDuplicationMode() { return m_bSceneDuplicationMode; };
-    void            SetSceneDuplicationMode(bool value) { m_bSceneDuplicationMode = value; };
-    bool            GetSwapScenesMode() { return m_bSwapScenesMode; };
-    void            SetSwapScenesMode(bool value) { m_bSwapScenesMode = value; };
-    bool            JustCheckPreviewProgramMode() { return m_bPreviewProgramMode; };
-    inline bool     IsPreviewProgramMode() const { return os_atomic_load_bool(&m_bPreviewProgramMode); }
+    bool            GetEditPropertiesMode() { return m_editPropertiesMode; };
+    void            SetEditPropertiesMode(bool value) { m_editPropertiesMode = value; };
+    bool            GetSceneDuplicationMode() { return m_sceneDuplicationMode; };
+    void            SetSceneDuplicationMode(bool value) { m_sceneDuplicationMode = value; };
+    bool            GetSwapScenesMode() { return m_swapScenesMode; };
+    void            SetSwapScenesMode(bool value) { m_swapScenesMode = value; };
+    bool            JustCheckPreviewProgramMode() { return m_previewProgramMode; };
+    inline bool     IsPreviewProgramMode() const { return os_atomic_load_bool(&m_previewProgramMode); }
     bool            SetPreviewProgramMode(bool value);
 #pragma endregion public func
 
@@ -44,12 +40,10 @@ public:
 #pragma endregion public member var
 #pragma region private member var
 private:
-	bool			m_bEnableHotkeysInFocus = true;
-	bool			m_bEnableHotkeysOutOfFocus = true;
-    bool            m_bEditPropertiesMode = false;
-    bool            m_bSceneDuplicationMode = true;
-    bool            m_bSwapScenesMode = true;
+    bool            m_editPropertiesMode = false;
+    bool            m_sceneDuplicationMode = true;
+    bool            m_swapScenesMode = false;
     
-    volatile bool   m_bPreviewProgramMode = false;
+    volatile bool   m_previewProgramMode = false;
 #pragma endregion private member var
 };

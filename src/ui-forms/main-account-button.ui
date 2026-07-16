@@ -6,61 +6,94 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>30</width>
-    <height>30</height>
+    <width>46</width>
+    <height>46</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>30</width>
-    <height>30</height>
+    <width>46</width>
+    <height>46</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>30</width>
-    <height>30</height>
+    <width>46</width>
+    <height>46</height>
    </size>
   </property>
   <property name="styleSheet">
-   <string notr="true">QPushButton{background:transparent;}</string>
+   <string notr="true"/>
   </property>
-  <layout class="QHBoxLayout" name="horizontalLayout">
-   <property name="spacing">
-    <number>0</number>
+  <property name="checkable">
+   <bool>false</bool>
+  </property>
+  <widget class="QPushButton" name="pushButton_Frame">
+   <property name="geometry">
+    <rect>
+     <x>5</x>
+     <y>5</y>
+     <width>36</width>
+     <height>36</height>
+    </rect>
    </property>
-   <property name="leftMargin">
-    <number>3</number>
+   <property name="text">
+    <string/>
    </property>
-   <property name="topMargin">
-    <number>3</number>
+  </widget>
+  <widget class="QPushButton" name="pushButton_Platform">
+   <property name="geometry">
+    <rect>
+     <x>8</x>
+     <y>8</y>
+     <width>30</width>
+     <height>30</height>
+    </rect>
    </property>
-   <property name="rightMargin">
-    <number>3</number>
+   <property name="minimumSize">
+    <size>
+     <width>30</width>
+     <height>30</height>
+    </size>
    </property>
-   <property name="bottomMargin">
-    <number>3</number>
+   <property name="maximumSize">
+    <size>
+     <width>30</width>
+     <height>30</height>
+    </size>
    </property>
-   <item>
-    <widget class="QPushButton" name="pushButton_Platform">
-     <property name="minimumSize">
-      <size>
-       <width>24</width>
-       <height>24</height>
-      </size>
-     </property>
-     <property name="maximumSize">
-      <size>
-       <width>24</width>
-       <height>24</height>
-      </size>
-     </property>
-     <property name="text">
-      <string/>
-     </property>
-    </widget>
-   </item>
-  </layout>
+   <property name="text">
+    <string/>
+   </property>
+   <property name="checkable">
+    <bool>false</bool>
+   </property>
+   <property name="checked">
+    <bool>false</bool>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_IsLive">
+   <property name="geometry">
+    <rect>
+     <x>30</x>
+     <y>6</y>
+     <width>10</width>
+     <height>10</height>
+    </rect>
+   </property>
+   <property name="maximumSize">
+    <size>
+     <width>10</width>
+     <height>10</height>
+    </size>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">background-color: black;</string>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+  </widget>
  </widget>
  <resources/>
  <connections/>

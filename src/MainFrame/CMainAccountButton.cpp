@@ -1,14 +1,34 @@
 ﻿#include "CMainAccountButton.h"
 #include "ui_main-account-button.h"
 
+#include <QStyle>
+#include <QTimer>
+#include <QPainter>
+
+#include <QGraphicsOpacityEffect>
+
+#include "qt-wrappers.hpp"
 #include "platform/platform.hpp"
+
+#include "CoreModel/Auth/CAuthManager.h"
 
 AFMainAccountButton::AFMainAccountButton(QWidget *parent) :
     QPushButton(parent),
     ui(new Ui::AFMainAccountButton)
 {
     ui->setupUi(this);
-    connect(ui->pushButton_Platform, &QPushButton::clicked, this, &QPushButton::clicked);
+
+    setAttribute(Qt::WA_Hover, true);
+    setAttribute(Qt::WA_StyledBackground, true);
+
+    ui->pushButton_Frame->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->pushButton_Platform->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->pushButton_IsLive->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+    connect(ui->pushButton_Platform, &QPushButton::clicked, this, &AFMainAccountButton::click);
+    connect(ui->pushButton_IsLive, &QPushButton::clicked, this, &AFMainAccountButton::click);
+
+    ui->pushButton_IsLive->setStyleSheet("border-radius:0; background:transparent");
 }
 
 AFMainAccountButton::~AFMainAccountButton()
@@ -18,45 +38,75 @@ AFMainAccountButton::~AFMainAccountButton()
 
 void AFMainAccountButton::qslotQuitStream()
 {
-    m_dChannelData->bIsStreaming = false;
-    SetStreaming(false);
+    if (m_pChannelData)
+    {
+        m_pChannelData->isStreaming = false;
+        SetStreaming(false);
+    }
 }
 
 void AFMainAccountButton::qslotStartStream()
 {
-    m_dChannelData->bIsStreaming = true;
-    SetStreaming(false, true);
+    if (m_pChannelData)
+    {
+        m_pChannelData->isStreaming = true;
+        SetStreaming(false, true);
+    }
 }
 
+void AFMainAccountButton::qslotHoverPlatformImage(bool hover)
+{
+    std::string platform = m_platformStr;
+    platform.erase(std::remove(platform.begin(), platform.end(), ' '), platform.end());
+
+    QString imgPath = "";
+    if (hover)
+    {
+        std::string absPath;
+        GetDataFilePath("assets", absPath);
+        imgPath = QString("%1/platform/mousehover/%2.png")
+            .arg(absPath.data()).arg(platform.data());
+
+        ui->pushButton_Platform->setIcon(QIcon(imgPath));
+    }
+    else
+    {
+        TransparentPlatformImage(m_isTransparent);
+    }
+}
+
+void AFMainAccountButton::qslotPressedPlatformImage(bool pressed)
+{
+    if (pressed)
+    {
+        QGraphicsOpacityEffect* effect = new QGraphicsOpacityEffect();
+        effect->setOpacity(0.2);
+        setGraphicsEffect(effect);
+    }
+    else
+    {
+        setGraphicsEffect(nullptr);
+    }
+}
 
 void AFMainAccountButton::SetChannelData(AFChannelData* data)
 {
-    m_dChannelData = data;
+    m_pChannelData = data;
 }
 
 void AFMainAccountButton::SetStreaming(bool streaming, bool setLive, bool disable)
 {
-    //Image QSS higher qulality on png
-                /*QSize testIconSize;
-                testIconSize.setWidth(24);
-                testIconSize.setHeight(24);
-                QPixmap scaled = QPixmap(absPath.c_str()).scaled(testIconSize,
-                                                                 Qt::KeepAspectRatio,
-                                                                 Qt::SmoothTransformation);*/
-                                                                 /*testButton->setIconSize(testIconSize);
-                                                                 testButton->setIcon(scaled);*/
+    m_isDisable = disable;
+    ui->pushButton_Frame->setProperty("streaming", streaming);
+    ui->pushButton_Frame->setProperty("live", setLive);
+    PolishStyleSheet(ui->pushButton_Frame);
 
-                                                                 //QSS Stroke -> changed to image for higher quality
-                                                                 //QString sts = QString("QLabel { image:url(%1); border-radius:13px; "\
-                                                                 //    "background-color: rgba(255,255,255,0.6%); border:2px solid #24272D; }"\
-                                                                 //    "QPushButton {border-radius:15px; background:qlineargradient(x1:0, y1:0.869, x2:1, y2:0.8346, stop:0 #00E0FF , stop:1 #D1FF01 );  }").arg(absPath.c_str());//.arg(absEllipsePath.c_str());
+    setProperty("disable", disable);
+    this->style()->unpolish(this);
+    this->style()->polish(this);
 
     if (disable)
-    {
-        QString sts = QString("QPushButton {border-radius:15px; background:transparent; }");
-        setStyleSheet(sts);
         return;
-    }
 
     std::string absEllipsePath;
 
@@ -64,83 +114,165 @@ void AFMainAccountButton::SetStreaming(bool streaming, bool setLive, bool disabl
     {
         if (streaming)
         {
-            GetDataFilePath("assets/platform/broad-ellipse.png", absEllipsePath);
-            QString sts = QString(
-                "QPushButton {border-radius:15px; background:transparent; image:url(%2);}"\
-                "QPushButton:hover{background:#009DA7}; }")
-                .arg(absEllipsePath.c_str());
-            setStyleSheet(sts);
+            std::string absPath;
+            GetDataFilePath("assets", absPath);
 
-            m_eCurrentState = ChannelState::Streaming;
+            QString imgPath = QString("%1/platform/live-streaming.svg")
+                .arg(absPath.data());
+            QIcon icon(imgPath);
+            ui->pushButton_IsLive->setIconSize(ui->pushButton_IsLive->size());
+            ui->pushButton_IsLive->setIcon(icon);
+            m_currentState = ChannelState::Streaming;
         }
         else
         {
-            GetDataFilePath("assets/platform/standby-ellipse.png", absEllipsePath);
-            QString sts = QString(
-                "QPushButton {border-radius:15px; background:transparent; image:url(%2);}"\
-                "QPushButton:hover{background:#484848}; }")
-                .arg(absEllipsePath.c_str());
-            setStyleSheet(sts);
-
-            m_eCurrentState = ChannelState::LoginWithSimulcast;
-
+            ui->pushButton_IsLive->setIcon(QIcon());
+            m_currentState = ChannelState::LoginWithSimulcast;
         }
     }
     else
     {
-        QString sts = QString(
-            "QPushButton {border-radius:15px; background:transparent;}"\
-            "QPushButton:hover{background:#484848}; }");
-        setStyleSheet(sts);
-
-        m_eCurrentState = ChannelState::LoginWithoutSimulcast;
+        ui->pushButton_IsLive->setIcon(QIcon());
+        m_currentState = ChannelState::LoginWithSimulcast;
     }
 }
 
-
-void AFMainAccountButton::SetPlatformImage(std::string platform, bool disable)
+void AFMainAccountButton::TransparentPlatformImage(bool transparent)
 {
+    std::string platform = m_platformStr;
+    platform.erase(std::remove(platform.begin(), platform.end(), ' '), platform.end());
+    m_isTransparent = transparent;
+
     std::string absPath;
-    std::string abshoverPath;
-    bool foundIcon = false;
-    if (platform == "SOOP Global")
+    GetDataFilePath("assets", absPath);
+    QString imgPath = QString("%1/platform/default/%2.png")
+        .arg(absPath.data()).arg(platform.data());
+
+    if (transparent)
     {
-        m_bIsMainAccount = true;
-        if (disable)
+        QPixmap* transparentPixmap = SetTransparentImage(imgPath, 0.5);
+        if (transparentPixmap)
         {
-            GetDataFilePath("assets/platform/disable/soopglobal.png", absPath);
-            GetDataFilePath("assets/platform/disable/soopglobalhover.png", abshoverPath);
+            QIcon icon(*transparentPixmap);
+            ui->pushButton_Platform->setIconSize(ui->pushButton_Platform->size());
+            ui->pushButton_Platform->setIcon(icon);
         }
         else
         {
-            foundIcon = GetDataFilePath("assets/platform/default/soopglobal.png", absPath);
+            QIcon icon(imgPath);
+            ui->pushButton_Platform->setIconSize(ui->pushButton_Platform->size());
+            ui->pushButton_Platform->setIcon(icon);
         }
-    }
-    else if (platform == "afreecaTV")
-        foundIcon = GetDataFilePath("assets/platform/default/soop.png", absPath);
-    else if (platform == "Twitch")
-        foundIcon = GetDataFilePath("assets/platform/default/twitch.png", absPath);
-    else if (platform == "Youtube")
-        foundIcon = GetDataFilePath("assets/platform/default/youtube.png", absPath);
-    else if (platform == "Custom RTMP")
-        foundIcon = GetDataFilePath("assets/platform/default/rtmp.png", absPath);
-
-    QString sts = "";
-    if (disable)
-    {
-        sts = QString("#pushButton_Platform { image:url(%1); border-radius:14px; "\
-            "background: transparent; }"\
-            "#pushButton_Platform:hover{ image:url(%2); }")
-            .arg(absPath.c_str()).arg(abshoverPath.c_str());
-        m_eCurrentState = ChannelState::Disable;
     }
     else
     {
-        sts = QString("#pushButton_Platform { image:url(%1); border-radius:14px; "\
-            "background: transparent; }")
-            .arg(absPath.c_str());
-        m_eCurrentState = ChannelState::LoginWithoutSimulcast;
+        QIcon icon(imgPath);
+        ui->pushButton_Platform->setIconSize(ui->pushButton_Platform->size());
+        ui->pushButton_Platform->setIcon(icon);
     }
-    
-    ui->pushButton_Platform->setStyleSheet(sts);
+
+
+}
+
+void AFMainAccountButton::SetPlatform(std::string platform, bool hover)
+{
+    m_platformStr = platform;
+
+    if(hover)
+        connect(this, &AFMainAccountButton::qsignalAccountButtonHover, this, &AFMainAccountButton::qslotHoverPlatformImage);
+    //connect(this, &AFMainAccountButton::qsignalAccountButtonPressed, this, &AFMainAccountButton::qslotPressedPlatformImage);
+}
+
+void AFMainAccountButton::SetImage(QPixmap* image)
+{
+    QIcon icon(*image);
+    ui->pushButton_Platform->setIconSize(ui->pushButton_Platform->size());
+    ui->pushButton_Platform->setIcon(icon);
+}
+
+QSize AFMainAccountButton::SetFixedSize(QSize size)
+{
+    QSize insideButtonSize = size;
+    setFixedSize(size);
+
+    if (width() == 64)
+    {
+        insideButtonSize = size - QSize(2, 2);
+        ui->pushButton_Frame->setFixedSize(insideButtonSize);
+        ui->pushButton_Frame->move(1, 1);
+
+        insideButtonSize = size - QSize(8, 8);
+        ui->pushButton_Platform->setFixedSize(insideButtonSize);
+        ui->pushButton_Platform->move(4,4);
+
+        ui->pushButton_IsLive->resize(12, 12);
+        ui->pushButton_IsLive->move(width() - ui->pushButton_IsLive->width() - 6, 6);
+    }
+    else if (width() == 48)
+    {
+        insideButtonSize = size - QSize(2, 2);
+        ui->pushButton_Frame->setFixedSize(insideButtonSize);
+        ui->pushButton_Frame->move(1, 1);
+
+        insideButtonSize = size - QSize(8, 8);
+        ui->pushButton_Platform->setFixedSize(insideButtonSize);
+        ui->pushButton_Platform->move(4, 4);
+
+        ui->pushButton_IsLive->move(width() - ui->pushButton_IsLive->width() - 3, 3);
+    }
+    else
+    {
+        insideButtonSize = size - QSize(10, 10);
+        ui->pushButton_Frame->setFixedSize(insideButtonSize);
+        ui->pushButton_Frame->move(5, 5);
+
+        insideButtonSize = size - QSize(16, 16);
+        ui->pushButton_Platform->setFixedSize(insideButtonSize);
+        ui->pushButton_Platform->move(8, 8);
+
+        ui->pushButton_IsLive->resize(10, 10);
+        ui->pushButton_IsLive->move(30, 6);
+    }
+
+    return insideButtonSize;
+}
+
+void AFMainAccountButton::SetChecked(bool checked)
+{
+    setChecked(checked);
+    ui->pushButton_Platform->setChecked(checked);
+}
+
+void AFMainAccountButton::checkChecked()
+{
+    qDebug() << isChecked();
+    qDebug() << ui->pushButton_Platform->isChecked();
+}
+
+bool AFMainAccountButton::IsLive()
+{
+    return ui->pushButton_Frame->property("live").toBool();
+}
+
+bool AFMainAccountButton::event(QEvent* event)
+{
+    switch (event->type())
+    {
+    case QEvent::MouseMove:
+        emit qsignalAccountButtonMouseMove();
+        break;
+    case QEvent::HoverEnter:
+        emit qsignalAccountButtonHover(true);
+        break;
+    case QEvent::HoverLeave:
+        emit qsignalAccountButtonHover(false);
+        break;
+    case QEvent::MouseButtonPress:
+        emit qsignalAccountButtonPressed(true);
+        break;
+    case QEvent::MouseButtonRelease:
+        emit qsignalAccountButtonPressed(false);
+        break;
+    };
+    return QPushButton::event(event);
 }

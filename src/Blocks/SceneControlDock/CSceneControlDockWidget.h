@@ -8,22 +8,17 @@
 #include <QLabel>
 #include <QPushButton>
 
-#include "Blocks/CBaseDockWidget.h"
-
-
-#define SCENE_CONTROL_MIN_SIZE_WIDTH 720
-#define SCENE_CONTROL_MIN_SIZE_HEIGTH 486
+#define SCENE_CONTROL_MIN_SIZE_WIDTH 718
+#define SCENE_CONTROL_MIN_SIZE_HEIGTH 444
 
 
 class AFSimpleHoverEventFilter : public QObject
 {
-#pragma region QT Field
     Q_OBJECT
+
 signals:
     void qsignalHoverEventOccurred(QEvent::Type type);
-#pragma endregion QT Field
-    
-#pragma region protected function
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override 
     {
@@ -36,61 +31,41 @@ protected:
         }
         return QObject::eventFilter(watched, event);
     };
-#pragma endregion protected function
 };
 
-class AFSceneControlDockWidget final : public AFQBaseDockWidget
+class AFSceneControlWidget final : public QWidget
 {
-#pragma region QT Field
 	Q_OBJECT
-    
-#pragma region class initializer, destructor
+
 public:
-    explicit AFSceneControlDockWidget(QWidget* parent = nullptr);
-    ~AFSceneControlDockWidget();
-#pragma endregion class initializer, destructor
+    explicit AFSceneControlWidget(QWidget* parent = nullptr);
+    ~AFSceneControlWidget();
 
 signals:
-    void        qSignalTransitionButtonClicked();
+    void qSignalTransitionButtonClicked();
 
 private slots:
-    void        qslotChangedTopLevel(bool value);
-    void        qslotChangedVisibility(bool value);
-    void        qslotTransitionUIStyle(QEvent::Type type);
+    void qslotStudioModeToggled();
 
-    
-#pragma endregion QT Field
-    
-    
-#pragma region public function
 public:
-    void        ChangeLayoutStudioMode(bool studioMode);
-#pragma endregion QT public function
-    
-    
-#pragma region public function
-private:
-    void        _InitLayout();
-    void        _ReleaseLayoutObj();
-#pragma endregion QT public function
-    
-    
-#pragma region private member
-private:
-    bool                                m_bNeverDocked = true;
-    
-    QWidget*                            m_pTransitionAreaContents = nullptr;
-    QHBoxLayout*                        m_pTransitionAreaLayout = nullptr;
-    QPushButton*                        m_pTransitionButton = nullptr;
-    QLabel*                             m_pTransitionImg = nullptr;
-    
-    QWidget*                            m_pExpandedAreaContents = nullptr;
-    QHBoxLayout*                        m_pExpandedAreaLayout = nullptr;
+    void ChangeLayoutStudioMode();
 
-    
-    
-    QWidget                             m_Contents;
-    QVBoxLayout                         m_MainLayout;
-    QPointer<QWidget>                   m_MultiView = nullptr;
-#pragma endregion QT private member
+private:
+    void _InitLayout();
+    void _ReleaseLayoutObj();
+
+private:
+    QWidget* m_pTransitionAreaContents = nullptr;
+    QHBoxLayout* m_pTransitionAreaLayout = nullptr;
+    QPushButton* m_pTransitionButton = nullptr;
+    //QLabel* m_pTransitionImg = nullptr;
+                 
+    QWidget* m_pExpandedAreaContents = nullptr;
+    QHBoxLayout* m_pExpandedAreaLayout = nullptr;
+                 
+                 
+                 
+    QWidget m_contents;
+    QVBoxLayout m_mainLayout;
+    QPointer<QWidget> m_multiView = nullptr;
 };

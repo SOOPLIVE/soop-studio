@@ -5,7 +5,10 @@
 #include <QPointer>
 #include <QDoubleSpinBox>
 #include <QStackedWidget>
-#include "UIComponent/CBalanceSlider.h"
+
+#include "balance-slider.hpp"
+
+// [copy-obs] [adv-audio-control.hpp]
 
 class QGridLayout;
 class QHBoxLayout;
@@ -29,13 +32,14 @@ private:
 	QPointer<QWidget> mixerContainer;
 	QPointer<QWidget> balanceContainer;
 
+	QPointer<QLabel> iconLabel;
 	QPointer<QLabel> nameLabel;
 	QPointer<QLabel> active;
-	QPointer<QStackedWidget> volumeStackWidget;
+	QPointer<QStackedWidget> stackedWidget;
 	QPointer<QSpinBox> percent;
 	QPointer<QDoubleSpinBox> volume;
 	QPointer<QCheckBox> forceMono;
-	QPointer<AFQBalanceSlider> balance;
+	QPointer<BalanceSlider> balance;
 	QPointer<QLabel> labelL;
 	QPointer<QLabel> labelR;
 	QPointer<QSpinBox> syncOffset;
@@ -48,25 +52,16 @@ private:
 	QPointer<QCheckBox> mixer6;
 	QPointer<QCheckBox> lockIcon;
 
-	OBSSignal volChangedSignal;
-	OBSSignal syncOffsetSignal;
-	OBSSignal flagsSignal;
-	OBSSignal monitoringTypeSignal;
-	OBSSignal mixersSignal;
-	OBSSignal activateSignal;
-	OBSSignal deactivateSignal;
-	OBSSignal balChangedSignal;
-	OBSSignal renameSignal;
+	std::vector<OBSSignal> sigs;
 
-	void _SetContentsProperties();
+	void setContentsProperties();
 
 	static void OBSSourceActivated(void *param, calldata_t *calldata);
 	static void OBSSourceDeactivated(void *param, calldata_t *calldata);
 	static void OBSSourceFlagsChanged(void *param, calldata_t *calldata);
 	static void OBSSourceVolumeChanged(void *param, calldata_t *calldata);
 	static void OBSSourceSyncChanged(void *param, calldata_t *calldata);
-	static void OBSSourceMonitoringTypeChanged(void *param,
-						   calldata_t *calldata);
+	static void OBSSourceMonitoringTypeChanged(void *param, calldata_t *calldata);
 	static void OBSSourceMixersChanged(void *param, calldata_t *calldata);
 	static void OBSSourceBalanceChanged(void *param, calldata_t *calldata);
 	static void OBSSourceRenamed(void *param, calldata_t *calldata);
@@ -79,6 +74,7 @@ public:
 	void ShowAudioControl(QGridLayout *layout);
 
 	void SetVolumeWidget(VolumeType type);
+	void SetIconVisible(bool visible);
 
 public slots:
 	void SourceActiveChanged(bool active);

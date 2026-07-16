@@ -11,7 +11,8 @@ class QPixmap;
 
 class AFQStreamAccount : public QPushButton
 {
-	Q_OBJECT;
+	Q_OBJECT
+
 #pragma region class initializer, destructor
 public:
 	explicit AFQStreamAccount(QWidget* parent = nullptr);
@@ -44,39 +45,42 @@ public:
 	QString GetStreamAccountPlatform();
 
 	void SetStreamAccountID(QString id);
-	QString GetID() { return m_sID; }
+	QString GetID() { return m_iD; }
 
-	void SetPassword(QString password) { m_sPassword = password; }
-	QString GetPassword() { return m_sPassword; }
+	void SetPassword(QString password) { m_password = password; }
+	QString GetPassword() { return m_password; }
 
-	void SetStreamKey(QString streamkey) { m_sStreamKey = streamkey; };
-	QString GetStreamKey() { return m_sStreamKey; }
+	void SetStreamKey(QString streamkey) { m_streamKey = streamkey; };
+	QString GetStreamKey() { return m_streamKey; }
 
-	void SetServer(QString server) { m_sServer = server; }
-	QString GetServer() { return m_sServer; }
+	void SetServer(QString server) { m_server = server; }
+	QString GetServer() { return m_server; }
 
 	void SetChannelName(QString channelName);
-	QString GetChannelName() { return m_sChannelName; }
+	QString GetChannelName() { return m_channelName; }
 
-	void SetChannelNick(QString channelNickName) { m_sChannelNickName = channelNickName; };
-	QString GetChannelNick() { return m_sChannelNickName; }
+	void SetChannelNick(QString channelNickName) { m_channelNickName = channelNickName; };
+	QString GetChannelNick() { return m_channelNickName; }
 
-	void SetUuid(QString uuid) { m_sUuid = uuid; }
-	QString GetUuid() { return m_sUuid; };
+	void SetUuid(QString uuid) { m_uuid = uuid; }
+	QString GetUuid() { return m_uuid; };
 
     void SetPixmapProfileImgObj(QPixmap* pObj) { m_pPixmapProfileImg = pObj; }
     QPixmap* GetPixmapProfileImgObj() { return m_pPixmapProfileImg; };
     
-    bool GetStateLive() { return m_IsLive; }
+    bool GetStateLive() { return m_isLive; }
 	void SetOnLive(bool onlive);
 	bool GetOnLive();
 
-	void SetModified(bool modified) { m_IsModified = modified; }
-	bool GetModified() { return m_IsModified; }
+	void SetModified(bool modified) { m_isModified = modified; }
+	bool GetModified() { return m_isModified; }
 
-    void CompleteRegist() { m_IsRegistedChannelModelData = true; }
+    void CompleteRegist() { m_isRegistedChannelModelData = true; }
     
-	bool IsCustomService() { return m_sPlatform == "+RTMP"; };
+	bool IsCustomService() { return m_platform == "+RTMP"; };
+
+	void SetCookie(std::string cookie) { m_cookie = cookie; }
+	std::string GetCookie() { return m_cookie; }
 #pragma endregion public func
 
 #pragma region protected func
@@ -96,18 +100,19 @@ public:
 #pragma region private member var
 private:
 	Ui::AFQStreamAccount* ui;
-	QString m_sServer;
-	QString m_sStreamKey;
-	QString m_sID;
-	QString m_sPassword;
-	QString m_sPlatform;
+	QString m_server;
+	QString m_streamKey;
+	QString m_iD;
+	QString m_password;
+	QString m_platform;
     QPixmap* m_pPixmapProfileImg = nullptr;
-    bool m_IsLive = false;
-	QString m_sChannelName;
-	QString m_sChannelNickName;
-	QString m_sUuid;
-	bool m_IsModified = false;
-    bool m_IsRegistedChannelModelData = false;
+    bool m_isLive = false;
+	QString m_channelName;
+	QString m_channelNickName;
+	QString m_uuid;
+	bool m_isModified = false;
+    bool m_isRegistedChannelModelData = false;
+	std::string m_cookie = "";
 #pragma endregion private member var
 };
 

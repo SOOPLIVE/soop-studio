@@ -29,27 +29,17 @@ void AFBlockButtonWidget::qslotButtonPressedTriggered()
 //    ui->pushButton->setIconSize(ui->pushButton->rect().size());
 //}
 
-void AFBlockButtonWidget::AFBlockButtonWidgetInit(int type, const char* chartype)
+void AFBlockButtonWidget::AFBlockButtonWidgetInit(int type, QString key)
 {
-    m_cBlockType = chartype;
-
-    ui->pushButton->setProperty("buttonType", m_cBlockType);
-
-    /*std::string imgPath;
-    QString path = QString("assets/block-icon/popup/default/%1.svg").arg(m_cBlockType);
-    GetDataFilePath(path.toUtf8().constData(), imgPath);
-
-    QIcon ButtonIcon(imgPath.data());
-    ui->pushButton->setIcon(ButtonIcon);
-    ui->pushButton->setIconSize(ui->pushButton->rect().size());*/
-
+    //Button Image in QSS by Property
+    ui->pushButton->setProperty("buttonType", key);
 
     ui->pushButton->setChecked(false);
     SetOnLabelVisible(false);
     connect(ui->pushButton, &QPushButton::pressed, this, &AFBlockButtonWidget::qslotButtonPressedTriggered);
-    //connect(ui->pushButton, &QPushButton::released, this, &AFBlockButtonWidget::qslotButtonReleasedTriggered);
+    connect(ui->pushButton, &QPushButton::released, this, &AFBlockButtonWidget::qslotButtonPressedTriggered);
     connect(ui->pushButton, &QPushButton::clicked, this, &AFBlockButtonWidget::qsignalBlockButtonClicked);
-    m_BlockButtonType = type;
+    m_blockButtonType = type;
 }
 
 bool AFBlockButtonWidget::IsOnLabelVisible()
@@ -67,11 +57,11 @@ bool AFBlockButtonWidget::event(QEvent* e)
     switch (e->type())
     {
     case QEvent::HoverEnter:
-        m_bCheckHover = true;
-        emit qsignalShowTooltip(m_BlockButtonType);
+        m_checkHover = true;
+        emit qsignalShowTooltip(m_blockButtonType);
         break;
     case QEvent::HoverLeave:
-        m_bCheckHover = false;
+        m_checkHover = false;
         emit qsignalHideTooltip();
         break;
     case QEvent::HoverMove:

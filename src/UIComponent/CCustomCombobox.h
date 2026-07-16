@@ -19,6 +19,8 @@ class AFQCustomCombobox : public QComboBox
 public:
     explicit AFQCustomCombobox(QWidget* parent = nullptr);
 
+Q_SIGNALS:
+    void beforeShowPopup();
 #pragma endregion QT Field
 
 #pragma region public func

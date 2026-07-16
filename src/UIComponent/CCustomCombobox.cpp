@@ -36,7 +36,7 @@ AFQCustomCombobox::AFQCustomCombobox(QWidget *parent)
 
     QListView* listView = qobject_cast<QListView*>(view());
     if (listView) {
-        listView->setStyleSheet(QSS_QCOMBOBOX_LISTVIEW);
+        //listView->setStyleSheet(QSS_QCOMBOBOX_LISTVIEW);
     }
 
 }
@@ -48,10 +48,12 @@ void AFQCustomCombobox::wheelEvent(QWheelEvent* event)
 
 void AFQCustomCombobox::showPopup()
 {
-    QComboBox::showPopup();
+    emit beforeShowPopup();
 
     QListView* listView = qobject_cast<QListView*>(view());
     if (listView) {
-        listView->setStyleSheet(QSS_QCOMBOBOX_LISTVIEW);
+        //listView->setStyleSheet(QSS_QCOMBOBOX_LISTVIEW);
     }
+
+    QComboBox::showPopup();
 }

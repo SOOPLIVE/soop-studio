@@ -36,7 +36,7 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QFrame" name="frame">
+    <widget class="AFTransparentMouseEvents" name="titleWidget" native="true">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -48,12 +48,6 @@
        <width>16777215</width>
        <height>38</height>
       </size>
-     </property>
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Raised</enum>
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout_3">
       <property name="spacing">
@@ -204,6 +198,12 @@
    <class>AFQTDisplay</class>
    <extends>QWidget</extends>
    <header>UIComponent/CQtDisplay.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>AFTransparentMouseEvents</class>
+   <extends>QWidget</extends>
+   <header>MainFrame/CTransparentMouseEvents.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

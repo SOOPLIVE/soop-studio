@@ -130,6 +130,8 @@ static std::string GetFormatExt(const char* container)
 	std::string ext = container;
 	if(ext == "fragmented_mp4")
 		ext = "mp4";
+	if(ext == "hybrid_mp4")
+		ext = "mp4";
 	else if(ext == "fragmented_mov")
 		ext = "mov";
 	else if(ext == "hls")
@@ -192,13 +194,6 @@ static std::string GetOutputFilename(const char* path, const char* container, bo
 	os_dir_t* dir = path && path[0] ? os_opendir(path) : nullptr;
 
 	if(!dir) {
-		/*if(main->isVisible())
-			OBSMessageBox::warning(main,
-						   QTStr("Output.BadPath.Title"),
-						   QTStr("Output.BadPath.Text"));
-		else
-			main->SysTrayNotify(QTStr("Output.BadPath.Text"),
-						QSystemTrayIcon::Warning);*/
 		return "";
 	}
 

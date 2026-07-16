@@ -12,7 +12,7 @@
 
 #include "ui_missing-files-dialog.h"
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 #include "UIComponent/CElidedSlideLabel.h"
 
 class MissingFilesModel;
@@ -28,12 +28,12 @@ public:
     ~AFQMissingFileColumnWidget() {};
 
     void AddMissingFileWidget(const char* name, const char* oldPath);
-    QString GetSourceName() { return m_qSourceName->text(); };
-    QString GetOriginalName() { return m_qMissingPath->text(); };
-    QString GetNewName() { return m_qNewFilePath->text(); };
-    MissingFilesState GetState() { return m_State; };
+    QString GetSourceName() { return m_pSourceName->text(); };
+    QString GetOriginalName() { return m_pMissingPath->text(); };
+    QString GetNewName() { return m_pNewFilePath->text(); };
+    MissingFilesState GetState() { return m_state; };
     
-    void SetNewName(QString path) { m_qNewFilePath->setText(path); };
+    void SetNewName(QString path) { m_pNewFilePath->setText(path); };
 
 public slots:
     void qslotBrowseFilePath();
@@ -41,18 +41,18 @@ public slots:
     void qslotEditingFinished();
 
 private:
-    AFQElidedSlideLabel* m_qSourceName;
-    AFQElidedSlideLabel* m_qMissingPath;
-    QLineEdit* m_qNewFilePath;
-    QPushButton* m_qPathResetButton;
-    QPushButton* m_qFindPathButton;
-    AFQElidedSlideLabel* m_qStatusLabel;
-    QPushButton* m_qChangedCheck;
+    AFQElidedSlideLabel* m_pSourceName;
+    AFQElidedSlideLabel* m_pMissingPath;
+    QLineEdit* m_pNewFilePath;
+    QPushButton* m_pPathResetButton;
+    QPushButton* m_pFindPathButton;
+    AFQElidedSlideLabel* m_pStatusLabel;
+    QPushButton* m_pChangedCheck;
 
-    MissingFilesState m_State;
+    MissingFilesState m_state;
 };
 
-class AFQMissingFilesDialog : public AFQRoundedDialogBase
+class AFQMissingFilesDialog : public AFTTopBaseDialog
 {
     Q_OBJECT
 
@@ -67,12 +67,12 @@ private:
     void saveFiles();
     void browseFolders();
 
-    obs_missing_files_t* fileStore;
+    obs_missing_files_t* m_pFileStore;
 private:
 
-    bool m_bLoop = true;
+    bool m_loop = true;
 
-    QList<AFQMissingFileColumnWidget*> m_qFiles;
+    QList<AFQMissingFileColumnWidget*> m_files;
 
     void _FileCheckLoop(QString path, bool skipPrompt);
 };

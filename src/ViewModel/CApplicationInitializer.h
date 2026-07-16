@@ -2,9 +2,9 @@
 
 
 #include <string>
+#include <memory>
 
 #ifdef _WIN32
-#define NOMINMAX
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -13,17 +13,15 @@
 #endif
 
 //Forward
-class AFMakeDirectory;
+class AFLogManager;
+class AFArgOption;
 
 class AFApplicationInitializer final
 {
-#pragma region QT Field, CTOR/DTOR
 public:
-    AFApplicationInitializer() = default;
+    AFApplicationInitializer();
     ~AFApplicationInitializer();
-#pragma endregion QT Field, CTOR/DTOR
 
-#pragma region public func
 public:
 #ifdef _WIN32
     static void             LoadDebugPrivilege();
@@ -31,14 +29,20 @@ public:
 
     void                    AppEntrySetting(int argc, char* argv[]);
     void                    AppEntryRelease();
-    void                    AppSetGlobalConfig(AFMakeDirectory* pDirMaker, bool bStateAppActive);
-#pragma endregion public func
+    void                    AppSetGlobalConfig(bool bStateAppActive);
 
-#pragma region private func
+    inline AFLogManager&    GetLogManager() { return *m_logManager; }
+    inline AFArgOption&     GetArgOption() { return *m_argOption; }
+
 private:
+    static bool             m_bIsSigned;
     // callback for libobs
 #ifdef _WIN32
     static void             _MainCrashHandler(const char* format, va_list args, void* caller);
+#endif
+    
+#ifdef __APPLE__
+    static void             _MainCrashHandler(siginfo_t* info, ucontext_t* uap, void* context);
 #endif
     //
 
@@ -54,14 +58,13 @@ private:
     void                    _ReleaseRTWorkQ();
 #endif
 
-#pragma endregion private func
-
-#pragma region private member var
 private:
 #ifdef _WIN32
     HMODULE                 m_hRtwq = NULL;
 #endif
-#pragma endregion private member var
+
+    std::unique_ptr<AFLogManager>   m_logManager;
+    std::unique_ptr<AFArgOption>    m_argOption;
 };
 
 #ifdef _WIN32

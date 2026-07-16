@@ -1,10 +1,9 @@
 ﻿#include "CVideo.h"
 
-
-
-
 #include <util/dstr.hpp>
 #include <util/profiler.hpp>
+
+#include "Application/CApplication.h"
 
 #include "Blocks/SceneControlDock/CProjector.h"
 
@@ -12,91 +11,78 @@
 #include "CoreModel/Graphics/CGraphicsContext.h"
 #include "CoreModel/Log/CLogManager.h"
 #include "CoreModel/OBSOutput/COBSOutputContext.h"
-
-#include "ViewModel/MainWindow/CMainWindowAccesser.h"
+#include "CoreModel/Config/CStateAppContext.h"
 #include "CoreModel/Statistics/CStatistics.h"
 
+#include "ViewModel/MainWindow/CMainWindowAccesser.h"
+#include "ViewModel/MainWindow/CMainWindowRenderModel.h"
 
-int AFVideoUtil::ResetVideo()
+
+inline enum obs_scale_type GetScaleType()
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-	auto& logManager = AFLogManager::GetSingletonInstance();
-
-	auto& tmpOutputHandler = AFOBSOutputContext::GetSingletonInstance().GetMainOuputHandler();
-	if (tmpOutputHandler && tmpOutputHandler->Active())
-		return OBS_VIDEO_CURRENTLY_ACTIVE;
-
-	ProfileScope("OBSBasic::ResetVideo");
-
-	struct obs_video_info ovi;
-	int ret = 0;
-	_GetConfigFPS(ovi.fps_num, ovi.fps_den);
-
-	const char* colorFormat = config_get_string(confManager.GetBasic(), "Video", "ColorFormat");
-	const char* colorSpace = config_get_string(confManager.GetBasic(), "Video", "ColorSpace");
-	const char* colorRange = config_get_string(confManager.GetBasic(), "Video", "ColorRange");
-	//
-	ovi.graphics_module = AFGraphicsContext::GetSingletonInstance().GetRenderModule();
-	ovi.base_width = (uint32_t)config_get_uint(confManager.GetBasic(), "Video", "BaseCX");
-	ovi.base_height = (uint32_t)config_get_uint(confManager.GetBasic(), "Video", "BaseCY");
-	ovi.output_width = (uint32_t)config_get_uint(confManager.GetBasic(), "Video", "OutputCX");
-	ovi.output_height = (uint32_t)config_get_uint(confManager.GetBasic(), "Video", "OutputCY");
-	ovi.output_format = _GetVideoFormatFromName(colorFormat);
-	ovi.colorspace = _GetVideoColorSpaceFromName(colorSpace);
-	ovi.range = astrcmpi(colorRange, "Full") == 0 ? VIDEO_RANGE_FULL
-												  : VIDEO_RANGE_PARTIAL;
-	ovi.adapter = config_get_uint(confManager.GetGlobal(), "Video", "AdapterIdx");
-	ovi.gpu_conversion = true;
-	ovi.scale_type = _GetScaleType(confManager.GetBasic());
-	if (ovi.base_width < 32 || ovi.base_height < 32)
-	{
-		ovi.base_width = 1920;
-		ovi.base_height = 1080;
-		config_set_uint(confManager.GetBasic(), "Video", "BaseCX", 1920);
-		config_set_uint(confManager.GetBasic(), "Video", "BaseCY", 1080);
+	const char* scaleTypeStr = config_get_string(ACTIVECONFIG, "Video", "ScaleType");
+	if(0 == astrcmpi(scaleTypeStr, "bilinear")) {
+		return OBS_SCALE_BILINEAR;
+	} else if(0 == astrcmpi(scaleTypeStr, "lanczos")) {
+		return OBS_SCALE_LANCZOS;
+	} else if(0 == astrcmpi(scaleTypeStr, "area")) {
+		return OBS_SCALE_AREA;
+	} else {
+		return OBS_SCALE_BICUBIC;
 	}
-	if (ovi.output_width < 32 || ovi.output_height < 32)
-	{
-		ovi.output_width = ovi.base_width;
-		ovi.output_height = ovi.base_height;
-		config_set_uint(confManager.GetBasic(), "Video", "OutputCX",
-						ovi.base_width);
-		config_set_uint(confManager.GetBasic(), "Video", "OutputCY",
-						ovi.base_height);
+};
+
+inline enum video_format _GetVideoFormatFromName(const char* name)
+{
+	if(0 == astrcmpi(name, "I420")) {
+		return VIDEO_FORMAT_I420;
+	} else if(0 == astrcmpi(name, "NV12")) {
+		return VIDEO_FORMAT_NV12;
+	} else if(0 == astrcmpi(name, "I444")) {
+		return VIDEO_FORMAT_I444;
+	} else if(0 == astrcmpi(name, "I010")) {
+		return VIDEO_FORMAT_I010;
+	} else if(0 == astrcmpi(name, "P010")) {
+		return VIDEO_FORMAT_P010;
+	} else if(0 == astrcmpi(name, "P216")) {
+		return VIDEO_FORMAT_P216;
+	} else if(0 == astrcmpi(name, "P416")) {
+		return VIDEO_FORMAT_P416;
 	}
-	ret = obs_reset_video(&ovi);
-	if(OBS_VIDEO_CURRENTLY_ACTIVE == ret) {
-		blog(LOG_WARNING, "Tried to reset when already active");
-		return ret;
+#if 1 // currently unsupported
+	else if(0 == astrcmpi(name, "YVYU")) {
+		return VIDEO_FORMAT_YVYU;
+	} else if(0 == astrcmpi(name, "YUY2")) {
+		return VIDEO_FORMAT_YUY2;
+	} else if(0 == astrcmpi(name, "UYVY")) {
+		return VIDEO_FORMAT_UYVY;
 	}
-    
-    if (ret == OBS_VIDEO_SUCCESS)
-    {
-        auto& tmpViewModels = g_ViewModelsDynamic.GetInstance();
-        tmpViewModels.m_RenderModel.ResizePreview(ovi.base_width, ovi.base_height);
-        AFStateAppContext* tmpStateApp = AFConfigManager::GetSingletonInstance().GetStates();
-        if (tmpStateApp->IsPreviewProgramMode())
-            tmpViewModels.m_RenderModel.ResizeProgram(ovi.base_width, ovi.base_height);
-        
-		const float sdr_white_level = (float)config_get_uint(confManager.GetBasic(),
-															 "Video", "SdrWhiteLevel");
-		const float hdr_nominal_peak_level = (float)config_get_uint(confManager.GetBasic(),
-																	"Video", "HdrNominalPeakLevel");
-		obs_set_video_levels(sdr_white_level, hdr_nominal_peak_level);
+#endif //
+	else {
+		return VIDEO_FORMAT_BGRA;
+	}
+};
 
-		AFStatistics::InitializeValues();
-        AFQProjector::UpdateMultiviewProjectors();
-    }
-
-	ret = 2;
-
-	return ret;
-}
+inline enum video_colorspace _GetVideoColorSpaceFromName(const char* name)
+{
+	enum video_colorspace colorspace = VIDEO_CS_SRGB;
+	if(0 == strcmp(name, "601")) {
+		colorspace = VIDEO_CS_601;
+	} else if(0 == strcmp(name, "709")) {
+		colorspace = VIDEO_CS_709;
+	} else if(0 == strcmp(name, "2100PQ")) {
+		colorspace = VIDEO_CS_2100_PQ;
+	} else if(0 == strcmp(name, "2100HLG")) {
+		colorspace = VIDEO_CS_2100_HLG;
+	}
+	return colorspace;
+};
 //
-void AFVideoUtil::_GetFPSCommon(uint32_t& num, uint32_t& den) const
+void GetFPSCommon(uint32_t& num, uint32_t& den)
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-	const char* pVal = config_get_string(confManager.GetBasic(), "Video", "FPSCommon");
+	auto config = ACTIVECONFIG;
+	//
+	const char* pVal = config_get_string(ACTIVECONFIG, "Video", "FPSCommon");
 	if(0 == strcmp(pVal, "10")) {
 		num = 10;
 		den = 1;
@@ -129,41 +115,122 @@ void AFVideoUtil::_GetFPSCommon(uint32_t& num, uint32_t& den) const
 		den = 1;
 	}
 }
-void AFVideoUtil::_GetFPSInteger(uint32_t& num, uint32_t& den) const
+void GetFPSInteger(uint32_t& num, uint32_t& den)
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-	num = (uint32_t)config_get_uint(confManager.GetBasic(), "Video", "FPSInt");
+	num = (uint32_t)config_get_uint(ACTIVECONFIG, "Video", "FPSInt");
 	den = 1;
 }
 
-void AFVideoUtil::_GetFPSFraction(uint32_t& num, uint32_t& den) const
+void GetFPSFraction(uint32_t& num, uint32_t& den)
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-	num = (uint32_t)config_get_uint(confManager.GetBasic(), "Video", "FPSNum");
-	den = (uint32_t)config_get_uint(confManager.GetBasic(), "Video", "FPSDen");
+	num = (uint32_t)config_get_uint(ACTIVECONFIG, "Video", "FPSNum");
+	den = (uint32_t)config_get_uint(ACTIVECONFIG, "Video", "FPSDen");
 }
 
-void AFVideoUtil::_GetFPSNanoseconds(uint32_t& num, uint32_t& den) const
+void GetFPSNanoseconds(uint32_t& num, uint32_t& den)
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
 	num = 1000000000;
-	den = (uint32_t)config_get_uint(confManager.GetBasic(), "Video", "FPSNS");
+	den = (uint32_t)config_get_uint(ACTIVECONFIG, "Video", "FPSNS");
 }
 
-void AFVideoUtil::_GetConfigFPS(uint32_t& num, uint32_t& den) const
+void GetConfigFPS(uint32_t& num, uint32_t& den)
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-	uint32_t type = config_get_uint(confManager.GetBasic(), "Video", "FPSType");
+	uint32_t type = config_get_uint(ACTIVECONFIG, "Video", "FPSType");
 	if(1 == type) { // "integer"
-		_GetFPSInteger(num, den);
+		GetFPSInteger(num, den);
 	} else if(2 == type) { // "fraction"
-		_GetFPSFraction(num, den);
+		GetFPSFraction(num, den);
 	}
     /*
      * 	else if (false) //"Nanoseconds", currently not implemented
      *		GetFPSNanoseconds(num, den);
      */
 	else {
-		_GetFPSCommon(num, den);
+		GetFPSCommon(num, den);
 	}
 }
+
+namespace AFVideoUtil {
+    int ResetVideo()
+    {
+        //auto& tmpOutputHandler = OUTPUT_CONTEXT.GetMainOuputHandler();
+        //if (tmpOutputHandler && tmpOutputHandler->Active())
+        //	return OBS_VIDEO_CURRENTLY_ACTIVE;
+
+        ProfileScope("OBSBasic::ResetVideo");
+
+        struct obs_video_info ovi;
+        int ret = 0;
+        GetConfigFPS(ovi.fps_num, ovi.fps_den);
+
+        config_t* activeConfig = ACTIVECONFIG;
+		//
+        const char* colorFormat = config_get_string(activeConfig, "Video", "ColorFormat");
+        const char* colorSpace = config_get_string(activeConfig, "Video", "ColorSpace");
+        const char* colorRange = config_get_string(activeConfig, "Video", "ColorRange");
+        //
+        ovi.graphics_module = GRAPHIC_CONTEXT.GetRenderModule();
+        ovi.base_width = (uint32_t)config_get_uint(activeConfig, "Video", "BaseCX");
+        ovi.base_height = (uint32_t)config_get_uint(activeConfig, "Video", "BaseCY");
+        ovi.output_width = (uint32_t)config_get_uint(activeConfig, "Video", "OutputCX");
+        ovi.output_height = (uint32_t)config_get_uint(activeConfig, "Video", "OutputCY");
+        ovi.output_format = _GetVideoFormatFromName(colorFormat);
+        ovi.colorspace = _GetVideoColorSpaceFromName(colorSpace);
+        ovi.range = astrcmpi(colorRange, "Full") == 0 ? VIDEO_RANGE_FULL : VIDEO_RANGE_PARTIAL;
+        ovi.adapter = config_get_uint(APPCONFIG, "Video", "AdapterIdx");
+        ovi.gpu_conversion = true;
+        ovi.scale_type = GetScaleType();
+
+        if(ovi.base_width < 32 || ovi.base_height < 32)
+        {
+            ovi.base_width = 1920;
+            ovi.base_height = 1080;
+            config_set_uint(activeConfig, "Video", "BaseCX", 1920);
+            config_set_uint(activeConfig, "Video", "BaseCY", 1080);
+        }
+
+        if(ovi.output_width < 32 || ovi.output_height < 32)
+        {
+            ovi.output_width = ovi.base_width;
+            ovi.output_height = ovi.base_height;
+            config_set_uint(activeConfig, "Video", "OutputCX", ovi.base_width);
+            config_set_uint(activeConfig, "Video", "OutputCY", ovi.base_height);
+        }
+
+		if(ovi.output_width != ovi.base_width || ovi.output_height != ovi.base_height)
+		{
+			ovi.base_width = ovi.output_width;
+			ovi.base_height = ovi.output_height;
+			config_set_uint(activeConfig, "Video", "BaseCX", ovi.base_width);
+			config_set_uint(activeConfig, "Video", "BaseCY", ovi.base_height);
+		}
+
+        ret = obs_reset_video(&ovi);
+        if(OBS_VIDEO_CURRENTLY_ACTIVE == ret) {
+            blog(LOG_WARNING, "Tried to reset when already active");
+            return ret;
+        }
+
+        if(ret == OBS_VIDEO_SUCCESS)
+        {
+			auto& tmpViewModels = g_viewModelsDynamic.GetInstance();
+			tmpViewModels.m_renderModel.ResizePreview(ovi.base_width, ovi.base_height);
+            if(STATEAPP.IsPreviewProgramMode())
+				tmpViewModels.m_renderModel.ResizeProgram(ovi.base_width, ovi.base_height);
+
+            const float sdr_white_level = (float)config_get_uint(activeConfig, "Video", "SdrWhiteLevel");
+            const float hdr_nominal_peak_level = (float)config_get_uint(activeConfig, "Video", "HdrNominalPeakLevel");
+            obs_set_video_levels(sdr_white_level, hdr_nominal_peak_level);
+
+            AFStatistics::InitializeValues();
+            AFQProjector::UpdateMultiviewProjectors();
+			AFSceneContext::UpdateVideoSize(ovi.base_width, ovi.base_height);
+
+			/*bool canMigrate = usingAbsoluteCoordinates ||
+				(migrationBaseResolution && (migrationBaseResolution->first != ovi.base_width ||
+											 migrationBaseResolution->second != ovi.base_height));*/
+        }
+
+        return ret;
+    }
+};

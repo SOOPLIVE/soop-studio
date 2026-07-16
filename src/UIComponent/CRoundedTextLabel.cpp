@@ -29,7 +29,7 @@ void AFQRoundedTextLabel::paintEvent(QPaintEvent* event)
     {
         QPen pen;
         pen.setWidth(1);
-        pen.setColor(m_LineBrush.color());
+        pen.setColor(m_lineBrush.color());
         
         p.setPen(pen);
         p.setBrush(Qt::NoBrush);

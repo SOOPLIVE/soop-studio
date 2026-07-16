@@ -1,19 +1,19 @@
 ﻿#include "CVolumeControl.h"
 
-#include <util/platform.h>
+#include <algorithm>
 
 #include <QHBoxLayout>
 #include <QPainter>
 
-#include "UIComponent/CSliderIgnoreWheel.h"
-#include "CoreModel/Config/CConfigManager.h"
+#include "qt-wrappers.hpp"
+#include "util/platform.h"
+
+#include "UIComponent/CVolumeSlider.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
 #include "Application/CApplication.h"
-#include "qt-wrapper.h"
 
-#define CLAMP(x, min, max) ((x) < (min) ? (min) : ((x) > (max) ? (max) : (x)))
 #define FADER_PRECISION 4096.0
-#define DB_TEXT_UPDATE_INTERVAL 300
+#define DB_TEXT_UPDATE_INTERVAL 300		// obs 31.0.2 remove
 
 // Size of the audio indicator in pixels
 #define INDICATOR_THICKNESS 3
@@ -43,14 +43,36 @@ static inline bool IsSourceUnassigned(obs_source_t* source)
 	return mixes == 0 && mt != OBS_MONITORING_TYPE_MONITOR_ONLY;
 }
 
+static void ShowUnassignedWarning(const char* name)
+{
+	auto msgBox = [=]() {
+		QMessageBox msgbox(MAINFRAME);
+		msgbox.setWindowTitle(QTStr("VolControl.UnassignedWarning.Title"));
+		msgbox.setText(QTStr("VolControl.UnassignedWarning.Text").arg(name));
+		msgbox.setIcon(QMessageBox::Icon::Information);
+		msgbox.addButton(QMessageBox::Ok);
+
+		QCheckBox* cb = new QCheckBox(QTStr("DoNotShowAgain"));
+		msgbox.setCheckBox(cb);
+
+		msgbox.exec();
+
+		if(cb->isChecked()) {
+			config_set_bool(USERCONFIG, "General", "WarnedAboutUnassignedSources", true);
+			config_save_safe(USERCONFIG, "tmp", nullptr);
+		}
+	};
+
+	QMetaObject::invokeMethod(App(), "Exec", Qt::QueuedConnection, Q_ARG(VoidFunc, msgBox));
+}
 
 AFQVolumeMeter::AFQVolumeMeter(QWidget* parent,
-	obs_volmeter_t* obs_volmeter,
-	bool vertical)
-	: QWidget(parent),
+	obs_volmeter_t* obs_volmeter, bool vertical)
+	: QWidget(parent), 
 	  obs_volmeter(obs_volmeter),
 	  vertical(vertical)
 {
+	//need test in mac - Mainframe transparent issue
 #ifdef __APPLE__
 	setAttribute(Qt::WA_OpaquePaintEvent, true);
 #endif
@@ -85,8 +107,7 @@ AFQVolumeMeter::AFQVolumeMeter(QWidget* parent,
 	peakHoldDuration = 20.0;                 //  20 seconds
 	inputPeakHoldDuration = 1.0;             //  1 second
 	meterThickness = 1;                      // Bar thickness in pixels
-	meterFontScaling =
-		0.7; // Font size for numbers is 70% of Widget's font size
+	meterFontScaling = 0.7; // Font size for numbers is 70% of Widget's font size
 	channels = (int)audio_output_get_channels(obs_get_audio());
 
 	doLayout();
@@ -176,15 +197,15 @@ QColor AFQVolumeMeter::getBackgroundNominalColorDisabled() const
 
 void AFQVolumeMeter::setBackgroundNominalColor(QColor c)
 {
-	p_backgroundNominalColor = std::move(c);
+    p_backgroundNominalColor = std::move(c);
+	backgroundNominalColor =
+		color_from_int(config_get_int(App()->GetUserConfig(), "Accessibility", "MixerGreen"));
 
-	backgroundNominalColor = color_from_int(config_get_int(
-		AFConfigManager::GetSingletonInstance().GetGlobal(), "Accessibility", "MixerGreen"));
 }
 
 void AFQVolumeMeter::setBackgroundNominalColorDisabled(QColor c)
 {
-	backgroundNominalColorDisabled = std::move(c);
+    backgroundNominalColorDisabled = std::move(c);
 }
 
 QColor AFQVolumeMeter::getBackgroundWarningColor() const
@@ -199,10 +220,10 @@ QColor AFQVolumeMeter::getBackgroundWarningColorDisabled() const
 
 void AFQVolumeMeter::setBackgroundWarningColor(QColor c)
 {
-	p_backgroundWarningColor = std::move(c);
+    p_backgroundWarningColor = std::move(c);
 
-	backgroundWarningColor = color_from_int(config_get_int(
-		AFConfigManager::GetSingletonInstance().GetGlobal(), "Accessibility", "MixerYellow"));
+	backgroundWarningColor = 
+		color_from_int(config_get_int(USERCONFIG, "Accessibility", "MixerYellow"));
 }
 
 void AFQVolumeMeter::setBackgroundWarningColorDisabled(QColor c)
@@ -222,10 +243,10 @@ QColor AFQVolumeMeter::getBackgroundErrorColorDisabled() const
 
 void AFQVolumeMeter::setBackgroundErrorColor(QColor c)
 {
-	p_backgroundErrorColor = std::move(c);
+    p_backgroundErrorColor = std::move(c);
 
-	backgroundErrorColor = color_from_int(config_get_int(
-		AFConfigManager::GetSingletonInstance().GetGlobal(), "Accessibility", "MixerRed"));
+	backgroundErrorColor = 
+		color_from_int(config_get_int(USERCONFIG, "Accessibility", "MixerRed"));
 }
 
 void AFQVolumeMeter::setBackgroundErrorColorDisabled(QColor c)
@@ -245,11 +266,10 @@ QColor AFQVolumeMeter::getForegroundNominalColorDisabled() const
 
 void AFQVolumeMeter::setForegroundNominalColor(QColor c)
 {
-	p_foregroundNominalColor = std::move(c);
+    p_foregroundNominalColor = std::move(c);
 
-	foregroundNominalColor = color_from_int(
-		config_get_int(AFConfigManager::GetSingletonInstance().GetGlobal(), "Accessibility",
-			"MixerGreenActive"));
+	foregroundNominalColor = 
+		color_from_int(config_get_int(USERCONFIG, "Accessibility", "MixerGreenActive"));
 }
 
 void AFQVolumeMeter::setForegroundNominalColorDisabled(QColor c)
@@ -269,11 +289,10 @@ QColor AFQVolumeMeter::getForegroundWarningColorDisabled() const
 
 void AFQVolumeMeter::setForegroundWarningColor(QColor c)
 {
-	p_foregroundWarningColor = std::move(c);
+    p_foregroundWarningColor = std::move(c);
 
-	foregroundWarningColor = color_from_int(
-		config_get_int(AFConfigManager::GetSingletonInstance().GetGlobal(), "Accessibility",
-			"MixerYellowActive"));
+	foregroundWarningColor = 
+		color_from_int( config_get_int(USERCONFIG, "Accessibility", "MixerYellowActive"));
 }
 
 void AFQVolumeMeter::setForegroundWarningColorDisabled(QColor c)
@@ -293,10 +312,10 @@ QColor AFQVolumeMeter::getForegroundErrorColorDisabled() const
 
 void AFQVolumeMeter::setForegroundErrorColor(QColor c)
 {
-	p_foregroundErrorColor = std::move(c);
+    p_foregroundErrorColor = std::move(c);
 
-	foregroundErrorColor = color_from_int(config_get_int(
-		AFConfigManager::GetSingletonInstance().GetGlobal(), "Accessibility", "MixerRedActive"));
+	foregroundErrorColor = 
+		color_from_int(config_get_int(USERCONFIG, "Accessibility", "MixerRedActive"));
 }
 
 void AFQVolumeMeter::setForegroundErrorColorDisabled(QColor c)
@@ -500,6 +519,18 @@ void AFQVolumeMeter::wheelEvent(QWheelEvent* event)
 	//QApplication::sendEvent(focusProxy(), event);
 }
 
+float AFQVolumeMeter::GetCurrentMaxPeak() {
+	if (visibleRegion().isEmpty())
+	{
+		uint64_t ts = os_gettime_ns();
+		qreal timeSinceLastRedraw = (ts - lastRedrawTime) * 0.000000001;
+		calculateBallistics(ts, timeSinceLastRedraw);
+		timeSinceLastRedraw = ts;
+	}
+
+	return currentMaxPeak;
+}
+
 inline void AFQVolumeMeter::resetLevels()
 {
 	currentLastUpdateTime = 0;
@@ -520,31 +551,28 @@ inline void AFQVolumeMeter::resetLevels()
 inline void AFQVolumeMeter::doLayout()
 {
 	QMutexLocker locker(&dataMutex);
-
+	
 	recalculateLayout = false;
 
 	tickFont = font();
 	QFontInfo info(tickFont);
 	tickFont.setPointSizeF(info.pointSizeF() * meterFontScaling);
 	QFontMetrics metrics(tickFont);
+
 	if (vertical) {
 		// Each meter channel is meterThickness pixels wide, plus one pixel
 		// between channels, but not after the last.
 		// Add 4 pixels for ticks, space to hold our longest label in this font,
 		// and a few pixels before the fader.
 		QRect scaleBounds = metrics.boundingRect("-88");
-		setMinimumSize(displayNrAudioChannels * (meterThickness + 1) -
-			1 + 4 + scaleBounds.width() + 2,
-			130);
+		setMinimumSize(displayNrAudioChannels * (meterThickness + 1) - 1 + 4 + scaleBounds.width() + 2, 130);
 	}
 	else {
 		// Each meter channel is meterThickness pixels high, plus one pixel
 		// between channels, but not after the last.
 		// Add 4 pixels for ticks, and space high enough to hold our label in
 		// this font, presuming that digits don't have descenders.
-		setMinimumSize(130,
-			displayNrAudioChannels * (meterThickness + 1) -
-			1 + 4 + metrics.capHeight());
+		setMinimumSize(130, displayNrAudioChannels * (meterThickness + 1) - 1 + 4 + metrics.capHeight());
 	}
 
 	resetLevels();
@@ -562,23 +590,20 @@ bool AFQVolumeMeter::detectIdle(uint64_t ts)
 	}
 }
 
-void AFQVolumeMeter::calculateBallistics(uint64_t ts,
-										 qreal timeSinceLastRedraw)
+void AFQVolumeMeter::calculateBallistics(uint64_t ts, qreal timeSinceLastRedraw)
 {
 	QMutexLocker locker(&dataMutex);
 
 	float maxPeak = -M_INFINITE;
 	for (int channelNr = 0; channelNr < MAX_AUDIO_CHANNELS; channelNr++) 
 	{
-		calculateBallisticsForChannel(channelNr, ts,
-			timeSinceLastRedraw);
-		maxPeak = maxPeak > currentPeak[channelNr] ? maxPeak : currentPeak[channelNr];
+		calculateBallisticsForChannel(channelNr, ts, timeSinceLastRedraw);
+		maxPeak = maxPeak > displayPeak[channelNr] ? maxPeak : displayPeak[channelNr]; // 가장 큰 값을 가진 채널 값을 사용 (평균 값을 사용해야 하지만 크게 문제 없을듯 함)
 	}
-	m_currentMaxPeak = maxPeak;
+	currentMaxPeak = maxPeak;
 }
 
-void AFQVolumeMeter::calculateBallisticsForChannel(int channelNr, uint64_t ts,
-												   qreal timeSinceLastRedraw)
+void AFQVolumeMeter::calculateBallisticsForChannel(int channelNr, uint64_t ts, qreal timeSinceLastRedraw)
 {
 	if (currentPeak[channelNr] >= displayPeak[channelNr] ||
 		isnan(displayPeak[channelNr])) {
@@ -590,8 +615,8 @@ void AFQVolumeMeter::calculateBallisticsForChannel(int channelNr, uint64_t ts,
 		// 20 dB / 1.7 seconds for Medium Profile (Type I PPM)
 		// 24 dB / 2.8 seconds for Slow Profile (Type II PPM)
 		float decay = float(peakDecayRate * timeSinceLastRedraw);
-		displayPeak[channelNr] = CLAMP(displayPeak[channelNr] - decay,
-			currentPeak[channelNr], 0);
+		displayPeak[channelNr] = std::clamp(displayPeak[channelNr] - decay,
+											  std::min(currentPeak[channelNr], 0.f), 0.f);
 	}
 
 	if (currentPeak[channelNr] >= displayPeakHold[channelNr] ||
@@ -604,10 +629,7 @@ void AFQVolumeMeter::calculateBallisticsForChannel(int channelNr, uint64_t ts,
 	else {
 		// The peak and hold falls back to peak
 		// after 20 seconds.
-		qreal timeSinceLastPeak =
-			(uint64_t)(ts -
-				displayPeakHoldLastUpdateTime[channelNr]) *
-			0.000000001;
+		qreal timeSinceLastPeak = (uint64_t)(ts - displayPeakHoldLastUpdateTime[channelNr]) * 0.000000001;
 		if (timeSinceLastPeak > peakHoldDuration) {
 			displayPeakHold[channelNr] = currentPeak[channelNr];
 			displayPeakHoldLastUpdateTime[channelNr] = ts;
@@ -623,34 +645,25 @@ void AFQVolumeMeter::calculateBallisticsForChannel(int channelNr, uint64_t ts,
 	}
 	else {
 		// The peak and hold falls back to peak after 1 second.
-		qreal timeSinceLastPeak =
-			(uint64_t)(ts -
-				displayInputPeakHoldLastUpdateTime[channelNr]) *
-			0.000000001;
+		qreal timeSinceLastPeak = (uint64_t)(ts - displayInputPeakHoldLastUpdateTime[channelNr]) * 0.000000001;
 		if (timeSinceLastPeak > inputPeakHoldDuration) {
-			displayInputPeakHold[channelNr] =
-				currentInputPeak[channelNr];
+			displayInputPeakHold[channelNr] = currentInputPeak[channelNr];
 			displayInputPeakHoldLastUpdateTime[channelNr] = ts;
 		}
 	}
 
 	if (!isfinite(displayMagnitude[channelNr])) {
 		// The statements in the else-leg do not work with
-		// NaN and infinite displayMagnitude.
+		// NaN and infinite m_displayMagnitude.
 		displayMagnitude[channelNr] = currentMagnitude[channelNr];
 	}
 	else {
 		// A VU meter will integrate to the new value to 99% in 300 ms.
 		// The calculation here is very simplified and is more accurate
 		// with higher frame-rate.
-		float attack =
-			float((currentMagnitude[channelNr] -
-				displayMagnitude[channelNr]) *
-				(timeSinceLastRedraw / magnitudeIntegrationTime) *
-				0.99);
-		displayMagnitude[channelNr] =
-			CLAMP(displayMagnitude[channelNr] + attack,
-				(float)minimumLevel, 0);
+		float attack = float((currentMagnitude[channelNr] - displayMagnitude[channelNr]) *
+							 (timeSinceLastRedraw / magnitudeIntegrationTime) * 0.99);
+		displayMagnitude[channelNr] = std::clamp(displayMagnitude[channelNr] + attack, (float)minimumLevel, 0.f);
 	}
 }
 
@@ -965,9 +978,9 @@ void AFQVolumeMeter::paintHTicks(QPainter& painter, int x, int y, int width)
 
 	// Draw minor tick lines.
 	painter.setPen(minorTickColor);
-	for (int i = 0; i >= minimumLevel; i--) {
+	for(int i = 0; i >= minimumLevel; i--) {
 		int position = int(x + width - (i * scale) - 1);
-		if (i % 5 != 0)
+		if(i % 5 != 0)
 			painter.drawLine(position, y, position, y + 1);
 	}
 }
@@ -987,13 +1000,10 @@ void AFQVolumeMeter::paintVTicks(QPainter& painter, int x, int y, int height)
 
 		// Center the number on the tick, but don't overflow
 		if (i == 0) {
-			painter.drawText(x + 6, position + metrics.capHeight(),
-				str);
+			painter.drawText(x + 6, position + metrics.capHeight(), str);
 		}
 		else {
-			painter.drawText(x + 4,
-				position + (metrics.capHeight() / 2),
-				str);
+			painter.drawText(x + 4, position + (metrics.capHeight() / 2), str);
 		}
 
 		painter.drawLine(x, position, x + 2, position);
@@ -1001,9 +1011,9 @@ void AFQVolumeMeter::paintVTicks(QPainter& painter, int x, int y, int height)
 
 	// Draw minor tick lines.
 	painter.setPen(minorTickColor);
-	for (int i = 0; i >= minimumLevel; i--) {
+	for(int i = 0; i >= minimumLevel; i--) {
 		int position = y + int(i * scale) + METER_PADDING;
-		if (i % 5 != 0)
+		if(i % 5 != 0)
 			painter.drawLine(x, position, x + 1, position);
 	}
 }
@@ -1034,11 +1044,10 @@ void AFQVolumeMeter::paintEvent(QPaintEvent* event)
 		//QColor background = 
 		//	palette().color(QPalette::ColorRole::Window);
 		QColor background;
-		//background.setRgb(50, 52, 58); // #32343A
-		background.setRgb(36, 39, 45); // #24272D
+		background = palette().window().color();
 		painter.fillRect(widgetRect, background);
 
-		if (m_bMeterTickEnabled)
+		if (meterTickEnabled)
 		{
 			if (vertical) {
 				paintVTicks(painter,
@@ -1073,7 +1082,7 @@ void AFQVolumeMeter::paintEvent(QPaintEvent* event)
 
 		if (vertical)
 			paintVMeter(painter,
-				channelNr * (meterThickness + 1),
+				6 + (channelNr * (meterThickness + 1)),
 				0 /*INDICATOR_THICKNESS + 2*/,
 				meterThickness,
 				height - (INDICATOR_THICKNESS + 2),
@@ -1090,22 +1099,22 @@ void AFQVolumeMeter::paintEvent(QPaintEvent* event)
 				displayPeak[channelNrFixed],
 				displayPeakHold[channelNrFixed]);
 
-		//if (idle)
-		//	continue;
+		if (idle)
+			continue;
 
 		// By not drawing the input meter boxes the user can
 		// see that the audio stream has been stopped, without
 		// having too much visual impact.
-		//if (vertical)
-		//	paintInputMeter(painter,
-		//		channelNr * (meterThickness + 4), 0,
-		//		meterThickness, INDICATOR_THICKNESS,
-		//		displayInputPeakHold[channelNrFixed]);
-		//else
-		//	paintInputMeter(painter, 0,
-		//		channelNr * (meterThickness + 4),
-		//		INDICATOR_THICKNESS, meterThickness,
-		//		displayInputPeakHold[channelNrFixed]);
+		if (vertical)
+			paintInputMeter(painter,
+				6 + (channelNr * (meterThickness + 1)), 0,
+				meterThickness, INDICATOR_THICKNESS,
+				displayInputPeakHold[channelNrFixed]);
+		else
+			paintInputMeter(painter, 0,
+				channelNr * (meterThickness + 4),
+				INDICATOR_THICKNESS, meterThickness,
+				displayInputPeakHold[channelNrFixed]);
 	}
 
 	lastRedrawTime = ts;
@@ -1149,16 +1158,18 @@ AFQVolControl::AFQVolControl(QWidget* parent, OBSSource source_, bool showConfig
 	  source(std::move(source_)),
 	  obs_fader(obs_fader_create(OBS_FADER_LOG)),
 	  obs_volmeter(obs_volmeter_create(OBS_FADER_LOG)),
+	  vertical(vertical),
 	  contextMenu(nullptr)
 {
 	nameLabel = new QLabel();
 	volLabel = new QLabel();
-	mute = new AFQMuteCheckBox();
+	mute = new MuteCheckBox();
 	mute->setFixedSize(QSize(24, 24));
 
 	lockIcon = new QCheckBox();
 	lockIcon->setText("");
 	lockIcon->setFixedSize(QSize(12, 12));
+	lockIcon->setIconSize(QSize(12, 12));
 	lockIcon->setCheckable(false);
 	lockIcon->setObjectName("checkBox_lockIcon");
 
@@ -1173,37 +1184,39 @@ AFQVolControl::AFQVolControl(QWidget* parent, OBSSource source_, bool showConfig
 	if (showConfig) {
 		config = new QPushButton(this);
 		config->setCheckable(true);
-		config->setProperty("themeID", "menuIconSmall");
-		config->setSizePolicy(QSizePolicy::Maximum,
-			QSizePolicy::Maximum);
+		config->setProperty("buttonType", "threeDots");
+		config->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 		config->setFixedSize(24, 24);
 		config->setAutoDefault(false);
 
-		config->setAccessibleName(
-			QString::fromUtf8(AFLocaleTextManager::GetSingletonInstance().Str("VolControl.Properties")).arg(sourceName));
+		config->setAccessibleName(QTStr("VolControl.Properties").arg(sourceName));
 
-		connect(config, &QAbstractButton::clicked, this,
-			&AFQVolControl::EmitConfigClicked);
+		connect(config, &QAbstractButton::clicked, this, &AFQVolControl::EmitConfigClicked);
 	}
 
 	QVBoxLayout* mainLayout = new QVBoxLayout;
 	mainLayout->setContentsMargins(4, 4, 4, 4);
 	mainLayout->setSpacing(2);
 
-	if (vertical) {
+	if (vertical) 
+	{
+		setFixedWidth(90);
+
 		QHBoxLayout* nameLayout = new QHBoxLayout;
 		QHBoxLayout* controlLayout = new QHBoxLayout;
 		QHBoxLayout* volLayout = new QHBoxLayout;
 		QHBoxLayout* meterLayout = new QHBoxLayout;
 
 		volMeter = new AFQVolumeMeter(nullptr, obs_volmeter, true);
-		slider = new AFCVolumeSlider(obs_fader, Qt::Vertical);
+		slider = new AFCVolumeSlider(nullptr, obs_fader, Qt::Vertical);
 		slider->setLayoutDirection(Qt::LeftToRight);
 
 		nameLayout->setAlignment(Qt::AlignCenter);
 		meterLayout->setAlignment(Qt::AlignCenter);
 		controlLayout->setAlignment(Qt::AlignCenter);
 		volLayout->setAlignment(Qt::AlignCenter);
+
+		nameLabel->setAlignment(Qt::AlignHCenter);
 
 		nameLayout->setContentsMargins(0, 0, 0, 0);
 		nameLayout->setSpacing(10);
@@ -1215,7 +1228,7 @@ AFQVolControl::AFQVolControl(QWidget* parent, OBSSource source_, bool showConfig
 
 		if (showConfig) {
 			controlLayout->addWidget(config);
-			controlLayout->setAlignment(config, Qt::AlignVCenter);
+			controlLayout->setAlignment(config, Qt::AlignHCenter);
 		}
 
 		controlLayout->addItem(new QSpacerItem(3, 0));
@@ -1233,10 +1246,10 @@ AFQVolControl::AFQVolControl(QWidget* parent, OBSSource source_, bool showConfig
 		volLayout->addWidget(volLabel);
 
 		// Default size can cause clipping of long names in vertical layout.
-		//QFont font = nameLabel->font();
-		//QFontInfo info(font);
-		//font.setPointSizeF(0.8 * info.pointSizeF());
-		//nameLabel->setFont(font);
+		QFont font = nameLabel->font();
+		QFontInfo info(font);
+		font.setPointSizeF(0.8 * info.pointSizeF());
+		nameLabel->setFont(font);
 
 		mainLayout->addItem(nameLayout);
 		mainLayout->addItem(volLayout);
@@ -1244,29 +1257,26 @@ AFQVolControl::AFQVolControl(QWidget* parent, OBSSource source_, bool showConfig
 		mainLayout->addItem(controlLayout);
 
 		volMeter->setFocusProxy(slider);
-
-		setMaximumWidth(110);
-
 	}
-	else {
-
+	else
+	{
 		QHBoxLayout* textLayout = new QHBoxLayout;
 		QHBoxLayout* botLayout = new QHBoxLayout;
 
 		volMeter = new AFQVolumeMeter(nullptr, obs_volmeter, false);
-		slider = new AFCVolumeSlider(obs_fader, Qt::Horizontal);
+		slider = new AFCVolumeSlider(nullptr, obs_fader, Qt::Horizontal);
 		slider->setLayoutDirection(Qt::LeftToRight);
+
+		nameLabel->setAlignment(Qt::AlignLeft);
 
 		textLayout->setContentsMargins(0, 0, 0, 0);
 		textLayout->setSpacing(10);
 		textLayout->addWidget(lockIcon);
 		textLayout->addWidget(nameLabel);
 		textLayout->addWidget(volLabel);
-		//textLayout->setAlignment(nameLabel, Qt::AlignLeft);
-		//textLayout->setAlignment(volLabel, Qt::AlignRight);
 
 		botLayout->setContentsMargins(0, 0, 0, 0);
-		botLayout->setSpacing(10);
+		botLayout->setSpacing(5);
 		botLayout->addWidget(slider);
 		botLayout->addWidget(mute);
 		botLayout->setAlignment(slider, Qt::AlignVCenter);
@@ -1278,23 +1288,17 @@ AFQVolControl::AFQVolControl(QWidget* parent, OBSSource source_, bool showConfig
 		}
 
 		mainLayout->addItem(textLayout);
-		mainLayout->addSpacing(20);
+		mainLayout->addSpacing(10);
 		mainLayout->addWidget(volMeter);
 		mainLayout->addItem(botLayout);
-		//mainLayout->addStretch();
 
 		volMeter->setFocusProxy(slider);
 
 	}
 	setLayout(mainLayout);
 
-	m_strSourceName = sourceName;
-	nameLabel->setText(sourceName);
-	if (vertical)
-		nameLabel->setMaximumWidth(85);
-	
-	TruncateTextToLabelWidth(nameLabel, nameLabel->text());
-	
+	SetName(sourceName);
+
 	OBSDataAutoRelease settings = obs_source_get_private_settings(source);
 	bool lock = obs_data_get_bool(settings, "volume_locked");
 	if (lock)
@@ -1310,28 +1314,20 @@ AFQVolControl::AFQVolControl(QWidget* parent, OBSSource source_, bool showConfig
 	mute->setCheckState(GetCheckState(muted, unassigned));
 	volMeter->muted = muted || unassigned;
 
-	mute->setAccessibleName(QString::fromUtf8(AFLocaleTextManager::GetSingletonInstance().Str("VolControl.Mute")).arg(sourceName));
+	mute->setAccessibleName(QTStr("VolControl.Mute").arg(sourceName));
 	obs_fader_add_callback(obs_fader, OBSVolumeChanged, this);
 	obs_volmeter_add_callback(obs_volmeter, OBSVolumeLevel, this);
 
-	signal_handler_connect(obs_source_get_signal_handler(source), "mute",
-		OBSVolumeMuted, this);
-	signal_handler_connect(obs_source_get_signal_handler(source),
-		"audio_mixers", OBSMixersOrMonitoringChanged,
-		this);
-	signal_handler_connect(obs_source_get_signal_handler(source),
-		"audio_monitoring", OBSMixersOrMonitoringChanged,
-		this);
+	sigs.emplace_back(obs_source_get_signal_handler(source), "mute", OBSVolumeMuted, this);
+	sigs.emplace_back(obs_source_get_signal_handler(source), "audio_mixers", OBSMixersOrMonitoringChanged, this);
+	sigs.emplace_back(obs_source_get_signal_handler(source), "audio_monitoring", OBSMixersOrMonitoringChanged, this);
 
-	QWidget::connect(slider, &AFCVolumeSlider::valueChanged, this,
-		&AFQVolControl::SliderChanged);
-	QWidget::connect(mute, &AFQMuteCheckBox::clicked, this,
-		&AFQVolControl::SetMuted);
+	QWidget::connect(slider, &AFCVolumeSlider::valueChanged, this, &AFQVolControl::SliderChanged);
+	QWidget::connect(mute, &MuteCheckBox::clicked, this, &AFQVolControl::SetMuted);
 	
-	m_UpdatePeakTextTimer = new QTimer(this);
-	QWidget::connect(m_UpdatePeakTextTimer, &QTimer::timeout, this,
-		&AFQVolControl::qslotUpdateCurrentDbText);
-	m_UpdatePeakTextTimer->start(DB_TEXT_UPDATE_INTERVAL);
+	updatePeakTextTimer = new QTimer(this);
+	QWidget::connect(updatePeakTextTimer, &QTimer::timeout, this, &AFQVolControl::UpdateCurrentDbText);
+	updatePeakTextTimer->start(DB_TEXT_UPDATE_INTERVAL);
 
 	obs_fader_attach_source(obs_fader, source);
 	obs_volmeter_attach_source(obs_volmeter, source);
@@ -1345,14 +1341,7 @@ AFQVolControl::~AFQVolControl()
 	obs_fader_remove_callback(obs_fader, OBSVolumeChanged, this);
 	obs_volmeter_remove_callback(obs_volmeter, OBSVolumeLevel, this);
 
-	signal_handler_disconnect(obs_source_get_signal_handler(source), "mute",
-		OBSVolumeMuted, this);
-	signal_handler_disconnect(obs_source_get_signal_handler(source),
-		"audio_mixers", OBSMixersOrMonitoringChanged,
-		this);
-	signal_handler_disconnect(obs_source_get_signal_handler(source),
-		"audio_monitoring",
-		OBSMixersOrMonitoringChanged, this);
+	sigs.clear();
 
 	lockIcon->deleteLater();
 
@@ -1395,17 +1384,24 @@ void AFQVolControl::OBSMixersOrMonitoringChanged(void* data, calldata_t*)
 		Qt::QueuedConnection);
 }
 
-void AFQVolControl::ChangeVolume(int volume)
+void AFQVolControl::MoveVolumeBy(int delta)
 {
-	slider->setValue(volume);
-}
+	int newValue = slider->value() + leftOverDelta + delta;
+	int minValue = slider->minimum();
+	int maxValue = slider->maximum();
 
-void AFQVolControl::ChangeMuteState()
-{
-	if(mute->checkState() == Qt::Checked)
-		mute->setCheckState(Qt::Unchecked);
+	if (newValue < minValue) {
+		leftOverDelta = newValue - minValue;
+		newValue = minValue;
+	}
+	else if (newValue > maxValue) {
+		leftOverDelta = newValue - maxValue;
+		newValue = maxValue;
+	}
 	else
-		mute->setCheckState(Qt::Checked);
+		leftOverDelta = 0;
+
+	slider->setValue(newValue);
 }
 
 bool AFQVolControl::IsMuted()
@@ -1428,14 +1424,12 @@ void AFQVolControl::EmitConfigClicked()
 	emit ConfigClicked();
 }
 
-
 void AFQVolControl::VolumeChanged()
 {
 	slider->blockSignals(true);
 	slider->setValue(
 		(int)(obs_fader_get_deflection(obs_fader) * FADER_PRECISION));
-	slider->blockSignals(false);
-
+	slider->blockSignals(false);	
 	//updateText();
 }
 
@@ -1472,11 +1466,9 @@ void AFQVolControl::SetMuted()
 	if (!checked && unassigned) {
 		mute->setCheckState(Qt::PartiallyChecked);
 		/* Show notice about the source no being assigned to any tracks */
-		//bool has_shown_warning =
-		//	config_get_bool(App()->GlobalConfig(), "General",
-		//		"WarnedAboutUnassignedSources");
+		//bool has_shown_warning = config_get_bool(USERCONFIG, "General", "WarnedAboutUnassignedSources");
 		//if (!has_shown_warning)
-		//	ShowUnassignedWarning(obs_source_get_name(source));
+		//	ShowUnassignedWarning(obs_source_get_name(m_source));
 	}
 
 	auto undo_redo = [](const std::string& uuid, bool val) {
@@ -1488,14 +1480,10 @@ void AFQVolControl::SetMuted()
 
 	const char* name = obs_source_get_name(source);
 	const char* uuid = obs_source_get_uuid(source);
-	AFMainFrame* main = App()->GetMainView();
-	main->m_undo_s.AddAction(text.arg(name),
-							 std::bind(undo_redo, std::placeholders::_1, prev),
-							 std::bind(undo_redo, std::placeholders::_1, checked), uuid,
-							 uuid);
-
-	if (m_bValueChangedByUser) 
-		App()->GetMainView()->GetMainWindow()->qslotSetMainAudioSource();
+	UNDO_STACK.AddAction(text.arg(name),
+						 std::bind(undo_redo, std::placeholders::_1, prev),
+						 std::bind(undo_redo, std::placeholders::_1, checked), uuid,
+						 uuid);
 }
 
 void AFQVolControl::SliderChanged(int vol)
@@ -1513,26 +1501,17 @@ void AFQVolControl::SliderChanged(int vol)
 	float val = obs_source_get_volume(source);
 	const char* name = obs_source_get_name(source);
 	const char* uuid = obs_source_get_uuid(source);
-	AFMainFrame* main = App()->GetMainView();
-	main->m_undo_s.AddAction(QTStr("Undo.Volume.Change").arg(name),
-							 std::bind(undo_redo, std::placeholders::_1, prev),
-							 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid,
-							 true);
-	
-	if (m_bValueChangedByUser)
-		App()->GetMainView()->GetMainWindow()->qslotSetMainAudioSource();
-}
 
+	UNDO_STACK.AddAction(QTStr("Undo.Volume.Change").arg(name),
+						 std::bind(undo_redo, std::placeholders::_1, prev),
+						 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid,
+						 true);
+}
 
 void AFQVolControl::updateText()
 {
 	QString text;
 	float db = obs_fader_get_db(obs_fader);
-
-	//if (db < -96.0f)
-	//	text = "-inf dB";
-	//else
-	//	text = QString::number(db, 'f', 1).append(" dB");
 
 	if (db < -96.0f)
 		db = -96.0f;
@@ -1545,22 +1524,21 @@ void AFQVolControl::updateText()
 		: "VolControl.SliderUnmuted";
 
 	QString sourceName = obs_source_get_name(source);
-	QString accText = QString::fromUtf8(AFLocaleTextManager::GetSingletonInstance().Str(accTextLookup)).arg(sourceName);
+	QString accText = QTStr(accTextLookup).arg(sourceName);
 
 	slider->setAccessibleName(accText);
 }
 
-void AFQVolControl::qslotUpdateCurrentDbText()
+void AFQVolControl::UpdateCurrentDbText()
 {
 	QString text;
 	float currentDb = volMeter->GetCurrentMaxPeak();
 	if (currentDb < -96.0f)
 		currentDb = -96.0f;
-	currentDb += 96.0f;
 
 	bool muted = obs_source_muted(source);
 	if (muted)
-		currentDb = 0.0f;
+		currentDb = -96.0f;
 
 	text = QString::number(currentDb, 'f', 1).append(" dB");
 	volLabel->setText(text);
@@ -1583,9 +1561,8 @@ QString AFQVolControl::GetName() const
 
 void AFQVolControl::SetName(const QString& newName)
 {
-	//nameLabel->setText(newName);
-	m_strSourceName = newName;
-	TruncateTextToLabelWidth(nameLabel, newName);
+	sourceName = newName;
+	TruncateTextToLabelWidth(nameLabel, newName, 0);
 }
 
 void AFQVolControl::SetMeterDecayRate(qreal q)
@@ -1630,13 +1607,13 @@ void AFQVolControl::refreshColors()
 }
 
 void AFQVolControl::showEvent(QShowEvent* event) {
-	m_UpdatePeakTextTimer->start(DB_TEXT_UPDATE_INTERVAL);
+	updatePeakTextTimer->start(DB_TEXT_UPDATE_INTERVAL);
 }
 void AFQVolControl::hideEvent(QHideEvent* event) {
-	m_UpdatePeakTextTimer->stop();
+	updatePeakTextTimer->stop();
 }
 
 void AFQVolControl::resizeEvent(QResizeEvent* event) {
 	QWidget::resizeEvent(event);
-	//TruncateTextToLabelWidth(nameLabel, m_strSourceName);
+	QTimer::singleShot(0, this, [this]() { SetName(sourceName); });
 }

@@ -1,6 +1,7 @@
 ﻿#include "CRemuxFrame.h"
 
-#include "Application/CApplication.h"
+#include <memory>
+#include <cmath>
 
 #include <qevent.h>
 #include <qdiriterator.h>
@@ -16,12 +17,11 @@
 #include <qtimer.h>
 
 #include "qt-wrappers.hpp"
+#include "Application/CApplication.h"
+
 #include "MainFrame/CMainFrame.h"
 
 #include "UIComponent/CMessageBox.h"
-
-#include <memory>
-#include <cmath>
 
 enum RemuxEntryColumn {
 	State,
@@ -35,7 +35,7 @@ enum RemuxEntryRole { EntryStateRole = Qt::UserRole, NewPathsToProcessRole };
 
 
 AFQRemux::AFQRemux(const char* recPath, QWidget* parent, bool autoRemux)
-	:AFQRoundedDialogBase(parent),
+	:AFTTopBaseDialog(parent),
 	m_queueModel(new AFRemuxQueueModel),
 	m_worker(new AFRemuxWorker()),
 	ui(new Ui::AFQRemux),
@@ -43,7 +43,6 @@ AFQRemux::AFQRemux(const char* recPath, QWidget* parent, bool autoRemux)
 	m_autoRemux(autoRemux)
 {
 	setAcceptDrops(true);
-	setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 	setAttribute(Qt::WA_DeleteOnClose);
 
 	ui->setupUi(this);
@@ -51,11 +50,17 @@ AFQRemux::AFQRemux(const char* recPath, QWidget* parent, bool autoRemux)
 	ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(false);
 	ui->buttonBox->button(QDialogButtonBox::RestoreDefaults)->setEnabled(false);
 
+
 	if(autoRemux) {
-		resize(480, 114);
+		setFixedSize(480, 144);
+		//resize(480, 114);
 		ui->widget_TableViewArea->hide();
 		ui->widget_ButtonBoxArea->hide();
 	}
+	
+	SetWidthResizeEnabled(false);
+	SetHeightResizeEnabled(false);
+	
 	ui->progressBar->setMinimum(0);
 	ui->progressBar->setMaximum(1000);
 	ui->progressBar->setValue(0);
@@ -131,8 +136,7 @@ void AFQRemux::qSlotRemuxFinished(bool success)
 	if(m_autoRemux && "" != m_autoRemuxFile) {
 		QTimer::singleShot(3000, this, &AFQRemux::close);
 
-		AFMainFrame* main = App()->GetMainView();
-//		main->ShowSystemAlert(QTStr("Basic.StatusBar.AutoRemuxedTo").arg(m_autoRemuxFile));
+//		MAINFRAME->ShowSystemAlert(QTStr("Basic.StatusBar.AutoRemuxedTo").arg(m_autoRemuxFile));
 	}
 	RemuxNextEntry();
 }

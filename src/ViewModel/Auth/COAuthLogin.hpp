@@ -26,12 +26,12 @@ public:
     void GetConnectedAFBasicAuth(AFBasicAuth*& outRefValue);
 
 protected:
-    AFBasicAuth* pConnectedAFAuth = nullptr;
-	std::string refresh_token;
-	std::string token;
-	bool implicit = false;
-	uint64_t expire_time = 0;
-	int currentScopeVer = 0;
+    AFBasicAuth* m_pConnectedAFAuth = nullptr;
+	std::string m_refreshToken;
+	std::string m_token;
+	bool m_implicit = false;
+	uint64_t m_expireTime = 0;
+	int m_currentScopeVer = 0;
 
 	virtual void SaveInternal() override;
 	virtual bool LoadInternal() override;
@@ -58,20 +58,12 @@ class AFOAuthStreamKey : public AFOAuth {
 	Q_OBJECT
 
 protected:
-	std::string key_;
+	std::string m_key;
 
 public:
 	inline AFOAuthStreamKey(const Def &d) : AFOAuth(d) {}
 
-	inline const std::string &key() const { return key_; }
+	inline const std::string &key() const { return m_key; }
 
 	virtual void OnStreamConfig() override;
 };
-
-
-bool GetRemoteFile(const char *url, std::string &str, std::string &error,
-                   long *responseCode = nullptr, const char *contentType = nullptr,
-                   std::string request_type = "", const char *postData = nullptr,
-                   std::vector<std::string> extraHeaders = std::vector<std::string>(),
-                   std::string *signature = nullptr, int timeoutSec = 0,
-                   bool fail_on_error = true, int postDataSize = 0);

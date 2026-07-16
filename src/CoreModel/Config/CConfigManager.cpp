@@ -1,1577 +1,1375 @@
 ﻿#include "CConfigManager.h"
 
+#include "Application/CApplication.h"
 
+#include "qt-wrappers.hpp"
 
-#include <util/bmem.h>
-#include <util/dstr.hpp>
-#include <util/platform.h>
 #include <util/profiler.hpp>
-
 
 #include "Common/StringMiscUtils.h"
 #include "Common/SettingsMiscDef.h"
-#include "include/qt-wrapper.h"
+#include "Common/StudioDefine.h"
+
+#include "CArgOption.h"
+#include "CStateAppContext.h"
+#include "CMakeDirectory.h"
+#include "CoreModel/OBSData/CLoadSaveManager.h"
+#include "CoreModel/Profile/CProfile.h"
+#include "CoreModel/Encoder/CEncoder.h"
+
 #include "platform/platform.hpp"
 
+#include "PopupWindows/SettingPopup/CSettingAccessibilityAreaWidget.h"
 
-#include "CoreModel/Config/CArgOption.h"
-#include "CoreModel/Locale/CLocaleTextManager.h"
-#include "PopupWindows/SettingPopup/CAccessibilitySettingAreaWidget.h"
-
-
-static const double scaled_vals[] = { 1.0,         1.25, (1.0 / 0.75), 1.5,
-									  (1.0 / 0.6), 1.75, 2.0,          2.25,
-									  2.5,         2.75, 3.0,          0.0 };
+#include "MainFrame/CMainFrame.h"
+#include "MainFrame/Profile/CMainProfile.h"
+#include "MainFrame/SceneCollection/CMainSceneCollection.h"
 
 
+static const double scaled_vals[] = {1.0,        1.25, (1.0 / 0.75), 1.5,
+                                    (1.0 / 0.6), 1.75, 2.0,          2.25,
+                                     2.5,        2.75, 3.0,          0.0};
 
 
-
-
-
-#define CONFIG_PATH BASE_PATH "/config"
-
-
-
-#if OBS_RELEASE_CANDIDATE == 0 && OBS_BETA == 0
-#define DEFAULT_CONTAINER "mkv"
-#elif defined(__APPLE__)
+#ifdef __APPLE__
 #define DEFAULT_CONTAINER "fragmented_mov"
+#elif OBS_RELEASE_CANDIDATE == 0 && OBS_BETA == 0
+#define DEFAULT_CONTAINER "mkv"
 #else
-#define DEFAULT_CONTAINER "fragmented_mp4"
+#define DEFAULT_CONTAINER "hybrid_mp4"
 #endif
 
 
-
-AFConfigManager::~AFConfigManager()
+inline void GetScreenInfo(uint32_t& screenCount,
+                          uint32_t& primaryScreenWidth, uint32_t& primaryScreenHeight,
+                          float& devicePixelRatio)
 {
-	if (m_pArgOption != nullptr)
-		delete m_pArgOption;
+    QScreen* primaryScreen = QGuiApplication::primaryScreen();
+    uint32_t cx = primaryScreen->size().width();
+    uint32_t cy = primaryScreen->size().height();
+    //
+    QList<QScreen*> screens = QGuiApplication::screens();
+    uint32_t cntScreen = (uint32_t)screens.count();
+    //
+    float pixelRatio = MAINFRAME->devicePixelRatioF();
+    
+    screenCount = cntScreen;
+    primaryScreenWidth = cx;
+    primaryScreenHeight = cy;
+    devicePixelRatio = pixelRatio;
 }
 
+//
 bool AFConfigManager::CheckExistingCookieId()
 {
-	if (m_bInitedBasic == false)
-		return false;
+    if(m_initedBasic == false)
+        return false;
 
+    if(config_has_user_value(m_activeConfig, "Panels", "CookieId"))
+        return true;
 
-	if (config_has_user_value(m_BasicConfig, "Panels", "CookieId"))
-		return true;
+    config_set_string(m_activeConfig, "Panels", "CookieId", GenId().c_str());
 
-	config_set_string(m_BasicConfig, "Panels", "CookieId",
-					  GenId().c_str());
-
-	return true;
+    return true;
 }
 
 bool AFConfigManager::InitGlobal()
 {
-	if (m_bInitedGlobal == false)
-	{
-		bool res = _InitGlobalConfig();
+    if(m_initedGlobal == false)
+    {
+        bool res = _InitGlobalConfig();
+        if(res)
+            m_initedGlobal = true;
 
-		if (res)
-			m_bInitedGlobal = true;
+        return res;
+    }
 
-
-		return res;
-	}
-
-	return true;
+    return true;
+}
+void AFConfigManager::InitBasic()
+{
+    if(!m_initedBasic)
+    {
+        bool res = _InitBasicConfig();
+        if(res)
+            m_initedBasic = true;
+    }
 }
 
-void AFConfigManager::InitBasic(uint32_t cntAssocScreen, 
-								uint32_t cxPrimaryScreen, uint32_t cyPrimaryScreen,
-								float devicePixelRatio)
+void AFConfigManager::SwapOtherToBasic(ConfigFile& other)
 {
-	if (m_bInitedBasic == false)
-	{
-		bool res = _InitBasicConfig(cntAssocScreen, 
-									cxPrimaryScreen, cyPrimaryScreen, devicePixelRatio);
-
-		if (res)
-			m_bInitedBasic = true;
-	}
+    other.Swap(m_activeConfig);
+    InitBasicConfigDefaults();
 }
 
-void AFConfigManager::SwapOtherToBasic(ConfigFile& other, uint32_t cntAssocScreen,
-                                       uint32_t cxPrimaryScreen, uint32_t cyPrimaryScreen,
-                                       float devicePixelRatio)
+void AFConfigManager::SafeSwapOtherToBasic(ConfigFile& other)
 {
-    other.Swap(m_BasicConfig);
-    SetDefaultValuesBasicConfig(cntAssocScreen,
-                                cxPrimaryScreen, cyPrimaryScreen,
-                                devicePixelRatio);
-}
-
-void AFConfigManager::SafeSwapOtherToBasic(ConfigFile& other, uint32_t cntAssocScreen,
-                                       uint32_t cxPrimaryScreen, uint32_t cyPrimaryScreen,
-                                       float devicePixelRatio)
-{
-    m_BasicConfig.SaveSafe("tmp");
+    m_activeConfig.SaveSafe("tmp");
     other.SaveSafe("tmp");
-    SwapOtherToBasic(other, cntAssocScreen,
-                     cxPrimaryScreen, cyPrimaryScreen,
-                     devicePixelRatio);
+    SwapOtherToBasic(other);
 }
 
-int AFConfigManager::GetConfigPath(char* path, size_t size, const char* name) const
+bool AFConfigManager::InitGlobalConfigDefaults()
 {
-#if ALLOW_PORTABLE_MODE
-	if (m_pArgOption && m_pArgOption->GetPortableMode()) 
-	{
-		if (name && *name)
-			return snprintf(path, size, CONFIG_PATH "/%s", name);
-		else 
-			return snprintf(path, size, CONFIG_PATH);
-	}
-	else 
-	{
-		return os_get_config_path(path, size, name);
-	}
+    config_set_default_uint(m_appConfig, "General", "MaxLogs", 30);
+    config_set_default_int(m_appConfig, "General", "InfoIncrement", -1);
+    config_set_default_string(m_appConfig, "General", "ProcessPriority", "AboveNormal");
+    config_set_default_bool(m_appConfig, "General", "EnableAutoUpdates", true);
+
+#if _WIN32
+    config_set_default_string(m_appConfig, "Video", "Renderer", "Direct3D 11");
 #else
-	return os_get_config_path(path, size, name);
+    config_set_default_string(m_appConfig, "Video", "Renderer", "OpenGL");
 #endif
-}
 
-char* AFConfigManager::GetConfigPathPtr(const char* name)
-{
-#if ALLOW_PORTABLE_MODE
-	if (m_pArgOption && m_pArgOption->GetPortableMode())
-	{
-		char path[512];
-
-		if (snprintf(path, sizeof(path), CONFIG_PATH "/%s", name) > 0)
-			return bstrdup(path);
-		else 
-			return NULL;
-	}
-	else 
-	{
-		return os_get_config_path_ptr(name);
-	}
-#else
-	return os_get_config_path_ptr(name);
+#ifdef _WIN32
+    config_set_default_bool(m_appConfig, "Audio", "DisableAudioDucking", true);
+    config_set_default_bool(m_appConfig, "General", "BrowserHWAccel", true);
 #endif
+
+#ifdef __APPLE__
+    config_set_default_bool(m_appConfig, "General", "BrowserHWAccel", true);
+    config_set_default_bool(m_appConfig, "Video", "DisableOSXVSync", true);
+    config_set_default_bool(m_appConfig, "Video", "ResetOSXVSyncOnExit", true);
+#endif
+
+    config_set_default_int(m_appConfig, "Audio", "MainAudioVolume", 4096);
+    config_set_default_int(m_appConfig, "Audio", "MainMicVolume", 4096);
+    config_set_default_bool(m_appConfig, "Audio", "MainAudioMute", false);
+    config_set_default_bool(m_appConfig, "Audio", "MainMicMute", false);
+    //
+    SetGlobalAudioConfig();
+    SetGlobalVideoConfig();
+
+    return true;
+}
+bool AFConfigManager::InitGlobalLocationDefaults()
+{
+    char path[512];
+
+    int len = GetAppConfigPath(path, sizeof(path), nullptr);
+    if(len <= 0) {
+        OBSErrorBox(NULL, "Unable to get global configuration path.");
+        return false;
+    }
+
+    config_set_default_string(m_appConfig, "Locations", "Configuration", path);
+    config_set_default_string(m_appConfig, "Locations", "SceneCollections", path);
+    config_set_default_string(m_appConfig, "Locations", "Profiles", path);
+    // fixed %appdata% path
+    if(!os_file_exists(config_get_string(m_appConfig, "Locations", "Configuration"))) {
+        config_set_string(m_appConfig, "Locations", "Configuration", path);
+        config_set_string(m_appConfig, "Locations", "SceneCollections", path);
+        config_set_string(m_appConfig, "Locations", "Profiles", path);
+    }
+
+    return true;
 }
 
-int AFConfigManager::GetProgramDataPath(char* path, size_t size, const char* name) const
+bool AFConfigManager::InitBasicConfigDefaults()
 {
-	return os_get_program_data_path(path, size, name);
-}
+    if(m_initedGlobal == false  /*|| m_initedBasic == false*/)
+        return false;
 
-char* AFConfigManager::GetProgramDataPathPtr(const char* name)
-{
-	return os_get_program_data_path_ptr(name);
-}
+    uint32_t cntScreen = 0;
+    uint32_t cxPrimaryScreen = 0;
+    uint32_t cyPrimaryScreen = 0;
+    float devicePixelRatio = .0f;
+    GetScreenInfo(cntScreen, cxPrimaryScreen, cyPrimaryScreen, devicePixelRatio);
+    //
+    if(cntScreen == 0)
+    {
+        OBSErrorBox(NULL, "There appears to be no monitors.  Er, this "
+                   "technically shouldn't be possible.");
+        return false;
+    }
 
-int AFConfigManager::GetProfilePath(char* path, size_t size, const char* file) const
-{
-	char profiles_path[512];
-	const char* profile =
-		config_get_string(m_GlobalConfig, "Basic", "ProfileDir");
-	int ret;
+    uint32_t cx = 1280, cy = 720;
+    //uint32_t cx = cxPrimaryScreen, cy = cyPrimaryScreen;
 
-	if (!profile)
-		return -1;
-	if (!path)
-		return -1;
-	if (!file)
-		file = "";
+    //cx *= devicePixelRatio;
+    //cy *= devicePixelRatio;
 
-	ret = GetConfigPath(profiles_path, 512, "SOOPStudio/basic/profiles");
-	if (ret <= 0)
-		return ret;
+    //bool oldResolutionDefaults = config_get_bool(m_userConfig, "General", "Pre19Defaults");
 
-	if (!*file)
-		return snprintf(path, size, "%s/%s", profiles_path, profile);
-
-	return snprintf(path, size, "%s/%s/%s", profiles_path, profile, file);
-}
-
-bool AFConfigManager::SetDefaultValuesBasicConfig(uint32_t cntAssocScreen, 
-												  uint32_t cxPrimaryScreen, uint32_t cyPrimaryScreen,
-												  float devicePixelRatio)
-{
-	if (m_bInitedGlobal == false  /*|| m_bInitedBasic == false*/)
-		return false;
-
-
-	if (cntAssocScreen == 0)
-	{
-		AFErrorBox(NULL, "There appears to be no monitors.  Er, this "
-				   "technically shouldn't be possible.");
-		return false;
-	}
-
-
-	uint32_t cx = cxPrimaryScreen, cy = cyPrimaryScreen;
-
-	cx *= devicePixelRatio;
-	cy *= devicePixelRatio;
-
-	bool oldResolutionDefaults = config_get_bool(m_GlobalConfig, "General", "Pre19Defaults");
-
-	/* use 1920x1080 for new default base res if main monitor is above
-	 * 1920x1080, but don't apply for people from older builds -- only to
-	 * new users */
-	if (!oldResolutionDefaults && (cx * cy) > (1920 * 1080)) 
-	{
-		cx = 1920;
-		cy = 1080;
-	}
+    ///* use 1920x1080 for new default base res if main monitor is above
+    // * 1920x1080, but don't apply for people from older builds -- only to
+    // * new users */
+    //if(!oldResolutionDefaults && (cx * cy) > (1920 * 1080))
+    //{
+    //    cx = 1920;
+    //    cy = 1080;
+    //}
 
     SetBasicOutputConfig();
     SetBasicAudioConfig();
     SetBasicVideoConfig(cx, cy);
 
-	bool changed = false;
+    bool changed = false;
 
-
-	/* ----------------------------------------------------- */
-	/* set twitch chat extensions to "both" if prev version  */
-	/* is under 24.1                                         */
-	if (config_get_bool(m_GlobalConfig, "General", "Pre24.1Defaults") &&
-		!config_has_user_value(m_BasicConfig, "Twitch", "AddonChoice")) 
-	{
-		config_set_int(m_BasicConfig, "Twitch", "AddonChoice", 3);
-
-		changed = true;
-	}
-
-
-
-
-	CheckExistingCookieId();
-
-	return true;
-}
-
-void AFConfigManager::SetDefaultValues2BasicConfig()
-{
-	// _UpdateNvencPresets
-	if (m_bInitedGlobal == false/* || m_bInitedBasic == false*/)
-		return;
-
-
-	bool oldEncDefaults = config_get_bool(m_GlobalConfig, "General",
-					      "Pre23Defaults");
-	//bool useNV = EncoderAvailable("ffmpeg_nvenc") && !oldEncDefaults;
-
-	config_set_default_string(m_BasicConfig, "SimpleOutput", "StreamEncoder",
-				 // useNV ? SIMPLE_ENCODER_NVENC
-					/*:*/ SIMPLE_ENCODER_X264);
-	config_set_default_string(m_BasicConfig, "SimpleOutput", "RecEncoder",
-				 // useNV ? SIMPLE_ENCODER_NVENC
-					/*:*/ SIMPLE_ENCODER_X264);
-
-	const char *aac_default = "ffmpeg_aac";
-	//if (EncoderAvailable("CoreAudio_AAC"))
-	//	aac_default = "CoreAudio_AAC";
-	//else if (EncoderAvailable("libfdk_aac"))
-	//	aac_default = "libfdk_aac";
-
-	config_set_default_string(m_BasicConfig, "AdvOut", "AudioEncoder",
-							  aac_default);
-	config_set_default_string(m_BasicConfig, "AdvOut", "RecAudioEncoder",
-							  aac_default);
-
-	/*if (_UpdateNvencPresets())
-		config_save_safe(m_BasicConfig, "tmp", nullptr);*/
-}
-
-void AFConfigManager::SetBasicProgramConfig() {
-	config_set_default_bool(m_BasicConfig, "General", "OpenStatsOnStartup",
-                            false);
-
-	config_save_safe(m_BasicConfig, "tmp", nullptr);
-}
-
-void AFConfigManager::SetGlobalProgramConfig() {
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "PreviewEnabled",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"PreviewProgramMode", false);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"SceneDuplicationMode", true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "SwapScenesMode",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "SnappingEnabled",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "ScreenSnapping",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "SourceSnapping",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "CenterSnapping",
-							false);
-	config_set_default_double(m_GlobalConfig, "BasicWindow", "SnapDistance",
-							  10.0);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"SpacingHelpersEnabled", true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"RecordWhenStreaming", false);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"KeepRecordingWhenStreamStops", false);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "SysTrayEnabled",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"SysTrayWhenStarted", false);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "SaveProjectors",
-							false);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "ShowTransitions",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"ShowListboxToolbars", true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "ShowStatusBar",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "ShowSourceIcons",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"ShowContextToolbars", true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow", "StudioModeLabels",
-							true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"VerticalVolControl", false);
-
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"MultiviewMouseSwitch", true);
-
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"MultiviewDrawNames", true);
-
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"MultiviewDrawAreas", true);
-	
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"ShowPopupLeft", true);
-	config_set_default_bool(m_GlobalConfig, "BasicWindow",
-							"MediaControlsCountdownTimer", true);
-	// -------------------------------------
-
-    config_set_default_bool(m_GlobalConfig, "BasicWindow",
-                            "WarnBeforeStartingStream", true);
-    config_set_default_bool(m_GlobalConfig, "BasicWindow",
-                            "WarnBeforeStoppingStream", true);
-    config_set_default_bool(m_GlobalConfig, "BasicWindow",
-                            "WarnBeforeStoppingRecord", false);
-    config_set_default_bool(m_GlobalConfig, "BasicWindow", "OverflowHidden",
-                            false);
-    config_set_default_bool(m_GlobalConfig, "BasicWindow",
-                            "OverflowAlwaysVisible", false);
-    config_set_default_bool(m_GlobalConfig, "BasicWindow",
-                            "OverflowSelectionHidden", false);
-    config_set_default_bool(m_GlobalConfig, "BasicWindow", "ShowSafeAreas",
-                            false);
-    config_set_default_bool(m_GlobalConfig, "General",
-                            "AutomaticCollectionSearch", false);
-    config_set_default_bool(m_GlobalConfig, "BasicWindow",
-                            "TransitionOnDoubleClick", false);
-    config_set_default_bool(m_GlobalConfig, "BasicWindow",
-                            "StudioPortraitLayout", false);
-
-    config_save_safe(m_GlobalConfig, "tmp", nullptr);
-}
-
-void AFConfigManager::ResetProgramConfig() {
-    config_remove_value(m_GlobalConfig, "BasicWindow", "PreviewEnabled");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "PreviewProgramMode");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "SceneDuplicationMode");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "SwapScenesMode");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "SnappingEnabled");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "ScreenSnapping");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "SourceSnapping");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "CenterSnapping");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "SnapDistance");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "SpacingHelpersEnabled");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "RecordWhenStreaming");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "KeepRecordingWhenStreamStops");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "SysTrayEnabled");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "SysTrayWhenStarted");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "SaveProjectors");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "ShowTransitions");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "ShowListboxToolbars");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "ShowStatusBar");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "ShowSourceIcons");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "ShowContextToolbars");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "StudioModeLabels");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "VerticalVolControl");
-
-    config_remove_value(m_GlobalConfig, "BasicWindow", "MultiviewMouseSwitch");
-
-    config_remove_value(m_GlobalConfig, "BasicWindow", "MultiviewDrawNames");
-
-    config_remove_value(m_GlobalConfig, "BasicWindow", "MultiviewDrawAreas");
-
-    config_remove_value(m_GlobalConfig, "BasicWindow", "ShowPopupLeft");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "MediaControlsCountdownTimer");
-	// -------------------------------------
-
-    config_remove_value(m_BasicConfig, "General", "OpenStatsOnStartup");
-    config_remove_value(m_GlobalConfig, "BasicWindow",
-                        "WarnBeforeStartingStream");
-    config_remove_value(m_GlobalConfig, "BasicWindow",
-                        "WarnBeforeStoppingStream");
-    config_remove_value(m_GlobalConfig, "BasicWindow",
-                        "WarnBeforeStoppingRecord");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "OverflowHidden");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "OverflowAlwaysVisible");
-    config_remove_value(m_GlobalConfig, "BasicWindow",
-                        "OverflowSelectionHidden");
-    config_remove_value(m_GlobalConfig, "BasicWindow", "ShowSafeAreas");
-    config_remove_value(m_GlobalConfig, "General", "AutomaticCollectionSearch");
-    config_remove_value(m_GlobalConfig, "BasicWindow",
-                        "TransitionOnDoubleClick");
-    config_remove_value(m_GlobalConfig, "BasicWindow",
-                            "StudioPortraitLayout");
-
-    const char* installLang =
-        config_get_string(m_GlobalConfig, "General", "LanguageBase");
-    if (installLang) { 
-        config_set_string(m_GlobalConfig, "General", "Language", installLang);
+    /* ----------------------------------------------------- */
+    /* set twitch chat extensions to "both" if prev version  */
+    /* is under 24.1                                         */
+    if(config_get_bool(m_userConfig, "General", "Pre24.1Defaults") &&
+       !config_has_user_value(m_activeConfig, "Twitch", "AddonChoice"))
+    {
+        config_set_int(m_activeConfig, "Twitch", "AddonChoice", 3);
+        changed = true;
     }
 
-    SetGlobalProgramConfig();
+    if(changed) {
+        m_activeConfig.SaveSafe("tmp");
+    }
+
+    CheckExistingCookieId();
+
+    return true;
 }
 
-void AFConfigManager::SetBasicStreamConfig() {}
+static const char* GetDefaultSimpleEncoder(bool oldEncDefaults)
+{
+    if (oldEncDefaults)
+        return SIMPLE_ENCODER_X264;
 
-void AFConfigManager::ResetStreamConfig() {}
+    if (AFEncoderUtil::EncoderAvailable("ffmpeg_nvenc"))
+        return SIMPLE_ENCODER_NVENC;
 
-void AFConfigManager::ResetOutputConfig() {
-    // Delete configs
-    config_remove_value(m_BasicConfig, "Output", "Mode");
-    config_remove_value(m_BasicConfig, "Stream1", "IgnoreRecommended");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "FilePath");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecFormat2");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "VBitrate");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "ABitrate");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "UseAdvanced");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "Preset");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "NVENCPreset2");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecQuality");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecRB");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecRBTime");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecRBSize");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecRBPrefix");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "StreamAudioEncoder");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecAudioEncoder");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecTracks");
+    if (AFEncoderUtil::EncoderAvailable("h264_texture_amf"))
+        return SIMPLE_ENCODER_AMD;
 
-    config_remove_value(m_BasicConfig, "AdvOut", "ApplyServiceSettings");
-	config_remove_value(m_BasicConfig, "AdvOut", "FFRescale");
-	config_remove_value(m_BasicConfig, "AdvOut", "RecRescale");
-    config_remove_value(m_BasicConfig, "AdvOut", "UseRescale");
-    config_remove_value(m_BasicConfig, "AdvOut", "TrackIndex");
-    config_remove_value(m_BasicConfig, "AdvOut", "VodTrackIndex");
-    config_remove_value(m_BasicConfig, "AdvOut", "Encoder");
+    if (AFEncoderUtil::EncoderAvailable("obs_qsv11"))
+        return SIMPLE_ENCODER_QSV;
 
-    config_remove_value(m_BasicConfig, "AdvOut", "RecType");
+    return SIMPLE_ENCODER_X264;
+}
 
-    config_remove_value(m_BasicConfig, "AdvOut", "RecFilePath");
-    config_remove_value(m_BasicConfig, "AdvOut", "RecFormat2");
-    config_remove_value(m_BasicConfig, "AdvOut", "RecUseRescale");
-    config_remove_value(m_BasicConfig, "AdvOut", "RecTracks");
-    config_remove_value(m_BasicConfig, "AdvOut", "RecEncoder");
-    config_remove_value(m_BasicConfig, "AdvOut", "FLVTrack");
+static const char* GetDefaultAdvEncoder(bool oldEncDefaults)
+{
+    if (oldEncDefaults)
+        return "obs_x264";
 
-    config_remove_value(m_BasicConfig, "AdvOut", "FFOutputToFile");
-    config_remove_value(m_BasicConfig, "AdvOut", "FFFilePath");
-    config_remove_value(m_BasicConfig, "AdvOut", "FFExtension");
-    config_remove_value(m_BasicConfig, "AdvOut", "FFVBitrate");
-    config_remove_value(m_BasicConfig, "AdvOut", "FFVGOPSize");
-    config_remove_value(m_BasicConfig, "AdvOut", "FFUseRescale");
-    config_remove_value(m_BasicConfig, "AdvOut", "FFIgnoreCompat");
-    config_remove_value(m_BasicConfig, "AdvOut", "FFABitrate");
-    config_remove_value(m_BasicConfig, "AdvOut", "FFAudioMixes");
+    if (AFEncoderUtil::EncoderAvailable("ffmpeg_nvenc"))
+        return "obs_nvenc_h264_tex";
 
-    config_remove_value(m_BasicConfig, "AdvOut", "Track1Bitrate");
-    config_remove_value(m_BasicConfig, "AdvOut", "Track2Bitrate");
-    config_remove_value(m_BasicConfig, "AdvOut", "Track3Bitrate");
-    config_remove_value(m_BasicConfig, "AdvOut", "Track4Bitrate");
-    config_remove_value(m_BasicConfig, "AdvOut", "Track5Bitrate");
-    config_remove_value(m_BasicConfig, "AdvOut", "Track6Bitrate");
+    if (AFEncoderUtil::EncoderAvailable("h264_texture_amf"))
+        return "h264_texture_amf";
 
-    config_remove_value(m_BasicConfig, "AdvOut", "RecSplitFileTime");
-    config_remove_value(m_BasicConfig, "AdvOut", "RecSplitFileSize");
+    if (AFEncoderUtil::EncoderAvailable("obs_qsv11"))
+        return "obs_qsv11";
 
-    config_remove_value(m_BasicConfig, "AdvOut", "RecRB");
-    config_remove_value(m_BasicConfig, "AdvOut", "RecRBTime");
-    config_remove_value(m_BasicConfig, "AdvOut", "RecRBSize");
+    return "obs_x264";
+}
 
-    config_remove_value(m_BasicConfig, "Output", "FilenameFormatting");
+void AFConfigManager::InitBasicConfigDefaults2()
+{
+    bool oldEncDefaults = config_get_bool(m_userConfig, "General", "Pre23Defaults");
+    const char* defaultSimpleEncoder = GetDefaultSimpleEncoder(oldEncDefaults);
 
-    config_remove_value(m_BasicConfig, "Output", "DelayEnable");
-    config_remove_value(m_BasicConfig, "Output", "DelaySec");
-    config_remove_value(m_BasicConfig, "Output", "DelayPreserve");
+    config_set_default_string(m_activeConfig, "SimpleOutput", "StreamEncoder",
+                        defaultSimpleEncoder);
+    config_set_default_string(m_activeConfig, "SimpleOutput", "RecEncoder",
+                        defaultSimpleEncoder);
 
-    config_remove_value(m_BasicConfig, "Output", "Reconnect");
-    config_remove_value(m_BasicConfig, "Output", "RetryDelay");
-    config_remove_value(m_BasicConfig, "Output", "MaxRetries");
+    const char* aac_default = "ffmpeg_aac";
+    if(AFEncoderUtil::EncoderAvailable("CoreAudio_AAC"))
+        aac_default = "CoreAudio_AAC";
+    else if(AFEncoderUtil::EncoderAvailable("libfdk_aac"))
+        aac_default = "libfdk_aac";
 
-    config_remove_value(m_BasicConfig, "Output", "BindIP");
-    config_remove_value(m_BasicConfig, "Output", "IPFamily");
-    config_remove_value(m_BasicConfig, "Output", "NewSocketLoopEnable");
-    config_remove_value(m_BasicConfig, "Output", "LowLatencyEnable");
+    config_set_default_string(m_activeConfig, "AdvOut", "AudioEncoder", aac_default);
+    config_set_default_string(m_activeConfig, "AdvOut", "RecAudioEncoder", aac_default);
 
-    // SetDefaultValues2BasicConfig()
-    config_remove_value(m_BasicConfig, "SimpleOutput", "StreamEncoder");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecEncoder");
+    const char* defaultAdvEncoder = GetDefaultAdvEncoder(oldEncDefaults);
+    config_set_default_string(m_activeConfig, "AdvOut", "Encoder", defaultAdvEncoder);
+}
 
-    config_remove_value(m_BasicConfig, "AdvOut", "AudioEncoder");
-    config_remove_value(m_BasicConfig, "AdvOut", "RecAudioEncoder");
+void AFConfigManager::SetBasicProgramConfig()
+{
+    config_set_default_bool(m_activeConfig, "General", "OpenStatsOnStartup", false);
+    m_activeConfig.SaveSafe("tmp");
+}
+
+static std::string GetOBSGlobalIniPath() {
+    return "/" + LOCAL_FOLDER_NAME + "/global.ini";
+}
+static std::string GetOBSUserIniPath() {
+    return "/" + LOCAL_FOLDER_NAME + "/user.ini";
+}
+
+bool AFConfigManager::MigrateGlobalSettings()
+{
+    char path[512];
+
+    int len = GetAppConfigPath(path, sizeof(path), nullptr);
+    if(len <= 0) {
+        OBSErrorBox(nullptr, "Unable to get global configuration path.");
+        return false;
+    }
+
+    const std::string OBSGlobalIniPath = GetOBSGlobalIniPath();
+    const std::string OBSUserIniPath = GetOBSUserIniPath();
+
+    std::string legacyConfigFileString;
+    legacyConfigFileString.reserve(strlen(path) + OBSGlobalIniPath.size());
+    legacyConfigFileString.append(path).append(OBSGlobalIniPath);
+
+    const std::filesystem::path legacyGlobalConfigFile = std::filesystem::u8path(legacyConfigFileString);
+
+    std::string configFileString;
+    configFileString.reserve(strlen(path) + OBSUserIniPath.size());
+    configFileString.append(path).append(OBSUserIniPath);
+
+    const std::filesystem::path userConfigFile = std::filesystem::u8path(configFileString);
+
+    if(std::filesystem::exists(userConfigFile)) {
+        OBSErrorBox(nullptr,
+                   "Unable to migrate global configuration - user configuration file already exists.");
+        return false;
+    }
+
+    try {
+        std::filesystem::copy(legacyGlobalConfigFile, userConfigFile);
+    } catch(const std::filesystem::filesystem_error&) {
+        OBSErrorBox(nullptr, "Unable to migrate global configuration - copy failed.");
+        return false;
+    }
+
+    return true;
+}
+void AFConfigManager::MigrateLegacySettings(uint32_t lastVersion)
+{
+    bool hasChanges = false;
+
+    const uint32_t v19 = MAKE_SEMANTIC_VERSION(19, 0, 0);
+    const uint32_t v21 = MAKE_SEMANTIC_VERSION(21, 0, 0);
+    const uint32_t v23 = MAKE_SEMANTIC_VERSION(23, 0, 0);
+    const uint32_t v24 = MAKE_SEMANTIC_VERSION(24, 0, 0);
+    const uint32_t v24_1 = MAKE_SEMANTIC_VERSION(24, 1, 0);
+
+    const std::map<uint32_t, std::string> defaultsMap {
+        {{v19, "Pre19Defaults"}, {v21, "Pre21Defaults"}, {v23, "Pre23Defaults"}, {v24_1, "Pre24.1Defaults"}}};
+
+    for(auto& [version, configKey] : defaultsMap) {
+        if(!config_has_user_value(m_userConfig, "General", configKey.c_str())) {
+            bool useOldDefaults = lastVersion && lastVersion < version;
+            config_set_bool(m_userConfig, "General", configKey.c_str(), useOldDefaults);
+
+            hasChanges = true;
+        }
+    }
+
+    /*if(config_has_user_value(m_userConfig, "BasicWindow", "MultiviewLayout")) {
+        const char* layout = config_get_string(m_userConfig, "BasicWindow", "MultiviewLayout");
+        bool layoutUpdated = _UpdatePre22MultiviewLayout(layout);
+        hasChanges = hasChanges | layoutUpdated;
+    }*/
+
+    if(lastVersion && lastVersion < v24) {
+        bool disableHotkeysInFocus = config_get_bool(m_userConfig, "General", "DisableHotkeysInFocus");
+
+        if(disableHotkeysInFocus) {
+            config_set_string(m_userConfig, "General", "HotkeyFocusType", "DisableHotkeysInFocus");
+        }
+
+        hasChanges = true;
+    }
+
+    if(hasChanges) {
+        m_userConfig.SaveSafe("tmp");
+    }
+}
+
+bool AFConfigManager::InitUserConfig(std::filesystem::path& userConfigLocation, uint32_t lastVersion)
+{
+    ProfileScope("AFConfigManager::InitUserConfig");
+    //
+    const std::string userConfigFile = userConfigLocation.u8string() + "/" + LOCAL_FOLDER_NAME  + "/user.ini";
+
+    int errorCode = m_userConfig.Open(userConfigFile.c_str(), CONFIG_OPEN_ALWAYS);
+
+    if(errorCode != CONFIG_SUCCESS) {
+        OBSErrorBox(nullptr, "Failed to open user.ini: %d", errorCode);
+        return false;
+    }
+
+    MigrateLegacySettings(lastVersion);
+    InitUserConfigDefaults();
+
+    return true;
+}
+void AFConfigManager::InitUserConfigDefaults()
+{
+    InitAccessibilityConfig();
+    InitBroadInfoConfig();
+    InitSarsaConfig();
+    InitBookmarkMenuConfig();
+    //
+    config_set_default_bool(m_userConfig, "General", "ConfirmOnExit", true);
+    config_set_default_string(m_userConfig, "General", "HotkeyFocusType", "NeverDisableHotkeys");
+
+    config_set_default_bool(m_userConfig, "BasicWindow", "PreviewEnabled", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "PreviewProgramMode", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "SceneDuplicationMode", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "SwapScenesMode", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "SnappingEnabled", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "ScreenSnapping", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "SourceSnapping", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "CenterSnapping", false);
+    config_set_default_double(m_userConfig, "BasicWindow", "SnapDistance", 20.0);
+    config_set_default_bool(m_userConfig, "BasicWindow", "SpacingHelpersEnabled", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "RecordWhenStreaming", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "KeepRecordingWhenStreamStops", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "SysTrayEnabled", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "SysTrayWhenStarted", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "SaveProjectors", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "ShowTransitions", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "ShowListboxToolbars", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "ShowStatusBar", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "ShowSourceIcons", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "ShowContextToolbars", true);
+    config_set_default_bool(m_userConfig, "BasicWindow", "StudioModeLabels", true);
+
+    config_set_default_bool(m_userConfig, "BasicWindow", "VerticalVolControl", false);
+
+    config_set_default_bool(m_userConfig, "BasicWindow", "MultiviewMouseSwitch", true);
+
+    config_set_default_bool(m_userConfig, "BasicWindow", "MultiviewDrawNames", true);
+
+    config_set_default_bool(m_userConfig, "BasicWindow", "MultiviewDrawAreas", true);
+
+    config_set_default_bool(m_userConfig, "BasicWindow", "MediaControlsCountdownTimer", true);
     
+    config_set_default_bool(m_userConfig, "BasicWindow", "ShowPopupLeft", true);
+    // -------------------------------------
+
+    config_set_default_bool(m_userConfig, "BasicWindow", "WarnBeforeStartingStream", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "WarnBeforeStoppingStream", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "WarnBeforeStoppingRecord", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "OverflowHidden", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "OverflowAlwaysVisible", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "OverflowSelectionHidden", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "ShowSafeAreas", false);
+    config_set_default_bool(m_userConfig, "General", "AutomaticCollectionSearch", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "TransitionOnDoubleClick", false);
+    config_set_default_bool(m_userConfig, "BasicWindow", "StudioPortraitLayout", false);
+    //config_set_default_bool(m_userConfig, "BasicWindow", "ShowVirtualCamToolip", true);
+    m_userConfig.SaveSafe("tmp");
+}
+void AFConfigManager::ResetProgramConfig()
+{
+    config_remove_value(m_userConfig, "General", "ConfirmOnExit");
+    config_remove_value(m_userConfig, "General", "HotkeyFocusType");
+
+    config_remove_value(m_userConfig, "BasicWindow", "PreviewEnabled");
+    config_remove_value(m_userConfig, "BasicWindow", "PreviewProgramMode");
+    config_remove_value(m_userConfig, "BasicWindow", "SceneDuplicationMode");
+    config_remove_value(m_userConfig, "BasicWindow", "SwapScenesMode");
+    config_remove_value(m_userConfig, "BasicWindow", "SnappingEnabled");
+    config_remove_value(m_userConfig, "BasicWindow", "ScreenSnapping");
+    config_remove_value(m_userConfig, "BasicWindow", "SourceSnapping");
+    config_remove_value(m_userConfig, "BasicWindow", "CenterSnapping");
+    config_remove_value(m_userConfig, "BasicWindow", "SnapDistance");
+    config_remove_value(m_userConfig, "BasicWindow", "SpacingHelpersEnabled");
+    config_remove_value(m_userConfig, "BasicWindow", "RecordWhenStreaming");
+    config_remove_value(m_userConfig, "BasicWindow", "KeepRecordingWhenStreamStops");
+    config_remove_value(m_userConfig, "BasicWindow", "SysTrayEnabled");
+    config_remove_value(m_userConfig, "BasicWindow", "SysTrayWhenStarted");
+    config_remove_value(m_userConfig, "BasicWindow", "SaveProjectors");
+    config_remove_value(m_userConfig, "BasicWindow", "ShowTransitions");
+    config_remove_value(m_userConfig, "BasicWindow", "ShowListboxToolbars");
+    config_remove_value(m_userConfig, "BasicWindow", "ShowStatusBar");
+    config_remove_value(m_userConfig, "BasicWindow", "ShowSourceIcons");
+    config_remove_value(m_userConfig, "BasicWindow", "ShowContextToolbars");
+    config_remove_value(m_userConfig, "BasicWindow", "StudioModeLabels");
+    config_remove_value(m_userConfig, "BasicWindow", "VerticalVolControl");
+
+    config_remove_value(m_userConfig, "BasicWindow", "MultiviewMouseSwitch");
+
+    config_remove_value(m_userConfig, "BasicWindow", "MultiviewDrawNames");
+
+    config_remove_value(m_userConfig, "BasicWindow", "MultiviewDrawAreas");
+
+    config_remove_value(m_userConfig, "BasicWindow", "ShowPopupLeft");
+    config_remove_value(m_userConfig, "BasicWindow", "MediaControlsCountdownTimer");
+    // -------------------------------------
+
+    config_remove_value(m_activeConfig, "General", "OpenStatsOnStartup");
+    config_remove_value(m_userConfig, "BasicWindow", "WarnBeforeStartingStream");
+    config_remove_value(m_userConfig, "BasicWindow", "WarnBeforeStoppingStream");
+    config_remove_value(m_userConfig, "BasicWindow", "WarnBeforeStoppingRecord");
+    config_remove_value(m_userConfig, "BasicWindow", "OverflowHidden");
+    config_remove_value(m_userConfig, "BasicWindow", "OverflowAlwaysVisible");
+    config_remove_value(m_userConfig, "BasicWindow", "OverflowSelectionHidden");
+    config_remove_value(m_userConfig, "BasicWindow", "ShowSafeAreas");
+    config_remove_value(m_userConfig, "General", "AutomaticCollectionSearch");
+    config_remove_value(m_userConfig, "BasicWindow", "TransitionOnDoubleClick");
+    config_remove_value(m_userConfig, "BasicWindow", "StudioPortraitLayout");
+    config_remove_value(m_userConfig, "BasicWindow", "ShowVirtualCamToolip");
+
+    const char* installLang = config_get_string(m_userConfig, "General", "LanguageBase");
+    if(installLang) {
+        config_set_string(m_userConfig, "General", "Language", installLang);
+    }
+
+    InitUserConfigDefaults();
+}
+
+void AFConfigManager::SetBasicOutputConfig()
+{
+    bool changed = false;
+
+    /* ----------------------------------------------------- */
+    /* move over old FFmpeg track settings                   */
+    if(config_has_user_value(m_activeConfig, "AdvOut", "FFAudioTrack") &&
+        !config_has_user_value(m_activeConfig, "AdvOut", "Pre22.1Settings")) {
+
+        int track = (int)config_get_int(m_activeConfig, "AdvOut", "FFAudioTrack");
+        config_set_int(m_activeConfig, "AdvOut", "FFAudioMixes", 1LL << (track - 1));
+        config_set_bool(m_activeConfig, "AdvOut", "Pre22.1Settings", true);
+        changed = true;
+    }
+
+    /* ----------------------------------------------------- */
+    /* move over mixer values in advanced if older config */
+    if(config_has_user_value(m_activeConfig, "AdvOut", "RecTrackIndex") &&
+        !config_has_user_value(m_activeConfig, "AdvOut", "RecTracks")) {
+
+        uint64_t track = config_get_uint(m_activeConfig, "AdvOut", "RecTrackIndex");
+        track = 1ULL << (track - 1);
+        config_set_uint(m_activeConfig, "AdvOut", "RecTracks", track);
+        config_remove_value(m_activeConfig, "AdvOut", "RecTrackIndex");
+        changed = true;
+    }
+
+    /* ----------------------------------------------------- */
+    /* move bitrate enforcement setting to new value         */
+    if(config_has_user_value(m_activeConfig, "SimpleOutput", "EnforceBitrate") &&
+        !config_has_user_value(m_activeConfig, "Stream1", "IgnoreRecommended") &&
+        !config_has_user_value(m_activeConfig, "Stream1", "MovedOldEnforce")) {
+        bool enforce = config_get_bool(m_activeConfig, "SimpleOutput", "EnforceBitrate");
+        config_set_bool(m_activeConfig, "Stream1", "IgnoreRecommended", !enforce);
+        config_set_bool(m_activeConfig, "Stream1", "MovedOldEnforce", true);
+        changed = true;
+    }
+
+    /* ----------------------------------------------------- */
+    /* enforce minimum retry delay of 1 second prior to 27.1 */
+    if(config_has_user_value(m_activeConfig, "Output", "RetryDelay")) {
+        int retryDelay = config_get_uint(m_activeConfig, "Output", "RetryDelay");
+        if(retryDelay < 1) {
+            config_set_uint(m_activeConfig, "Output", "RetryDelay", 1);
+            changed = true;
+        }
+    }
+
+    /* ----------------------------------------------------- */
+    /* Migrate old container selection (if any) to new key.  */
+    auto MigrateFormat = [&](const char* section) {
+        bool has_old_key = config_has_user_value(m_activeConfig, section, "RecFormat");
+        bool has_new_key = config_has_user_value(m_activeConfig, section, "RecFormat2");
+        if(!has_new_key && !has_old_key)
+            return;
+
+        std::string old_format = config_get_string(m_activeConfig, section, has_new_key ? "RecFormat2" : "RecFormat");
+        std::string new_format = old_format;
+        if(old_format == "ts")
+            new_format = "mpegts";
+        else if(old_format == "m3u8")
+            new_format = "hls";
+        else if(old_format == "fmp4")
+            new_format = "fragmented_mp4";
+        else if(old_format == "fmov")
+            new_format = "fragmented_mov";
+
+        if(new_format != old_format || !has_new_key) {
+            config_set_string(m_activeConfig, section, "RecFormat2", new_format.c_str());
+            changed = true;
+        }
+    };
+
+    MigrateFormat("AdvOut");
+    MigrateFormat("SimpleOutput");
+
+    /* ----------------------------------------------------- */
+    /* Migrate output scale setting to GPU scaling options.  */
+
+    if(config_get_bool(m_activeConfig, "AdvOut", "Rescale") &&
+        !config_has_user_value(m_activeConfig, "AdvOut", "RescaleFilter")) {
+        config_set_int(m_activeConfig, "AdvOut", "RescaleFilter", OBS_SCALE_BILINEAR);
+    }
+
+    if(config_get_bool(m_activeConfig, "AdvOut", "RecRescale") &&
+        !config_has_user_value(m_activeConfig, "AdvOut", "RecRescaleFilter")) {
+        config_set_int(m_activeConfig, "AdvOut", "RecRescaleFilter", OBS_SCALE_BILINEAR);
+    }
+
+    /* ----------------------------------------------------- */
+    std::string defaultOutputPath = GetDefaultVideoSavePath();
+
+    config_set_default_string(m_activeConfig, "Output", "Mode", "Simple");
+
+    config_set_default_bool(m_activeConfig, "Stream1", "IgnoreRecommended", false);
+    config_set_default_bool(m_activeConfig, "Stream1", "EnableMultitrackVideo", false);
+    config_set_default_bool(m_activeConfig, "Stream1", "MultitrackVideoMaximumAggregateBitrateAuto", true);
+    config_set_default_bool(m_activeConfig, "Stream1", "MultitrackVideoMaximumVideoTracksAuto", true);
+
+    config_set_default_string(m_activeConfig, "SimpleOutput", "FilePath", defaultOutputPath.c_str());
+    config_set_default_string(m_activeConfig, "SimpleOutput", "RecFormat2", DEFAULT_CONTAINER);
+    config_set_default_uint(m_activeConfig, "SimpleOutput", "VBitrate", 2000);
+    config_set_default_uint(m_activeConfig, "SimpleOutput", "ABitrate", 160);
+    config_set_default_bool(m_activeConfig, "SimpleOutput", "UseAdvanced", false);
+    config_set_default_string(m_activeConfig, "SimpleOutput", "Preset", "veryfast");
+    config_set_default_string(m_activeConfig, "SimpleOutput", "NVENCPreset2", "p5");
+    config_set_default_string(m_activeConfig, "SimpleOutput", "RecQuality", "Stream");
+    config_set_default_bool(m_activeConfig, "SimpleOutput", "RecRB", false);
+    config_set_default_int(m_activeConfig, "SimpleOutput", "RecRBTime", 20);
+    config_set_default_int(m_activeConfig, "SimpleOutput", "RecRBSize", 512);
+    config_set_default_string(m_activeConfig, "SimpleOutput", "RecRBPrefix", "Replay");
+    config_set_default_string(m_activeConfig, "SimpleOutput", "StreamAudioEncoder", "aac");
+    config_set_default_string(m_activeConfig, "SimpleOutput", "RecAudioEncoder", "aac");
+    config_set_default_uint(m_activeConfig, "SimpleOutput", "RecTracks", (1 << 0));
+
+    config_set_default_bool(m_activeConfig, "AdvOut", "ApplyServiceSettings", true);
+    config_set_default_bool(m_activeConfig, "AdvOut", "UseRescale", false);
+    config_set_default_uint(m_activeConfig, "AdvOut", "TrackIndex", 1);
+    config_set_default_uint(m_activeConfig, "AdvOut", "VodTrackIndex", 2);
+    //config_set_default_string(m_activeConfig, "AdvOut", "Encoder", "obs_x264");
+
+    config_set_default_string(m_activeConfig, "AdvOut", "RecType", "Standard");
+
+    config_set_default_string(m_activeConfig, "AdvOut", "RecFilePath", defaultOutputPath.c_str());
+    config_set_default_string(m_activeConfig, "AdvOut", "RecFormat2", DEFAULT_CONTAINER);
+    config_set_default_bool(m_activeConfig, "AdvOut", "RecUseRescale", false);
+    config_set_default_uint(m_activeConfig, "AdvOut", "RecTracks", (1 << 0));
+    config_set_default_string(m_activeConfig, "AdvOut", "RecEncoder", "none");
+    config_set_default_uint(m_activeConfig, "AdvOut", "FLVTrack", 1);
+    config_set_default_uint(m_activeConfig, "AdvOut", "StreamMultiTrackAudioMixes", 1);
+
+    config_set_default_bool(m_activeConfig, "AdvOut", "FFOutputToFile", true);
+    config_set_default_string(m_activeConfig, "AdvOut", "FFFilePath", defaultOutputPath.c_str());
+    config_set_default_string(m_activeConfig, "AdvOut", "FFExtension", "mp4");
+    config_set_default_uint(m_activeConfig, "AdvOut", "FFVBitrate", 2500);
+    config_set_default_uint(m_activeConfig, "AdvOut", "FFVGOPSize", 250);
+    config_set_default_bool(m_activeConfig, "AdvOut", "FFUseRescale", false);
+    config_set_default_bool(m_activeConfig, "AdvOut", "FFIgnoreCompat", false);
+    config_set_default_uint(m_activeConfig, "AdvOut", "FFABitrate", 160);
+    config_set_default_uint(m_activeConfig, "AdvOut", "FFAudioMixes", 1);
+
+    config_set_default_uint(m_activeConfig, "AdvOut", "Track1Bitrate", 160);
+    config_set_default_uint(m_activeConfig, "AdvOut", "Track2Bitrate", 160);
+    config_set_default_uint(m_activeConfig, "AdvOut", "Track3Bitrate", 160);
+    config_set_default_uint(m_activeConfig, "AdvOut", "Track4Bitrate", 160);
+    config_set_default_uint(m_activeConfig, "AdvOut", "Track5Bitrate", 160);
+    config_set_default_uint(m_activeConfig, "AdvOut", "Track6Bitrate", 160);
+
+    config_set_default_uint(m_activeConfig, "AdvOut", "RecSplitFileTime", 15);
+    config_set_default_uint(m_activeConfig, "AdvOut", "RecSplitFileSize", 2048);
+
+    config_set_default_bool(m_activeConfig, "AdvOut", "RecRB", false);
+    config_set_default_uint(m_activeConfig, "AdvOut", "RecRBTime", 20);
+    config_set_default_int(m_activeConfig, "AdvOut", "RecRBSize", 512);
+
+    config_set_default_string(m_activeConfig, "Output", "FilenameFormatting", "%CCYY-%MM-%DD %hh-%mm-%ss");
+
+    config_set_default_bool(m_activeConfig, "Output", "DelayEnable", false);
+    config_set_default_uint(m_activeConfig, "Output", "DelaySec", 20);
+    config_set_default_bool(m_activeConfig, "Output", "DelayPreserve", true);
+
+    config_set_default_bool(m_activeConfig, "Output", "Reconnect", true);
+    config_set_default_uint(m_activeConfig, "Output", "RetryDelay", 2);
+    config_set_default_uint(m_activeConfig, "Output", "MaxRetries", 25);
+
+    config_set_default_string(m_activeConfig, "Output", "BindIP", "default");
+    config_set_default_string(m_activeConfig, "Output", "IPFamily", "IPv4+IPv6");
+    config_set_default_bool(m_activeConfig, "Output", "NewSocketLoopEnable", false);
+    config_set_default_bool(m_activeConfig, "Output", "LowLatencyEnable", false);
+
+    //_MakeDefaultVideoSaveDir();
+    if(os_file_exists(defaultOutputPath.c_str()) == false)
+        os_mkdir(defaultOutputPath.c_str());
+
+    //InitBasicConfigDefaults2();
+
+    /* ----------------------------------------------------- */
+    //if(changed)
+    {
+        m_activeConfig.SaveSafe("tmp");
+    }
+    /* ----------------------------------------------------- */
+}
+void AFConfigManager::ResetOutputConfig()
+{
+    // Delete configs
+    config_remove_value(m_activeConfig, "Output", "Mode");
+    config_remove_value(m_activeConfig, "Stream1", "IgnoreRecommended");
+    config_remove_value(m_activeConfig, "SimpleOutput", "FilePath");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecFormat2");
+    config_remove_value(m_activeConfig, "SimpleOutput", "VBitrate");
+    config_remove_value(m_activeConfig, "SimpleOutput", "ABitrate");
+    config_remove_value(m_activeConfig, "SimpleOutput", "UseAdvanced");
+    config_remove_value(m_activeConfig, "SimpleOutput", "Preset");
+    config_remove_value(m_activeConfig, "SimpleOutput", "NVENCPreset2");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecQuality");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecRB");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecRBTime");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecRBSize");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecRBPrefix");
+    config_remove_value(m_activeConfig, "SimpleOutput", "StreamAudioEncoder");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecAudioEncoder");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecTracks");
+
+    config_remove_value(m_activeConfig, "AdvOut", "ApplyServiceSettings");
+    config_remove_value(m_activeConfig, "AdvOut", "FFRescale");
+    config_remove_value(m_activeConfig, "AdvOut", "RecRescale");
+    config_remove_value(m_activeConfig, "AdvOut", "UseRescale");
+    config_remove_value(m_activeConfig, "AdvOut", "TrackIndex");
+    config_remove_value(m_activeConfig, "AdvOut", "VodTrackIndex");
+    config_remove_value(m_activeConfig, "AdvOut", "Encoder");
+
+    config_remove_value(m_activeConfig, "AdvOut", "RecType");
+
+    config_remove_value(m_activeConfig, "AdvOut", "RecFilePath");
+    config_remove_value(m_activeConfig, "AdvOut", "RecFormat2");
+    config_remove_value(m_activeConfig, "AdvOut", "RecUseRescale");
+    config_remove_value(m_activeConfig, "AdvOut", "RecTracks");
+    config_remove_value(m_activeConfig, "AdvOut", "RecEncoder");
+    config_remove_value(m_activeConfig, "AdvOut", "FLVTrack");
+
+    config_remove_value(m_activeConfig, "AdvOut", "FFOutputToFile");
+    config_remove_value(m_activeConfig, "AdvOut", "FFFilePath");
+    config_remove_value(m_activeConfig, "AdvOut", "FFExtension");
+    config_remove_value(m_activeConfig, "AdvOut", "FFVBitrate");
+    config_remove_value(m_activeConfig, "AdvOut", "FFVGOPSize");
+    config_remove_value(m_activeConfig, "AdvOut", "FFUseRescale");
+    config_remove_value(m_activeConfig, "AdvOut", "FFIgnoreCompat");
+    config_remove_value(m_activeConfig, "AdvOut", "FFABitrate");
+    config_remove_value(m_activeConfig, "AdvOut", "FFAudioMixes");
+
+    config_remove_value(m_activeConfig, "AdvOut", "Track1Bitrate");
+    config_remove_value(m_activeConfig, "AdvOut", "Track2Bitrate");
+    config_remove_value(m_activeConfig, "AdvOut", "Track3Bitrate");
+    config_remove_value(m_activeConfig, "AdvOut", "Track4Bitrate");
+    config_remove_value(m_activeConfig, "AdvOut", "Track5Bitrate");
+    config_remove_value(m_activeConfig, "AdvOut", "Track6Bitrate");
+
+    config_remove_value(m_activeConfig, "AdvOut", "RecSplitFileTime");
+    config_remove_value(m_activeConfig, "AdvOut", "RecSplitFileSize");
+
+    config_remove_value(m_activeConfig, "AdvOut", "RecRB");
+    config_remove_value(m_activeConfig, "AdvOut", "RecRBTime");
+    config_remove_value(m_activeConfig, "AdvOut", "RecRBSize");
+
+    config_remove_value(m_activeConfig, "Output", "FilenameFormatting");
+
+    config_remove_value(m_activeConfig, "Output", "DelayEnable");
+    config_remove_value(m_activeConfig, "Output", "DelaySec");
+    config_remove_value(m_activeConfig, "Output", "DelayPreserve");
+
+    config_remove_value(m_activeConfig, "Output", "Reconnect");
+    config_remove_value(m_activeConfig, "Output", "RetryDelay");
+    config_remove_value(m_activeConfig, "Output", "MaxRetries");
+
+    config_remove_value(m_activeConfig, "Output", "BindIP");
+    config_remove_value(m_activeConfig, "Output", "IPFamily");
+    config_remove_value(m_activeConfig, "Output", "NewSocketLoopEnable");
+    config_remove_value(m_activeConfig, "Output", "LowLatencyEnable");
+
+    config_remove_value(m_activeConfig, "SimpleOutput", "StreamEncoder");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecEncoder");
+
+    config_remove_value(m_activeConfig, "AdvOut", "AudioEncoder");
+    config_remove_value(m_activeConfig, "AdvOut", "RecAudioEncoder");
+
     // Set default values
     SetBasicOutputConfig();
 }
 
-void AFConfigManager::SetBasicOutputConfig() {
-    bool changed = false;
-	/* ----------------------------------------------------- */
-	/* move over old FFmpeg track settings                   */
-	if (config_has_user_value(m_BasicConfig, "AdvOut", "FFAudioTrack") &&
-		!config_has_user_value(m_BasicConfig, "AdvOut", "Pre22.1Settings")) 
-	{
-
-		int track = (int)config_get_int(m_BasicConfig, "AdvOut",
-										"FFAudioTrack");
-		config_set_int(m_BasicConfig, "AdvOut", "FFAudioMixes",
-					   1LL << (track - 1));
-		config_set_bool(m_BasicConfig, "AdvOut", "Pre22.1Settings", true);
-        changed = true;
-	}
-
-	/* ----------------------------------------------------- */
-	/* move over mixer values in advanced if older config */
-	if (config_has_user_value(m_BasicConfig, "AdvOut", "RecTrackIndex") &&
-		!config_has_user_value(m_BasicConfig, "AdvOut", "RecTracks")) 
-	{
-
-		uint64_t track =
-			config_get_uint(m_BasicConfig, "AdvOut", "RecTrackIndex");
-		track = 1ULL << (track - 1);
-		config_set_uint(m_BasicConfig, "AdvOut", "RecTracks", track);
-		config_remove_value(m_BasicConfig, "AdvOut", "RecTrackIndex");
-        changed = true;
-	}
-	/* ----------------------------------------------------- */
-	/* move bitrate enforcement setting to new value         */
-	if (config_has_user_value(m_BasicConfig, "SimpleOutput",
-							  "EnforceBitrate") &&
-		!config_has_user_value(m_BasicConfig, "Stream1",
-							   "IgnoreRecommended") &&
-		!config_has_user_value(m_BasicConfig, "Stream1", "MovedOldEnforce")) 
-	{
-		bool enforce = config_get_bool(m_BasicConfig, "SimpleOutput",
-									   "EnforceBitrate");
-		config_set_bool(m_BasicConfig, "Stream1", "IgnoreRecommended",
-						!enforce);
-		config_set_bool(m_BasicConfig, "Stream1", "MovedOldEnforce",
-						true);
-        changed = true;
-	}
-	/* ----------------------------------------------------- */
-	/* enforce minimum retry delay of 1 second prior to 27.1 */
-	if (config_has_user_value(m_BasicConfig, "Output", "RetryDelay")) 
-	{
-		int retryDelay =
-			config_get_uint(m_BasicConfig, "Output", "RetryDelay");
-		if (retryDelay < 1) 
-		{
-			config_set_uint(m_BasicConfig, "Output", "RetryDelay", 1);
-            changed = true;
-		}
-	}
-
-	/* ----------------------------------------------------- */
-	/* Migrate old container selection (if any) to new key.  */
-	auto MigrateFormat = [&](const char* section) {
-		bool has_old_key = config_has_user_value(m_BasicConfig, section,
-			"RecFormat");
-		bool has_new_key = config_has_user_value(m_BasicConfig, section,
-			"RecFormat2");
-		if (!has_new_key && !has_old_key)
-			return;
-
-		std::string old_format = config_get_string(
-			m_BasicConfig, section,
-			has_new_key ? "RecFormat2" : "RecFormat");
-		std::string new_format = old_format;
-		if (old_format == "ts")
-			new_format = "mpegts";
-		else if (old_format == "m3u8")
-			new_format = "hls";
-		else if (old_format == "fmp4")
-			new_format = "fragmented_mp4";
-		else if (old_format == "fmov")
-			new_format = "fragmented_mov";
-
-		if (new_format != old_format || !has_new_key) {
-			config_set_string(m_BasicConfig, section, "RecFormat2",
-				new_format.c_str());
-            changed = true;
-		}
-		};
-
-	MigrateFormat("AdvOut");
-	MigrateFormat("SimpleOutput");
-
-    config_set_default_string(m_BasicConfig, "Output", "Mode", "Simple");
-	config_set_default_bool(m_BasicConfig, "Stream1", "IgnoreRecommended",
-							false);
-	config_set_default_string(m_BasicConfig, "SimpleOutput", "FilePath",
-							  GetDefaultVideoSavePath().c_str());
-	config_set_default_string(m_BasicConfig, "SimpleOutput", "RecFormat2",
-							  DEFAULT_CONTAINER);
-	config_set_default_uint(m_BasicConfig, "SimpleOutput", "VBitrate", 6000);
-	config_set_default_uint(m_BasicConfig, "SimpleOutput", "ABitrate", 160);
-	config_set_default_bool(m_BasicConfig, "SimpleOutput", "UseAdvanced",
-							false);
-	config_set_default_string(m_BasicConfig, "SimpleOutput", "Preset",
-							  "veryfast");
-	config_set_default_string(m_BasicConfig, "SimpleOutput", "NVENCPreset2",
-							  "p5");
-	config_set_default_string(m_BasicConfig, "SimpleOutput", "RecQuality",
-							  "Stream");
-	config_set_default_bool(m_BasicConfig, "SimpleOutput", "RecRB", false);
-	config_set_default_int(m_BasicConfig, "SimpleOutput", "RecRBTime", 20);
-	config_set_default_int(m_BasicConfig, "SimpleOutput", "RecRBSize", 512);
-	config_set_default_string(m_BasicConfig, "SimpleOutput", "RecRBPrefix",
-							  "Replay");
-	config_set_default_string(m_BasicConfig, "SimpleOutput",
-							  "StreamAudioEncoder", "aac");
-	config_set_default_string(m_BasicConfig, "SimpleOutput",
-							  "RecAudioEncoder", "aac");
-	config_set_default_uint(m_BasicConfig, "SimpleOutput", "RecTracks",
-							(1 << 0));
-
-	config_set_default_bool(m_BasicConfig, "AdvOut", "ApplyServiceSettings",
-							true);
-
-	config_set_default_bool(m_BasicConfig, "AdvOut", "FFRescale", false);
-	config_set_default_bool(m_BasicConfig, "AdvOut", "RecRescale", false);
-	config_set_default_bool(m_BasicConfig, "AdvOut", "UseRescale", false);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "TrackIndex", 1);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "VodTrackIndex", 2);
-	config_set_default_string(m_BasicConfig, "AdvOut", "Encoder", "obs_x264");
-
-	config_set_default_string(m_BasicConfig, "AdvOut", "RecType", "Standard");
-
-	config_set_default_string(m_BasicConfig, "AdvOut", "RecFilePath",
-							  GetDefaultVideoSavePath().c_str());
-	config_set_default_string(m_BasicConfig, "AdvOut", "RecFormat2",
-							  DEFAULT_CONTAINER);
-	config_set_default_bool(m_BasicConfig, "AdvOut", "RecUseRescale", false);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "RecTracks", (1 << 0));
-	config_set_default_string(m_BasicConfig, "AdvOut", "RecEncoder", "none");
-	config_set_default_uint(m_BasicConfig, "AdvOut", "FLVTrack", 1);
-
-	config_set_default_bool(m_BasicConfig, "AdvOut", "FFOutputToFile", true);
-	config_set_default_string(m_BasicConfig, "AdvOut", "FFFilePath",
-							  GetDefaultVideoSavePath().c_str());
-	config_set_default_string(m_BasicConfig, "AdvOut", "FFExtension", "mp4");
-	config_set_default_uint(m_BasicConfig, "AdvOut", "FFVBitrate", 2500);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "FFVGOPSize", 250);
-	config_set_default_bool(m_BasicConfig, "AdvOut", "FFUseRescale", false);
-	config_set_default_bool(m_BasicConfig, "AdvOut", "FFIgnoreCompat", false);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "FFABitrate", 160);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "FFAudioMixes", 1);
-
-	config_set_default_uint(m_BasicConfig, "AdvOut", "Track1Bitrate", 160);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "Track2Bitrate", 160);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "Track3Bitrate", 160);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "Track4Bitrate", 160);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "Track5Bitrate", 160);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "Track6Bitrate", 160);
-
-	config_set_default_uint(m_BasicConfig, "AdvOut", "RecSplitFileTime", 15);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "RecSplitFileSize",
-							2048);
-
-	config_set_default_bool(m_BasicConfig, "AdvOut", "RecRB", false);
-	config_set_default_uint(m_BasicConfig, "AdvOut", "RecRBTime", 20);
-	config_set_default_int(m_BasicConfig, "AdvOut", "RecRBSize", 512);
-
-	config_set_default_string(m_BasicConfig, "Output", "FilenameFormatting",
-							  "%CCYY-%MM-%DD %hh-%mm-%ss");
-
-	config_set_default_bool(m_BasicConfig, "Output", "DelayEnable", false);
-	config_set_default_uint(m_BasicConfig, "Output", "DelaySec", 20);
-	config_set_default_bool(m_BasicConfig, "Output", "DelayPreserve", true);
-
-	config_set_default_bool(m_BasicConfig, "Output", "Reconnect", true);
-	config_set_default_uint(m_BasicConfig, "Output", "RetryDelay", 2);
-	config_set_default_uint(m_BasicConfig, "Output", "MaxRetries", 25);
-
-	config_set_default_string(m_BasicConfig, "Output", "BindIP", "default");
-	config_set_default_string(m_BasicConfig, "Output", "IPFamily",
-							  "IPv4+IPv6");
-	config_set_default_bool(m_BasicConfig, "Output", "NewSocketLoopEnable",
-							false);
-	config_set_default_bool(m_BasicConfig, "Output", "LowLatencyEnable",
-                            false);
-
-    SetDefaultValues2BasicConfig();
-
-    config_save_safe(m_BasicConfig, "tmp", nullptr);
+void AFConfigManager::SetBasicAudioConfig()
+{
+    config_set_default_string(m_activeConfig, "Audio", "MonitoringDeviceId", "default");
+    config_set_default_string(m_activeConfig, "Audio", "MonitoringDeviceName",
+                              Str("Basic.Settings.Advanced.Audio.MonitoringDevice.Default"));
+    config_set_default_uint(m_activeConfig, "Audio", "SampleRate", 48000);
+    config_set_default_string(m_activeConfig, "Audio", "ChannelSetup", "Stereo");
+    config_set_default_double(m_activeConfig, "Audio", "MeterDecayRate", VOLUME_METER_DECAY_FAST);
+    config_set_default_uint(m_activeConfig, "Audio", "PeakMeterType", 0);
+    m_activeConfig.SaveSafe("tmp");
 }
-
-void AFConfigManager::SetBasicAudioConfig() {
-	config_set_default_string(m_BasicConfig, "Audio", "MonitoringDeviceId",
-							  "default");
-	config_set_default_string(m_BasicConfig, "Audio", "MonitoringDeviceName",
-							  AFLocaleTextManager::GetSingletonInstance().Str(
-								"Basic.Settings.Advanced.Audio.MonitoringDevice"
-							  	".Default")
-							  );
-	config_set_default_uint(m_BasicConfig, "Audio", "SampleRate", 48000);
-	config_set_default_string(m_BasicConfig, "Audio", "ChannelSetup",
-							  "Stereo");
-	config_set_default_double(m_BasicConfig, "Audio", "MeterDecayRate",
-							  VOLUME_METER_DECAY_FAST);
-	config_set_default_uint(m_BasicConfig, "Audio", "PeakMeterType", 0);
-    config_save_safe(m_BasicConfig, "tmp", nullptr);
-}
-
-void AFConfigManager::SetGlobalAudioConfig() {
+void AFConfigManager::SetGlobalAudioConfig()
+{
 #ifdef _WIN32
-    config_set_default_bool(m_GlobalConfig, "Audio", "DisableAudioDucking",
-                            true);
-    config_save_safe(m_GlobalConfig, "tmp", nullptr);
+    config_set_default_bool(m_appConfig, "Audio", "DisableAudioDucking", true);
+    m_appConfig.SaveSafe("tmp");
 #endif
 }
-
-void AFConfigManager::ResetAudioConfig() {
+void AFConfigManager::ResetAudioConfig()
+{
     // Remove exists
-    config_remove_value(m_BasicConfig, "Audio", "MonitoringDeviceId");
-    config_remove_value(m_BasicConfig, "Audio", "MonitoringDeviceName");
-    config_remove_value(m_BasicConfig, "Audio", "SampleRate");
-    config_remove_value(m_BasicConfig, "Audio", "ChannelSetup");
-    config_remove_value(m_BasicConfig, "Audio", "MeterDecayRate");
-    config_remove_value(m_BasicConfig, "Audio", "PeakMeterType");
+    config_remove_value(m_activeConfig, "Audio", "MonitoringDeviceId");
+    config_remove_value(m_activeConfig, "Audio", "MonitoringDeviceName");
+    config_remove_value(m_activeConfig, "Audio", "SampleRate");
+    config_remove_value(m_activeConfig, "Audio", "ChannelSetup");
+    config_remove_value(m_activeConfig, "Audio", "MeterDecayRate");
+    config_remove_value(m_activeConfig, "Audio", "PeakMeterType");
 #ifdef _WIN32
-    config_remove_value(m_GlobalConfig, "Audio", "DisableAudioDucking");
+    config_remove_value(m_appConfig, "Audio", "DisableAudioDucking");
 #endif
     // Set defaults
     SetBasicAudioConfig();
     SetGlobalAudioConfig();
 }
 
-void AFConfigManager::SetBasicVideoConfig(uint32_t cx, uint32_t cy) {
-    
-	config_set_default_uint(m_BasicConfig, "Video", "BaseCX", cx);
-	config_set_default_uint(m_BasicConfig, "Video", "BaseCY", cy);
+void AFConfigManager::SetBasicVideoConfig(uint32_t cx, uint32_t cy)
+{
+    config_set_default_uint(m_activeConfig, "Video", "BaseCX", cx);
+    config_set_default_uint(m_activeConfig, "Video", "BaseCY", cy);
 
-	/* don't allow BaseCX/BaseCY to be susceptible to defaults changing */
-	if (!config_has_user_value(m_BasicConfig, "Video", "BaseCX") ||
-		!config_has_user_value(m_BasicConfig, "Video", "BaseCY")) {
-		config_set_uint(m_BasicConfig, "Video", "BaseCX", cx);
-		config_set_uint(m_BasicConfig, "Video", "BaseCY", cy);
-	}
+    /* don't allow BaseCX/BaseCY to be susceptible to defaults changing */
+    if(!config_has_user_value(m_activeConfig, "Video", "BaseCX") ||
+        !config_has_user_value(m_activeConfig, "Video", "BaseCY")) {
+        config_set_uint(m_activeConfig, "Video", "BaseCX", cx);
+        config_set_uint(m_activeConfig, "Video", "BaseCY", cy);
+    }
 
-	int i = 0;
-	uint32_t scale_cx = cx;
-	uint32_t scale_cy = cy;
+    int i = 0;
+    uint32_t scale_cx = cx;
+    uint32_t scale_cy = cy;
 
-	///* use a default scaled resolution that has a pixel count no higher
-	// * than 1280x720 */
-	//while (((scale_cx * scale_cy) > (1280 * 720)) && scaled_vals[i] > 0.0)
-	//{
-	//	double scale = scaled_vals[i++];
-	//	scale_cx = uint32_t(double(cx) / scale);
-	//	scale_cy = uint32_t(double(cy) / scale);
-	//}
+    /* use a default scaled resolution that has a pixel count no higher
+     * than 1280x720 */
+    /*while (((scale_cx * scale_cy) > (1280 * 720)) && scaled_vals[i] > 0.0)
+    {
+    	double scale = scaled_vals[i++];
+    	scale_cx = uint32_t(double(cx) / scale);
+    	scale_cy = uint32_t(double(cy) / scale);
+    }*/
 
-	//config_set_default_uint(m_BasicConfig, "Video", "OutputCX", scale_cx);
-	//config_set_default_uint(m_BasicConfig, "Video", "OutputCY", scale_cy);
+    /*config_set_default_uint(m_activeConfig, "Video", "OutputCX", scale_cx);
+    config_set_default_uint(m_activeConfig, "Video", "OutputCY", scale_cy);*/
 
-	///* don't allow OutputCX/OutputCY to be susceptible to defaults
-	// * changing */
-	//if (!config_has_user_value(m_BasicConfig, "Video", "OutputCX") ||
-	//	!config_has_user_value(m_BasicConfig, "Video", "OutputCY"))
-	//{
-	//	config_set_uint(m_BasicConfig, "Video", "OutputCX", scale_cx);
-	//	config_set_uint(m_BasicConfig, "Video", "OutputCY", scale_cy);
-	//}
+    /* don't allow OutputCX/OutputCY to be susceptible to defaults
+     * changing */
+    /*if (!config_has_user_value(m_activeConfig, "Video", "OutputCX") ||
+    	!config_has_user_value(m_activeConfig, "Video", "OutputCY"))
+    {
+    	config_set_uint(m_activeConfig, "Video", "OutputCX", scale_cx);
+    	config_set_uint(m_activeConfig, "Video", "OutputCY", scale_cy);
+    }*/
 
-	config_set_default_uint(m_BasicConfig, "Video", "OutputCX", 1920);
-	config_set_default_uint(m_BasicConfig, "Video", "OutputCY", 1080);
+    config_set_default_uint(m_activeConfig, "Video", "OutputCX", 1280);
+    config_set_default_uint(m_activeConfig, "Video", "OutputCY", 720);
 
-	config_set_default_uint(m_BasicConfig, "Video", "FPSType", 0);
-	config_set_default_string(m_BasicConfig, "Video", "FPSCommon", "30");
-	config_set_default_uint(m_BasicConfig, "Video", "FPSInt", 30);
-	config_set_default_uint(m_BasicConfig, "Video", "FPSNum", 30);
-	config_set_default_uint(m_BasicConfig, "Video", "FPSDen", 1);
-	config_set_default_string(m_BasicConfig, "Video", "ScaleType", "bicubic");
-	config_set_default_string(m_BasicConfig, "Video", "ColorFormat", "NV12");
-	config_set_default_string(m_BasicConfig, "Video", "ColorSpace", "709");
-	config_set_default_string(m_BasicConfig, "Video", "ColorRange",
-							  "Partial");
-	config_set_default_uint(m_BasicConfig, "Video", "SdrWhiteLevel", 300);
-	config_set_default_uint(m_BasicConfig, "Video", "HdrNominalPeakLevel",
-							1000);
-	config_set_default_bool(m_BasicConfig, "AdvOut", "Rescale", false);
-
-    config_save_safe(m_BasicConfig, "tmp", nullptr);
+    config_set_default_uint(m_activeConfig, "Video", "FPSType", 0);
+    config_set_default_string(m_activeConfig, "Video", "FPSCommon", "30");
+    config_set_default_uint(m_activeConfig, "Video", "FPSInt", 30);
+    config_set_default_uint(m_activeConfig, "Video", "FPSNum", 30);
+    config_set_default_uint(m_activeConfig, "Video", "FPSDen", 1);
+    config_set_default_string(m_activeConfig, "Video", "ScaleType", "bicubic");
+    config_set_default_string(m_activeConfig, "Video", "ColorFormat", "NV12");
+    config_set_default_string(m_activeConfig, "Video", "ColorSpace", "709");
+    config_set_default_string(m_activeConfig, "Video", "ColorRange", "Partial");
+    config_set_default_uint(m_activeConfig, "Video", "SdrWhiteLevel", 300);
+    config_set_default_uint(m_activeConfig, "Video", "HdrNominalPeakLevel", 1000);
+    config_set_default_bool(m_activeConfig, "AdvOut", "Rescale", false);
+    m_activeConfig.SaveSafe("tmp");
 }
-
-void AFConfigManager::SetGlobalVideoConfig() {
+void AFConfigManager::SetGlobalVideoConfig()
+{
 #if _WIN32
-	config_set_default_string(m_GlobalConfig, "Video", "Renderer",
-							  "Direct3D 11");
+    config_set_default_string(m_appConfig, "Video", "Renderer", "Direct3D 11");
 #else
-	config_set_default_string(m_GlobalConfig, "Video", "Renderer", "OpenGL");
-	config_set_default_bool(m_GlobalConfig, "Video", "DisableOSXVSync", true);
-	config_set_default_bool(m_GlobalConfig, "Video", "ResetOSXVSyncOnExit",
-							true);
+    config_set_default_string(m_appConfig, "Video", "Renderer", "OpenGL");
+    config_set_default_bool(m_appConfig, "Video", "DisableOSXVSync", true);
+    config_set_default_bool(m_appConfig, "Video", "ResetOSXVSyncOnExit", true);
 #endif
-    config_save_safe(m_GlobalConfig, "tmp", nullptr);
+    m_appConfig.SaveSafe("tmp");
 }
-
-void AFConfigManager::ResetVideoConfig(uint32_t cx, uint32_t cy) {
-    config_remove_value(m_BasicConfig, "Video", "BaseCX");
-    config_remove_value(m_BasicConfig, "Video", "BaseCY");
-	config_remove_value(m_BasicConfig, "Video", "OutputCX");
-	config_remove_value(m_BasicConfig, "Video", "OutputCY");
-	config_remove_value(m_BasicConfig, "Video", "FPSType");
-	config_remove_value(m_BasicConfig, "Video", "FPSCommon");
-	config_remove_value(m_BasicConfig, "Video", "FPSInt");
-	config_remove_value(m_BasicConfig, "Video", "FPSNum");
-	config_remove_value(m_BasicConfig, "Video", "FPSDen");
-	config_remove_value(m_BasicConfig, "Video", "ScaleType");
-	config_remove_value(m_BasicConfig, "Video", "ColorFormat");
-	config_remove_value(m_BasicConfig, "Video", "ColorSpace");
-	config_remove_value(m_BasicConfig, "Video", "ColorRange");
-	config_remove_value(m_BasicConfig, "Video", "SdrWhiteLevel");
-	config_remove_value(m_BasicConfig, "Video", "HdrNominalPeakLevel");
-	config_remove_value(m_BasicConfig, "AdvOut", "Rescale");
+void AFConfigManager::ResetVideoConfig(uint32_t cx, uint32_t cy)
+{
+    config_remove_value(m_activeConfig, "Video", "BaseCX");
+    config_remove_value(m_activeConfig, "Video", "BaseCY");
+    config_remove_value(m_activeConfig, "Video", "OutputCX");
+    config_remove_value(m_activeConfig, "Video", "OutputCY");
+    config_remove_value(m_activeConfig, "Video", "FPSType");
+    config_remove_value(m_activeConfig, "Video", "FPSCommon");
+    config_remove_value(m_activeConfig, "Video", "FPSInt");
+    config_remove_value(m_activeConfig, "Video", "FPSNum");
+    config_remove_value(m_activeConfig, "Video", "FPSDen");
+    config_remove_value(m_activeConfig, "Video", "ScaleType");
+    config_remove_value(m_activeConfig, "Video", "ColorFormat");
+    config_remove_value(m_activeConfig, "Video", "ColorSpace");
+    config_remove_value(m_activeConfig, "Video", "ColorRange");
+    config_remove_value(m_activeConfig, "Video", "SdrWhiteLevel");
+    config_remove_value(m_activeConfig, "Video", "HdrNominalPeakLevel");
+    config_remove_value(m_activeConfig, "AdvOut", "Rescale");
 #if _WIN32
-	config_remove_value(m_GlobalConfig, "Video", "Renderer");
+    config_remove_value(m_appConfig, "Video", "Renderer");
 #else
-	config_remove_value(m_GlobalConfig, "Video", "Renderer");
-	config_remove_value(m_GlobalConfig, "Video", "DisableOSXVSync");
-	config_remove_value(m_GlobalConfig, "Video", "ResetOSXVSyncOnExit");
+    config_remove_value(m_appConfig, "Video", "Renderer");
+    config_remove_value(m_appConfig, "Video", "DisableOSXVSync");
+    config_remove_value(m_appConfig, "Video", "ResetOSXVSyncOnExit");
 #endif
     SetBasicVideoConfig(cx, cy);
     SetGlobalVideoConfig();
 }
 
-void AFConfigManager::SetBasicHotkeysConfig() {}
+void AFConfigManager::InitAccessibilityConfig()
+{
+    config_set_default_int(m_userConfig, "Accessibility", "SelectRed", 0xff8201);
+    config_set_default_int(m_userConfig, "Accessibility", "SelectGreen", 0x5141c3);
+    config_set_default_int(m_userConfig, "Accessibility", "SelectBlue", 0xffe000);
+    config_set_default_int(m_userConfig, "Accessibility", "MixerGreen", 0x2e4821);
+    config_set_default_int(m_userConfig, "Accessibility", "MixerYellow", 0x275e63);
+    config_set_default_int(m_userConfig, "Accessibility", "MixerRed", 0x222255);
+    config_set_default_int(m_userConfig, "Accessibility", "MixerGreenActive", 0x4cff4c);
+    config_set_default_int(m_userConfig, "Accessibility", "MixerYellowActive", 0x4cffff);
+    config_set_default_int(m_userConfig, "Accessibility", "MixerRedActive", 0x4c4cff);
+    config_set_default_int(m_userConfig, "Accessibility", "ColorPreset", ColorPreset::COLOR_PRESET_DEFAULT);
+    m_userConfig.SaveSafe("tmp");
+}
+void AFConfigManager::ResetAccessibilityConfig()
+{
+    config_remove_value(m_userConfig, "Accessibility", "SelectRed");
+    config_remove_value(m_userConfig, "Accessibility", "SelectGreen");
+    config_remove_value(m_userConfig, "Accessibility", "SelectBlue");
+    config_remove_value(m_userConfig, "Accessibility", "MixerGreen");
+    config_remove_value(m_userConfig, "Accessibility", "MixerYellow");
+    config_remove_value(m_userConfig, "Accessibility", "MixerRed");
+    config_remove_value(m_userConfig, "Accessibility", "MixerGreenActive");
+    config_remove_value(m_userConfig, "Accessibility", "MixerYellowActive");
+    config_remove_value(m_userConfig, "Accessibility", "MixerRedActive");
 
-void AFConfigManager::SetGlobalAccessibilityConfig() {
-    config_set_default_int(m_GlobalConfig, "Accessibility", "SelectRed",
-                           0x01ffd1);
-    config_set_default_int(m_GlobalConfig, "Accessibility", "SelectGreen",
-                           0x5141c3);
-    config_set_default_int(m_GlobalConfig, "Accessibility", "SelectBlue",
-                           0xffe000);
-    config_set_default_int(m_GlobalConfig, "Accessibility", "MixerGreen",
-                           0x2e4821);
-    config_set_default_int(m_GlobalConfig, "Accessibility", "MixerYellow",
-                           0x275e63);
-    config_set_default_int(m_GlobalConfig, "Accessibility", "MixerRed",
-                           0x222255);
-    config_set_default_int(m_GlobalConfig, "Accessibility", "MixerGreenActive",
-                           0x4cff4c);
-    config_set_default_int(m_GlobalConfig, "Accessibility", "MixerYellowActive",
-                           0x4cffff);
-    config_set_default_int(m_GlobalConfig, "Accessibility", "MixerRedActive",
-                           0x4c4cff);
-    config_set_default_int(m_GlobalConfig, "Accessibility", "ColorPreset",
-                           ColorPreset::COLOR_PRESET_DEFAULT);
+    config_remove_value(m_userConfig, "Accessibility", "ColorPreset");
 
-    config_save_safe(m_GlobalConfig, "tmp", nullptr);
+    InitAccessibilityConfig();
 }
 
-void AFConfigManager::ResetAccessibilityConfig() {
-    config_remove_value(m_GlobalConfig, "Accessibility", "SelectRed");
-    config_remove_value(m_GlobalConfig, "Accessibility", "SelectGreen");
-    config_remove_value(m_GlobalConfig, "Accessibility", "SelectBlue");
-    config_remove_value(m_GlobalConfig, "Accessibility", "MixerGreen");
-    config_remove_value(m_GlobalConfig, "Accessibility", "MixerYellow");
-    config_remove_value(m_GlobalConfig, "Accessibility", "MixerRed");
-    config_remove_value(m_GlobalConfig, "Accessibility", "MixerGreenActive");
-    config_remove_value(m_GlobalConfig, "Accessibility", "MixerYellowActive");
-    config_remove_value(m_GlobalConfig, "Accessibility", "MixerRedActive");
-
-    config_remove_value(m_GlobalConfig, "Accessibility", "ColorPreset");
-
-    SetGlobalAccessibilityConfig();
+void AFConfigManager::InitBroadInfoConfig()
+{
+    config_set_default_bool(m_userConfig, "BroadInfo", "NotifyOnTitleChange", true);
+    m_userConfig.SaveSafe("tmp");
 }
 
-void AFConfigManager::SetBasicAdvancedConfig() {
+// for sarsa
+void AFConfigManager::InitSarsaConfig()
+{
+    config_set_default_bool(m_userConfig, "SARSA", "UseTextMode", false);
+    config_set_default_bool(m_userConfig, "SARSA", "UseWakeWord", false);
+    config_set_default_bool(m_userConfig, "SARSA", "UseBGM", false);
+    config_set_default_bool(m_userConfig, "SARSA", "FirstStart", true);
+	config_set_default_int(m_userConfig, "SARSA", "UseMinsimCheckCnt", 0);
+    m_userConfig.SaveSafe("tmp");
+}
+
+void AFConfigManager::InitBookmarkMenuConfig()
+{
+    const QByteArray now = QDateTime::currentDateTime()
+        .toString(Qt::ISODateWithMs).toUtf8();
+
+    config_set_default_bool(m_userConfig, "FavoriteMenu", "chat", true);
+    config_set_default_string(m_userConfig, "FavoriteMenu", "chat_favorite_at", now.constData());
+    config_set_default_bool(m_userConfig, "FavoriteMenu", "overlay", false);
+    config_set_default_string(m_userConfig, "FavoriteMenu", "overlay_favorite_at", "");
+    config_set_default_bool(m_userConfig, "FavoriteMenu", "mission", false);
+    config_set_default_string(m_userConfig, "FavoriteMenu", "mission_favorite_at", "");
+    config_set_default_bool(m_userConfig, "FavoriteMenu", "vote", false);
+    config_set_default_string(m_userConfig, "FavoriteMenu", "vote_favorite_at", "");
+    config_set_default_bool(m_userConfig, "FavoriteMenu", "extensions", false);
+    config_set_default_string(m_userConfig, "FavoriteMenu", "extensions_favorite_at", "");
+    config_set_default_bool(m_userConfig, "FavoriteMenu", "aquacontrol", false);
+    config_set_default_string(m_userConfig, "FavoriteMenu", "aquacontrol_favorite_at", "");
+    config_set_default_bool(m_userConfig, "FavoriteMenu", "savevod", false);
+    config_set_default_string(m_userConfig, "FavoriteMenu", "savevod_favorite_at", "");
+    config_set_default_bool(m_userConfig, "FavoriteMenu", "breaktime", false);
+    config_set_default_string(m_userConfig, "FavoriteMenu", "breaktime_favorite_at", "");
+
+    m_userConfig.SaveSafe("tmp");
+}
+
+void AFConfigManager::SetBasicAdvancedConfig()
+{
 #ifdef _WIN32
-	config_set_default_bool(m_BasicConfig, "Output", "NewSocketLoopEnable",
-							false);
-	config_set_default_bool(m_BasicConfig, "Output", "LowLatencyEnable",
-                            false);
+    config_set_default_bool(m_activeConfig, "Output", "NewSocketLoopEnable", false);
+    config_set_default_bool(m_activeConfig, "Output", "LowLatencyEnable", false);
 #endif
-	config_set_default_string(m_BasicConfig, "Output", "FilenameFormatting",
-							  "%CCYY-%MM-%DD %hh-%mm-%ss");
-    config_set_default_string(m_BasicConfig, "SimpleOutput", "RecRBPrefix",
-                            "Replay");
+    config_set_default_string(m_activeConfig, "Output", "FilenameFormatting", "%CCYY-%MM-%DD %hh-%mm-%ss");
+    config_set_default_string(m_activeConfig, "SimpleOutput", "RecRBPrefix", "Replay");
 
-	config_set_default_bool(m_BasicConfig, "Output", "Reconnect", true);
-	config_set_default_uint(m_BasicConfig, "Output", "RetryDelay", 2);
-	config_set_default_uint(m_BasicConfig, "Output", "MaxRetries", 25);
+    config_set_default_bool(m_activeConfig, "Output", "Reconnect", true);
+    config_set_default_uint(m_activeConfig, "Output", "RetryDelay", 2);
+    config_set_default_uint(m_activeConfig, "Output", "MaxRetries", 25);
 
-	config_set_default_string(m_BasicConfig, "Output", "IPFamily",
-							  "IPv4+IPv6");
-	config_set_default_string(m_BasicConfig, "Output", "BindIP", "default");
-
-    config_save_safe(m_BasicConfig, "tmp", nullptr);
+    config_set_default_string(m_activeConfig, "Output", "IPFamily", "IPv4+IPv6");
+    config_set_default_string(m_activeConfig, "Output", "BindIP", "default");
+    m_activeConfig.SaveSafe("tmp");
 }
-
-void AFConfigManager::SetGlobalAdvancedConfig() {
+void AFConfigManager::SetGlobalAdvancedConfig()
+{
 #ifdef _WIN32
-    config_set_default_string(m_GlobalConfig, "General", "ProcessPriority",
-                            "Normal");
+    config_set_default_string(m_appConfig, "General", "ProcessPriority", "AboveNormal");
 #endif
-	config_set_default_bool(m_GlobalConfig, "General", "ConfirmOnExit", true);
-    
+    //No Use ConfirmOnExit - Streaming always show end dialog, Recording - use WarnBeforeStoppingRecord
+    config_set_default_bool(m_userConfig, "General", "ConfirmOnExit", true);
+
     // _WIN32 || __APPLE__
-	config_set_default_bool(m_GlobalConfig, "General", "BrowserHWAccel",
-							true);
-
-    config_save_safe(m_GlobalConfig, "tmp", nullptr);
+    config_set_default_bool(m_appConfig, "General", "BrowserHWAccel", true);
+    m_appConfig.SaveSafe("tmp");
 }
-
-void AFConfigManager::ResetAdvancedConfig() {
+void AFConfigManager::ResetAdvancedConfig()
+{
     // Remove basic configs
 #ifdef _WIN32
-	config_remove_value(m_BasicConfig, "Output", "NewSocketLoopEnable");
-	config_remove_value(m_BasicConfig, "Output", "LowLatencyEnable");
+    config_remove_value(m_activeConfig, "Output", "NewSocketLoopEnable");
+    config_remove_value(m_activeConfig, "Output", "LowLatencyEnable");
 #endif
-	config_remove_value(m_BasicConfig, "Output", "FilenameFormatting");
-    config_remove_value(m_BasicConfig, "SimpleOutput", "RecRBPrefix");
+    config_remove_value(m_activeConfig, "Output", "FilenameFormatting");
+    config_remove_value(m_activeConfig, "SimpleOutput", "RecRBPrefix");
 
-	config_remove_value(m_BasicConfig, "Output", "Reconnect");
-	config_remove_value(m_BasicConfig, "Output", "RetryDelay");
-	config_remove_value(m_BasicConfig, "Output", "MaxRetries");
+    config_remove_value(m_activeConfig, "Output", "Reconnect");
+    config_remove_value(m_activeConfig, "Output", "RetryDelay");
+    config_remove_value(m_activeConfig, "Output", "MaxRetries");
 
-	config_remove_value(m_BasicConfig, "Output", "IPFamily");
-	config_remove_value(m_BasicConfig, "Output", "BindIP");
+    config_remove_value(m_activeConfig, "Output", "IPFamily");
+    config_remove_value(m_activeConfig, "Output", "BindIP");
 
     // Remove global configs
 #ifdef _WIN32
-    config_remove_value(m_GlobalConfig, "General", "ProcessPriority");
+    config_remove_value(m_appConfig, "General", "ProcessPriority");
 #endif
-	config_remove_value(m_GlobalConfig, "General", "ConfirmOnExit");
-    
+    config_remove_value(m_userConfig, "General", "ConfirmOnExit");
+
     // _WIN32 || __APPLE__
-	config_remove_value(m_GlobalConfig, "General", "BrowserHWAccel");
+    config_remove_value(m_appConfig, "General", "BrowserHWAccel");
 
     // Set default
     SetBasicAdvancedConfig();
     SetGlobalAdvancedConfig();
 }
 
-
-void AFConfigManager::UpdateHotkeyFocusSetting(bool resetState, bool appActiveState)
-{
-    m_StatesApp.SetEnableHotkeysInFocus(true);
-    m_StatesApp.SetEnableHotkeysOutOfFocus(true);
-
-    if (resetState) {
-        config_remove_value(m_GlobalConfig, "General", "HotkeyFocusType");
-        config_set_default_string(m_GlobalConfig, "General",
-                                  "HotkeyFocusType", "NeverDisableHotkeys");
-        SafeSaveGlobal();
-    }
-
-    const char *hotkeyFocusType =
-        config_get_string(m_GlobalConfig, "General", "HotkeyFocusType");
-
-    if (astrcmpi(hotkeyFocusType, "DisableHotkeysInFocus") == 0)
-        m_StatesApp.SetEnableHotkeysInFocus(false);
-    else if (astrcmpi(hotkeyFocusType, "DisableHotkeysOutOfFocus") == 0)
-        m_StatesApp.SetEnableHotkeysOutOfFocus(false);
-
-    if (resetState) {
-        ResetHotkeyState(appActiveState);
-    }
-
-}
-void AFConfigManager::DisableHotkeys(bool appActiveState)
-{
-    m_StatesApp.SetEnableHotkeysInFocus(false);
-    m_StatesApp.SetEnableHotkeysOutOfFocus(false);
-    
-    ResetHotkeyState(appActiveState);
-}
 bool AFConfigManager::GetFileSafeName(const char* name, std::string& file)
 {
-	size_t base_len = strlen(name);
-	size_t len = os_utf8_to_wcs(name, base_len, nullptr, 0);
-	std::wstring wfile;
+    size_t base_len = strlen(name);
+    size_t len = os_utf8_to_wcs(name, base_len, nullptr, 0);
+    std::wstring wfile;
 
-	if(!len)
-		return false;
+    if(!len)
+        return false;
 
-	wfile.resize(len);
-	os_utf8_to_wcs(name, base_len, &wfile[0], len + 1);
+    wfile.resize(len);
+    os_utf8_to_wcs(name, base_len, &wfile[0], len + 1);
 
-	for(size_t i = wfile.size(); i > 0; i--) {
-		size_t im1 = i - 1;
+    for(size_t i = wfile.size(); i > 0; i--) {
+        size_t im1 = i - 1;
 
-		if(iswspace(wfile[im1])) {
-			wfile[im1] = '_';
-		} else if(wfile[im1] != '_' && !iswalnum(wfile[im1])) {
-			wfile.erase(im1, 1);
-		}
-	}
+        if(iswspace(wfile[im1])) {
+            wfile[im1] = '_';
+        } else if(wfile[im1] != '_' && !iswalnum(wfile[im1])) {
+            wfile.erase(im1, 1);
+        }
+    }
 
-	if(wfile.size() == 0)
-		wfile = L"characters_only";
+    if(wfile.size() == 0)
+        wfile = L"characters_only";
 
-	len = os_wcs_to_utf8(wfile.c_str(), wfile.size(), nullptr, 0);
-	if(!len)
-		return false;
+    len = os_wcs_to_utf8(wfile.c_str(), wfile.size(), nullptr, 0);
+    if(!len)
+        return false;
 
-	file.resize(len);
-	os_wcs_to_utf8(wfile.c_str(), wfile.size(), &file[0], len + 1);
-	return true;
+    file.resize(len);
+    os_wcs_to_utf8(wfile.c_str(), wfile.size(), &file[0], len + 1);
+    return true;
 }
 bool AFConfigManager::GetClosestUnusedFileName(std::string& path, const char* extension)
 {
-	size_t len = path.size();
-	if(extension) {
-		path += ".";
-		path += extension;
-	}
+    size_t len = path.size();
+    if(extension) {
+        path += ".";
+        path += extension;
+    }
 
-	if(!os_file_exists(path.c_str()))
+    if(!os_file_exists(path.c_str()))
+        return true;
+
+    int index = 1;
+
+    do {
+        path.resize(len);
+        path += std::to_string(++index);
+        if(extension) {
+            path += ".";
+            path += extension;
+        }
+    } while(os_file_exists(path.c_str()));
+
+    return true;
+}
+bool AFConfigManager::GetUnusedName(std::string& name)
+{
+    if(!MAIN_SCENECOLLECTION->GetSceneCollectionByName(name))
+        return false;
+
+    std::string newName;
+    int inc = 2;
+    do {
+        newName = name;
+        newName += " ";
+        newName += std::to_string(inc++);
+    } while(MAIN_SCENECOLLECTION->GetSceneCollectionByName(newName));
+
+    name = newName;
+    return true;
+}
+
+bool AFConfigManager::CheckSavvyTempFolder()
+{
+	char savvypath[512] = { 0, };
+	if (GetAppConfigPath(savvypath, sizeof(savvypath), (LOCAL_FOLDER_NAME + "/savvy").c_str()) <= 0)
 		return true;
 
-	int index = 1;
-
-	do {
-		path.resize(len);
-		path += std::to_string(++index);
-		if(extension) {
-			path += ".";
-			path += extension;
-		}
-	} while(os_file_exists(path.c_str()));
-
-	return true;
-}
-bool AFConfigManager::GetUnusedSceneCollectionFile(std::string& name, std::string& file)
-{
-	char path[512];
-	int ret;
-
-	if(!GetFileSafeName(name.c_str(), file)) {
-		blog(LOG_WARNING, "Failed to create safe file name for '%s'",
-			 name.c_str());
-		return false;
-	}
-
-	ret = GetConfigPath(path, sizeof(path), "SOOPStudio/basic/scenes/");
-	if(ret <= 0) {
-		blog(LOG_WARNING, "Failed to get scene collection config path");
-		return false;
-	}
-
-	file.insert(0, path);
-
-	if(!GetClosestUnusedFileName(file, "json")) {
-		blog(LOG_WARNING, "Failed to get closest file name for %s",
-			 file.c_str());
-		return false;
-	}
-
-	file.erase(file.size() - 5, 5);
-	file.erase(0, strlen(path));
-	return true;
+    if(!AFMakeDirectoryUtil::DoMkDir(savvypath))
+        return false;
+    return true;
 }
 
-void AFConfigManager::_MakeArg()
-{
-	if (m_pArgOption == nullptr)
-		m_pArgOption = new AFArgOption();
-}
-//
-bool AFConfigManager::_do_mkdir(const char* path)
-{
-	if(os_mkdirs(path) == MKDIR_ERROR) {
-		AFErrorBox(NULL, "Failed to create directory %s", path);
-		return false;
-	}
-
-	return true;
-}
-bool AFConfigManager::_MakeUserDirs()
-{
-	char path[512] = {0,};
-	if(GetConfigPath(path, sizeof(path), "SOOPStudio/basic") <= 0)
-		return false;
-	if(!_do_mkdir(path))
-		return false;
-
-	if(GetConfigPath(path, sizeof(path), "SOOPStudio/logs") <= 0)
-		return false;
-	if(!_do_mkdir(path))
-		return false;
-
-	if(GetConfigPath(path, sizeof(path), "SOOPStudio/profiler_data") <= 0)
-		return false;
-	if(!_do_mkdir(path))
-		return false;
-
-#ifdef _WIN32
-	if(GetConfigPath(path, sizeof(path), "SOOPStudio/crashes") <= 0)
-		return false;
-	if(!_do_mkdir(path))
-		return false;
-#endif
-
-#ifdef WHATSNEW_ENABLED
-	if(GetConfigPath(path, sizeof(path), "SOOPStudio/updates") <= 0)
-		return false;
-	if(!_do_mkdir(path))
-		return false;
-#endif
-
-	if(GetConfigPath(path, sizeof(path), "SOOPStudio/plugin_config") <= 0)
-		return false;
-	if(!_do_mkdir(path))
-		return false;
-
-	return true;
-}
 bool AFConfigManager::_MakeUserProfileDirs()
 {
-	char path[512] = {0,};
+    const std::filesystem::path userProfilePath = m_userProfilesLocation / GetProfileSubPath();
+    const std::filesystem::path userScenesPath = m_userScenesLocation / GetScenesSubPath();
 
-	if(GetConfigPath(path, sizeof(path), "SOOPStudio/basic/profiles") <= 0)
-		return false;
-	if(!_do_mkdir(path))
-		return false;
+    if(!std::filesystem::exists(userProfilePath)) {
+        try {
+            std::filesystem::create_directories(userProfilePath);
+        } catch(const std::filesystem::filesystem_error& error) {
+            blog(LOG_ERROR, "Failed to create user profile directory '%s'\n%s",
+                 userProfilePath.u8string().c_str(), error.what());
+            return false;
+        }
+    }
 
-	if(GetConfigPath(path, sizeof(path), "SOOPStudio/basic/scenes") <= 0)
-		return false;
-	if(!_do_mkdir(path))
-		return false;
+    if(!std::filesystem::exists(userScenesPath)) {
+        try {
+            std::filesystem::create_directories(userScenesPath);
+        } catch(const std::filesystem::filesystem_error& error) {
+            blog(LOG_ERROR, "Failed to create user scene collection directory '%s'\n%s",
+                 userScenesPath.u8string().c_str(), error.what());
+            return false;
+        }
+    }
 
-	return true;
-}
-std::string AFConfigManager::_GetSceneCollectionFileFromName(const char* name)
-{
-	std::string outputPath;
-	os_glob_t* glob;
-	char path[512];
-
-	if (GetConfigPath(path, sizeof(path), "SOOPStudio/basic/scenes") <= 0)
-		return outputPath;
-
-	strcat(path, "/*.json");
-
-	if (os_glob(path, 0, &glob) != 0)
-		return outputPath;
-
-	for (size_t i = 0; i < glob->gl_pathc; i++) 
-	{
-		struct os_globent ent = glob->gl_pathv[i];
-		if (ent.directory)
-			continue;
-
-		OBSDataAutoRelease data =
-			obs_data_create_from_json_file_safe(ent.path, "bak");
-		const char* curName = obs_data_get_string(data, "name");
-
-		if (astrcmpi(name, curName) == 0) 
-		{
-			outputPath = ent.path;
-			break;
-		}
-	}
-
-	os_globfree(glob);
-
-	if (!outputPath.empty()) 
-	{
-		outputPath.resize(outputPath.size() - 5);
-		replace(outputPath.begin(), outputPath.end(), '\\', '/');
-		const char* start = strrchr(outputPath.c_str(), '/');
-		if (start)
-			outputPath.erase(0, start - outputPath.c_str() + 1);
-	}
-
-
-	return outputPath;
+    return true;
 }
 
-std::string AFConfigManager::_GetProfileDirFromName(const char* name)
+bool AFConfigManager::_UpdatePre22MultiviewLayout(const char* layout)
 {
-	std::string outputPath;
-	os_glob_t* glob = nullptr;
-	char path[512] = {0, };
+    if(!layout)
+        return false;
 
-	if (GetConfigPath(path, sizeof(path), "SOOPStudio/basic/profiles") <= 0)
-		return outputPath;
+    /*if(astrcmpi(layout, "horizontaltop") == 0) {
+        config_set_int(m_userConfig, "BasicWindow", "MultiviewLayout",
+                   static_cast<int>(MultiviewLayout::HORIZONTAL_TOP_8_SCENES));
+        return true;
+    }
 
-	strcat(path, "/*");
+    if(astrcmpi(layout, "horizontalbottom") == 0) {
+        config_set_int(m_userConfig, "BasicWindow", "MultiviewLayout",
+                   static_cast<int>(MultiviewLayout::HORIZONTAL_BOTTOM_8_SCENES));
+        return true;
+    }
 
-	if (os_glob(path, 0, &glob) != 0)
-		return outputPath;
+    if(astrcmpi(layout, "verticalleft") == 0) {
+        config_set_int(m_userConfig, "BasicWindow", "MultiviewLayout",
+                   static_cast<int>(MultiviewLayout::VERTICAL_LEFT_8_SCENES));
+        return true;
+    }
 
-	for (size_t i = 0; i < glob->gl_pathc; i++) 
-	{
-		struct os_globent ent = glob->gl_pathv[i];
-		if (!ent.directory)
-			continue;
+    if(astrcmpi(layout, "verticalright") == 0) {
+        config_set_int(m_userConfig, "BasicWindow", "MultiviewLayout",
+                   static_cast<int>(MultiviewLayout::VERTICAL_RIGHT_8_SCENES));
+        return true;
+    }*/
 
-		strcpy(path, ent.path);
-		strcat(path, "/basic.ini");
-
-		ConfigFile config;
-		if (config.Open(path, CONFIG_OPEN_EXISTING) != 0)
-			continue;
-
-		const char* curName =
-			config_get_string(config, "General", "Name");
-		if (astrcmpi(curName, name) == 0) 
-		{
-			outputPath = ent.path;
-			break;
-		}
-	}
-
-	os_globfree(glob);
-
-	if (!outputPath.empty()) 
-	{
-		replace(outputPath.begin(), outputPath.end(), '\\', '/');
-		const char* start = strrchr(outputPath.c_str(), '/');
-		if (start)
-			outputPath.erase(0, start - outputPath.c_str() + 1);
-	}
-
-	return outputPath;
-}
-
-bool AFConfigManager::_UpdateNvencPresets()
-{
-	if (config_has_user_value(m_BasicConfig, "SimpleOutput", "NVENCPreset2") ||
-		!config_has_user_value(m_BasicConfig, "SimpleOutput", "NVENCPreset"))
-		return false;
-
-	const char* streamEncoder =
-		config_get_string(m_BasicConfig, "SimpleOutput", "StreamEncoder");
-	const char* nvencPreset =
-		config_get_string(m_BasicConfig, "SimpleOutput", "NVENCPreset");
-
-	OBSDataAutoRelease data = obs_data_create();
-	obs_data_set_string(data, "preset", nvencPreset);
-
-	//if (astrcmpi(streamEncoder, "nvenc_hevc") == 0) {
-	//	convert_nvenc_hevc_presets(data);
-	//}
-	//else {
-	//	convert_nvenc_h264_presets(data);
-	//}
-
-	config_set_string(m_BasicConfig, "SimpleOutput", "NVENCPreset2",
-					  obs_data_get_string(data, "preset2"));
-
-	return true;
-}
-
-void AFConfigManager::_SetDefaultValuesGlobalConfig()
-{
-    SetGlobalProgramConfig();
-    SetGlobalAudioConfig();
-    SetGlobalVideoConfig();
-    SetGlobalAccessibilityConfig();
-
-	config_set_default_uint(m_GlobalConfig, "General", "MaxLogs", 10);
-	config_set_default_int(m_GlobalConfig, "General", "InfoIncrement", -1);
-	config_set_default_string(m_GlobalConfig, "General", "ProcessPriority",
-							  "Normal");
-	config_set_default_bool(m_GlobalConfig, "General", "EnableAutoUpdates",
-							true);
-
-	config_set_default_bool(m_GlobalConfig, "General", "ConfirmOnExit", true);
-
-
-
-	config_set_default_string(m_GlobalConfig, "General", "HotkeyFocusType",
-							  "NeverDisableHotkeys");
-
-#ifdef _WIN32
-	config_set_default_bool(m_GlobalConfig, "Audio", "DisableAudioDucking", 
-							true);
-	config_set_default_bool(m_GlobalConfig, "General", "BrowserHWAccel",
-							true);
-#endif
-
-#ifdef __APPLE__
-	config_set_default_bool(m_GlobalConfig, "General", "BrowserHWAccel",
-							true);
-#endif
-	return;
+    return false;
 }
 
 bool AFConfigManager::_InitGlobalConfig()
 {
-	ProfileScope("AFConfigManager::_InitGlobalConfig");
+    ProfileScope("AFConfigManager::_InitGlobalConfig");
 
+    char path[512];
+    bool changed = false;
 
-	bool res = false;
+    int len = GetAppConfigPath(path, sizeof(path), (LOCAL_FOLDER_NAME + "/global.ini").c_str());
+    if(len <= 0)
+        return false;
 
+    int errorcode = m_appConfig.Open(path, CONFIG_OPEN_ALWAYS);
+    if(errorcode != CONFIG_SUCCESS) {
+        OBSErrorBox(NULL, "Failed to open global.ini: %d", errorcode);
+        return false;
+    }
 
-	char path[512];
-	bool changed = false;
+    uint32_t lastVersion = config_get_int(m_appConfig, "General", "LastVersion");
+    if(lastVersion < MAKE_SEMANTIC_VERSION(31, 0, 0)) {
+        bool migratedUserSettings = config_get_bool(m_appConfig, "General", "Pre31Migrated");
 
-	int len = GetConfigPath(path, sizeof(path), "SOOPStudio/global.ini");
-	if (len <= 0)
-		return res;
-	
+        if(!migratedUserSettings) {
+            bool migrated = MigrateGlobalSettings();
 
-	int errorcode = m_GlobalConfig.Open(path, CONFIG_OPEN_ALWAYS);
-	if (errorcode != CONFIG_SUCCESS) {
-		AFErrorBox(NULL, "Failed to open global.ini: %d", errorcode);
-		return res;
-	}
+            config_set_bool(m_appConfig, "General", "Pre31Migrated", migrated);
+            config_save_safe(m_appConfig, "tmp", nullptr);
+        }
+    }
 
-	if (!m_strStartingCollection.empty()) 
-	{
-		std::string path = _GetSceneCollectionFileFromName(m_strStartingCollection.c_str());
-		if (!path.empty())
-		{
-			config_set_string(m_GlobalConfig, "Basic", "SceneCollection",
-							  m_strStartingCollection.c_str());
-			config_set_string(m_GlobalConfig, "Basic",
-							  "SceneCollectionFile", path.c_str());
+    InitGlobalConfigDefaults();
+    InitGlobalLocationDefaults();
 
-			changed = true;
-		}
-	}
+    const char* uuid = config_get_string(m_appConfig, "General", "ModuleUUID");
+    if (!uuid)
+    {
+        m_moduleUUID = QUuid::createUuid().toString().toStdString();
+        config_set_string(m_appConfig, "General", "ModuleUUID", m_moduleUUID.c_str());
 
-	if (!m_strStartingProfile.empty())
-	{
-		std::string path = _GetProfileDirFromName(m_strStartingProfile.c_str());
-		if (!path.empty()) 
-		{
-			config_set_string(m_GlobalConfig, "Basic", "Profile",
-							  m_strStartingProfile.c_str());
-			config_set_string(m_GlobalConfig, "Basic", "ProfileDir",
-							  path.c_str());
+        m_init_firstrun = true;
+    }
+    else
+        m_moduleUUID = uuid;
 
-			changed = true;
-		}
-	}
+    if(ARGOPTION.GetPortableMode()) {
+        m_userConfigLocation = std::filesystem::u8path(config_get_default_string(m_appConfig, "Locations", "Configuration"));
+        m_userScenesLocation = std::filesystem::u8path(config_get_default_string(m_appConfig, "Locations", "SceneCollections"));
+        m_userProfilesLocation = std::filesystem::u8path(config_get_default_string(m_appConfig, "Locations", "Profiles"));
+    } else {
+        m_userConfigLocation = std::filesystem::u8path(config_get_string(m_appConfig, "Locations", "Configuration"));
+        m_userScenesLocation = std::filesystem::u8path(config_get_string(m_appConfig, "Locations", "SceneCollections"));
+        m_userProfilesLocation = std::filesystem::u8path(config_get_string(m_appConfig, "Locations", "Profiles"));
+    }
 
-	uint32_t lastVersion =
-		config_get_int(m_GlobalConfig, "General", "LastVersion");
+    bool userConfigResult = InitUserConfig(m_userConfigLocation, lastVersion);
+    return userConfigResult;
 
-	if (!config_has_user_value(m_GlobalConfig, "General", "Pre19Defaults")) {
-		bool useOldDefaults = lastVersion &&
-								lastVersion <
-								MAKE_SEMANTIC_VERSION(19, 0, 0);
-
-		config_set_bool(m_GlobalConfig, "General", "Pre19Defaults",
-						useOldDefaults);
-
-
-		changed = true;
-	}
-
-	if (!config_has_user_value(m_GlobalConfig, "General", "Pre21Defaults")) {
-		bool useOldDefaults = lastVersion &&
-								lastVersion <
-								MAKE_SEMANTIC_VERSION(21, 0, 0);
-
-		config_set_bool(m_GlobalConfig, "General", "Pre21Defaults",
-						useOldDefaults);
-
-
-		changed = true;
-	}
-
-	if (!config_has_user_value(m_GlobalConfig, "General", "Pre23Defaults")) {
-		bool useOldDefaults = lastVersion &&
-								lastVersion <
-								MAKE_SEMANTIC_VERSION(23, 0, 0);
-
-		config_set_bool(m_GlobalConfig, "General", "Pre23Defaults",
-						useOldDefaults);
-
-
-		changed = true;
-	}
-
-	const char* uuid = config_get_string(m_GlobalConfig, "General", "ModuleUUID");
-	if (!uuid)
-	{
-		m_strModuleUUID = QUuid::createUuid().toString().toStdString();
-		config_set_string(m_GlobalConfig, "General", "ModuleUUID",
-			m_strModuleUUID.c_str());
-	}
-	else
-		m_strModuleUUID = uuid;
-
-#define PRE_24_1_DEFS "Pre24.1Defaults"
-	if (!config_has_user_value(m_GlobalConfig, "General", PRE_24_1_DEFS)) {
-		bool useOldDefaults = lastVersion &&
-								lastVersion <
-								MAKE_SEMANTIC_VERSION(24, 1, 0);
-
-		config_set_bool(m_GlobalConfig, "General", PRE_24_1_DEFS,
-						useOldDefaults);
-
-
-		changed = true;
-	}
-#undef PRE_24_1_DEFS
-
-
-	if (lastVersion && lastVersion < MAKE_SEMANTIC_VERSION(24, 0, 0)) {
-		bool disableHotkeysInFocus = config_get_bool(
-			m_GlobalConfig, "General", "DisableHotkeysInFocus");
-		if (disableHotkeysInFocus)
-			config_set_string(m_GlobalConfig, "General",
-							  "HotkeyFocusType",
-							  "DisableHotkeysInFocus");
-
-
-		changed = true;
-	}
-
-	if (changed)
-		config_save_safe(m_GlobalConfig, "tmp", nullptr);
-
-
-	_SetDefaultValuesGlobalConfig();
-
-
-	res = true;
-
-
-	return res;
 }
 
-bool AFConfigManager::_InitBasicConfig(uint32_t cntAssocScreen,
-									   uint32_t cxPrimaryScreen, uint32_t cyPrimaryScreen,
-									   float devicePixelRatio)
+bool AFConfigManager::_InitBasicConfig()
 {
-	ProfileScope("AFConfigManager::_InitBasicConfig");
+    ProfileScope("AFConfigManager::_InitBasicConfig");
 
-	char configPath[512] = {0,};
-	int ret = GetProfilePath(configPath, sizeof(configPath), "");
-	if (ret <= 0) {
-		AFErrorBox(nullptr, "Failed to get profile path");
-		return false;
-	}
+    MAIN_PROFILE->RefreshProfiles(true);
 
-	if (os_mkdir(configPath) == MKDIR_ERROR) {
-		AFErrorBox(nullptr, "Failed to create profile path");
-		return false;
-	}
+    auto& stringProfile = ARGOPTION.startingProfile();
+    std::string currentProfileName {config_get_string(m_userConfig, "Basic", "Profile")};
+    if(currentProfileName.empty()) {
+        currentProfileName = Str("Untitled");
+        config_set_string(m_userConfig, "Basic", "Profile", Str("Untitled"));
+    }
 
-	ret = GetProfilePath(configPath, sizeof(configPath), "basic.ini");
-	if (ret <= 0) {
-		AFErrorBox(nullptr, "Failed to get basic.ini path");
-		return false;
-	}
+    const std::optional<OBSProfile> currentProfile = MAIN_PROFILE->GetProfileByName(currentProfileName);
+    const std::optional<OBSProfile> foundProfile = MAIN_PROFILE->GetProfileByName(stringProfile);
 
-	int code = m_BasicConfig.Open(configPath, CONFIG_OPEN_ALWAYS);
-	if (code != CONFIG_SUCCESS) {
-		AFErrorBox(NULL, "Failed to open basic.ini: %d", code);
-		return false;
-	}
+    try {
+        if(foundProfile) {
+            MAIN_PROFILE->ActivateProfile(foundProfile.value());
+        } else if(currentProfile) {
+            MAIN_PROFILE->ActivateProfile(currentProfile.value());
+        } else {
+            const OBSProfile& newProfile = MAIN_PROFILE->CreateProfile(currentProfileName);
+            MAIN_PROFILE->ActivateProfile(newProfile);
+        }
+    } catch(const std::logic_error&) {
+        OBSErrorBox(NULL, "Failed to open basic.ini: %d", -1);
+        return false;
+    }
 
-	if (config_get_string(m_BasicConfig, "General", "Name") == nullptr) {
-		const char* curName = config_get_string(m_GlobalConfig,
-												"Basic", "Profile");
-
-		config_set_string(m_BasicConfig, "General", "Name", curName);
-		m_BasicConfig.SaveSafe("tmp");
-	}
-
-	return SetDefaultValuesBasicConfig(cntAssocScreen, cxPrimaryScreen, 
-									   cyPrimaryScreen, devicePixelRatio);
+    return true;
 }
-
+     
 void AFConfigManager::_move_basic_to_profiles(void)
 {
-	auto& localeTextManager = AFLocaleTextManager::GetSingletonInstance();
-	//
-	char path[512] = {0,};
-	char new_path[512] = {0,};
-	os_glob_t* glob = NULL;
+    char path[512] = {0,};
+    char new_path[512] = {0,};
+    os_glob_t* glob = NULL;
 
-	/* if not first time use */
-	if(GetConfigPath(path, 512, "SOOPStudio/basic") <= 0)
-		return;
-	if(!os_file_exists(path))
-		return;
+    /* if not first time use */
+    if(GetAppConfigPath(path, 512, (LOCAL_FOLDER_NAME + "/basic").c_str()) <= 0)
+        return;
 
-	/* if the profiles directory doesn't already exist */
-	if(GetConfigPath(new_path, 512, "SOOPStudio/basic/profiles") <= 0)
-		return;
-	if(os_file_exists(new_path))
-		return;
+    const std::filesystem::path basicPath = std::filesystem::u8path(path);
+    if(!std::filesystem::exists(basicPath))
+        return;
 
-	if(os_mkdir(new_path) == MKDIR_ERROR)
-		return;
+    const std::filesystem::path profilesPath = USERPROFILE_PATH / std::filesystem::u8path(LOCAL_FOLDER_NAME + "/basic/profiles");
+    if(std::filesystem::exists(profilesPath))
+        return;
 
-	strcat(new_path, "/");
-	strcat(new_path, localeTextManager.Str("Untitled"));
-	if(os_mkdir(new_path) == MKDIR_ERROR)
-		return;
+    try {
+        std::filesystem::create_directories(profilesPath);
+    } catch(const std::filesystem::filesystem_error& error) {
+        blog(LOG_ERROR, "Failed to create profiles directory for migration from basic profile\n%s",
+             error.what());
+        return;
+    }
 
-	strcat(path, "/*.*");
-	if(os_glob(path, 0, &glob) != 0)
-		return;
+    const std::filesystem::path newProfilePath = profilesPath / std::filesystem::u8path(Str("Untitled"));
+    for(auto& entry : std::filesystem::directory_iterator(basicPath)) {
+        if(entry.is_directory())
+            continue;
 
-	strcpy(path, new_path);
+        if(entry.path().filename().u8string() == "scenes.json")
+            continue;
 
-	for(size_t i = 0; i < glob->gl_pathc; i++) {
-		struct os_globent ent = glob->gl_pathv[i];
-		char* file;
+        if(!std::filesystem::exists(newProfilePath)) {
+            try {
+                std::filesystem::create_directory(newProfilePath);
+            } catch(const std::filesystem::filesystem_error& error) {
+                blog(LOG_ERROR, "Failed to create profile directory for 'Untitled'\n%s", error.what());
+                return;
+            }
+        }
 
-		if(ent.directory)
-			continue;
+        const std::filesystem::path destinationFile = newProfilePath / entry.path().filename();
 
-		file = strrchr(ent.path, '/');
-		if(!file++)
-			continue;
+        const auto copyOptions = std::filesystem::copy_options::overwrite_existing;
 
-		if(astrcmpi(file, "scenes.json") == 0)
-			continue;
+        try {
+            std::filesystem::copy(entry.path(), destinationFile, copyOptions);
+        } catch(const std::filesystem::filesystem_error& error) {
+            blog(LOG_ERROR, "Failed to copy basic profile file '%s' to new profile 'Untitled'\n%s",
+                 entry.path().filename().u8string().c_str(), error.what());
 
-		strcpy(new_path, path);
-		strcat(new_path, "/");
-		strcat(new_path, file);
-		os_rename(ent.path, new_path);
-	}
-
-	os_globfree(glob);
+            return;
+        }
+    }
 }
 void AFConfigManager::_move_basic_to_scene_collections(void)
 {
-	auto& localeTextManager = AFLocaleTextManager::GetSingletonInstance();
-	//
-	char path[512] = {0,};
-	char new_path[512] = {0,};
-	if(GetConfigPath(path, 512, "SOOPStudio/basic") <= 0)
-		return;
-	if(!os_file_exists(path))
-		return;
+    char path[512] = {0,};
+    if(GetAppConfigPath(path, 512, (LOCAL_FOLDER_NAME + "/basic").c_str()) <= 0)
+        return;
 
-	if(GetConfigPath(new_path, 512, "SOOPStudio/basic/scenes") <= 0)
-		return;
-	if(os_file_exists(new_path))
-		return;
+    const std::filesystem::path basicPath = std::filesystem::u8path(path);
+    if(!std::filesystem::exists(basicPath))
+        return;
 
-	if(os_mkdir(new_path) == MKDIR_ERROR)
-		return;
+    const std::filesystem::path sceneCollectionPath = USERSCENES_PATH / std::filesystem::u8path(LOCAL_FOLDER_NAME + "/basic/scenes");
+    if(std::filesystem::exists(sceneCollectionPath))
+        return;
 
-	strcat(path, "/scenes.json");
-	strcat(new_path, "/");
-	strcat(new_path, localeTextManager.Str("Untitled"));
-	strcat(new_path, ".json");
+    try {
+        std::filesystem::create_directories(sceneCollectionPath);
+    } catch(const std::filesystem::filesystem_error& error) {
+        blog(LOG_ERROR,
+             "Failed to create scene collection directory for migration from basic scene collection\n%s",
+             error.what());
+        return;
+    }
 
-	os_rename(path, new_path);
+    const std::filesystem::path sourceFile = basicPath / std::filesystem::u8path("scenes.json");
+    const std::filesystem::path destinationFile =
+        (sceneCollectionPath / std::filesystem::u8path(Str("Untitled"))).replace_extension(".json");
+
+    try {
+        std::filesystem::rename(sourceFile, destinationFile);
+    } catch(const std::filesystem::filesystem_error& error) {
+        blog(LOG_ERROR, "Failed to rename basic scene collection file:\n%s", error.what());
+        return;
+    }
 }

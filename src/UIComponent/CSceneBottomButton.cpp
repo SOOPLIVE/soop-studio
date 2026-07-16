@@ -9,6 +9,9 @@
 #include <QGuiApplication>
 #include <QScreen>
 
+#include "qt-wrappers.hpp"
+
+
 AFQSceneBottomButton::AFQSceneBottomButton(QWidget* parent, OBSScene scene,
     int index, QString name) :
     QFrame(parent),
@@ -21,173 +24,133 @@ AFQSceneBottomButton::AFQSceneBottomButton(QWidget* parent, OBSScene scene,
 
     setFixedHeight(30);
 
-    QString sceneIndex = QString("Scene %1").arg(index + 1);
+    QString sceneIndex = QString("%1").arg(index + 1);
 
-    m_labelSceneIndex = new QLabel(this);
-    m_labelSceneIndex->setFixedHeight(20);
-    m_labelSceneIndex->setText(sceneIndex);
-    m_labelSceneIndex->setObjectName("sceneButtonIndex");
-    m_labelSceneIndex->setStyleSheet("color : rgba(255, 255, 255, 70%); \
-                                      font-size : 14px; font-style: normal; font-weight: 400; line-height: normal;  \
-                                      ");
+    m_plabelSceneIndex = new QLabel(this);
+    m_plabelSceneIndex->setFixedHeight(20);
+    m_plabelSceneIndex->setText(sceneIndex);
+    m_plabelSceneIndex->setObjectName("sceneButtonIndex");
 
-    m_labelSceneName = new AFQElidedSlideLabel(this);
-    m_labelSceneName->setMaximumWidth(106);
-    m_labelSceneName->setFixedHeight(20);
-    m_labelSceneName->setObjectName("sceneButtonName");
-    m_labelSceneName->setStyleSheet("color : rgba(255, 255, 255, 70%); \
-                                     font-size: 14px; font-style: normal; font-weight: 400; line-height: normal;");
+    m_pLabelSceneName = new AFQElidedSlideLabel(this);
+    m_pLabelSceneName->setObjectName("sceneButtonName");
+    m_pLabelSceneName->setMaximumWidth(106);
+    m_pLabelSceneName->setFixedHeight(20);
 
-    m_labelSceneName->setText(name);
-    m_labelNameWidth = m_labelSceneName->width();
+    m_pLabelSceneName->setText(name);
+    m_labelNameWidth = m_pLabelSceneName->width();
 
     connect(this, &AFQSceneBottomButton::qsignalHoverButton,
-            m_labelSceneName, &AFQElidedSlideLabel::qSlotHoverButton);
+            m_pLabelSceneName, &AFQElidedSlideLabel::qslotHoverButton);
 
     connect(this, &AFQSceneBottomButton::qsignalLeaveButton,
-            m_labelSceneName, &AFQElidedSlideLabel::qSlotLeaveButton);
+            m_pLabelSceneName, &AFQElidedSlideLabel::qslotLeaveButton);
 
     QVBoxLayout* layoutMiddleLine = new QVBoxLayout();
     layoutMiddleLine->setContentsMargins(0, 3, 0, 0);
 
-    m_frameMiddleLine = new QFrame(this);
-    m_frameMiddleLine->setFixedSize(QSize(1, 10));
-    m_frameMiddleLine->setStyleSheet("QFrame { background-color : rgba(255, 255, 255, 10%);}");
+    m_pFrameMiddleLine = new QFrame(this);
+    m_pFrameMiddleLine->setObjectName("frameMiddleLine");
+    m_pFrameMiddleLine->setFixedSize(QSize(1, 10));
 
-    layoutMiddleLine->addWidget(m_frameMiddleLine, Qt::AlignVCenter);
+    layoutMiddleLine->addWidget(m_pFrameMiddleLine, Qt::AlignVCenter);
 
-    m_pScreenshotScene = new QLabel(this);
-    m_pScreenshotScene->setWindowFlags(Qt::ToolTip);
-    m_pScreenshotScene->setStyleSheet("QLabel { border: 1px solid #00E0FF; }");
-    m_pScreenshotScene->setFixedSize(208, 117);
-    m_pScreenshotScene->hide();
 
-    hLayout->addWidget(m_labelSceneIndex);
+    hLayout->addWidget(m_plabelSceneIndex);
     hLayout->addLayout(layoutMiddleLine);
-    hLayout->addWidget(m_labelSceneName);
+    hLayout->addWidget(m_pLabelSceneName);
 
     this->setLayout(hLayout);
 
-    m_timerScreenShot = new QTimer(this);
-    connect(m_timerScreenShot, &QTimer::timeout,
-            this, &AFQSceneBottomButton::qslotTimerScreenShot);
-
-    m_timerHoverPreview = new QTimer(this);
-    connect(m_timerHoverPreview, &QTimer::timeout,
+    m_pTimerHoverPreview = new QTimer(this);
+    connect(m_pTimerHoverPreview, &QTimer::timeout,
             this, &AFQSceneBottomButton::qslotTimerHoverPreview);
 
 }
 
 AFQSceneBottomButton::~AFQSceneBottomButton()
 {
+    if (m_sceneListPreviewWidget) {
+        m_sceneListPreviewWidget->close();
+        m_sceneListPreviewWidget = nullptr;
+    }
     m_obsScene = nullptr;
-    delete m_pScreenshotObj;
-    m_pScreenshotObj = nullptr;
 }
 
 void AFQSceneBottomButton::SetSelectedState(bool selected)
 {
     if (selected) {
         setProperty("sceneBtnType", "selected");
-        m_labelSceneIndex->setStyleSheet("QLabel {					\
-										   color : #00E0FF; }");
-
-
-        m_frameMiddleLine->setStyleSheet("QFrame { \
-                                          background-color : #166C7B;}");
-
-        m_labelSceneName->setStyleSheet("QLabel {			\
-										   color : #00E0FF;}");
+        m_plabelSceneIndex->setProperty("selected", true);
+        m_pFrameMiddleLine->setProperty("selected", true);
+        m_pLabelSceneName->setProperty("selected", true);
     }
     else {
         setProperty("sceneBtnType", "");
-        m_labelSceneIndex->setStyleSheet("QLabel {								\
-										   color : rgba(255, 255, 255, 70%);}");
-
-        m_frameMiddleLine->setStyleSheet("QFrame { \
-                                          background-color : rgba(255, 255, 255, 10%);}");
-
-        m_labelSceneName->setStyleSheet("QLabel {			\
-										   color : rgba(255, 255, 255, 70%);}");
+        m_plabelSceneIndex->setProperty("selected", false);
+        m_pFrameMiddleLine->setProperty("selected", false);
+        m_pLabelSceneName->setProperty("selected", false);
     }
 
-    style()->unpolish(this);
-    style()->polish(this);
+    PolishStyleSheet(m_plabelSceneIndex);
+    PolishStyleSheet(m_pFrameMiddleLine);
+    PolishStyleSheet(m_pLabelSceneName);
+    PolishStyleSheet(this);
 
-    m_bSelected = selected;
+    m_selected = selected;
 
 }
 
 void AFQSceneBottomButton::_ShowPreveiw(bool on)
 {
-    if (!m_pScreenshotScene || !m_timerScreenShot)
-        return;
+    if (on) {
+        m_pTimerHoverPreview->start(300);
+    }
 
-    if (on /*&& !m_pScreenshotScene->isVisible()*/) {
-        if (!m_pScreenshotScene->isVisible()) {
-            if (!m_timerScreenShot->isActive()) {
-                qslotTimerScreenShot();
-
-                m_timerHoverPreview->start(300);
-                m_timerScreenShot->start(1000);
-            }
+    if (!on) {
+        m_pTimerHoverPreview->stop();
+        if (m_sceneListPreviewWidget) {
+            m_sceneListPreviewWidget->close();
+            m_sceneListPreviewWidget = nullptr;
         }
     }
-
-    if (!on /*&& m_pScreenshotScene->isVisible()*/) {
-        m_timerScreenShot->stop();
-        m_timerHoverPreview->stop();
-        m_pScreenshotScene->hide();
-
-        if (m_pScreenshotScene)
-            m_pScreenshotScene->setPixmap(QPixmap());
-    }
-}
-
-void AFQSceneBottomButton::qslotTimerScreenShot()
-{
-    obs_source_t* source = obs_scene_get_source(m_obsScene);
-    delete m_pScreenshotObj;
-    m_pScreenshotObj = new AFQScreenShotObj(source,
-                                            AFQScreenShotObj::Type::Screenshot_SceneButton);
-
-    connect(m_pScreenshotObj, &AFQScreenShotObj::qsignalSetPreview,
-            this, &AFQSceneBottomButton::qslotSetScreenShotPreview);
-
 }
 
 void AFQSceneBottomButton::qslotTimerHoverPreview()
 {
-    m_timerHoverPreview->stop();
+    m_pTimerHoverPreview->stop();
 
-    QRect screenRect = QGuiApplication::primaryScreen()->geometry();
+    m_sceneListPreviewWidget = new AFQSceneListPreview(nullptr, obs_scene_get_source(m_obsScene));
+
     QPoint pos = QCursor::pos();
+
+    QRect pointInScreenRect;
+    QList<QScreen*> screens = QGuiApplication::screens();
+    for (QScreen* screen : screens) {
+        QRect rcScreen = screen->geometry();
+        if (rcScreen.contains(pos)) {
+            pointInScreenRect = rcScreen;
+            break;
+        }
+    }
 
     int x = pos.x();
     int y = pos.y();
 
-    if (pos.x() + m_pScreenshotScene->width() > screenRect.width())
-        x = pos.x() - m_pScreenshotScene->width() - 10;
+    if (pos.x() + m_sceneListPreviewWidget->width() > pointInScreenRect.x() + pointInScreenRect.width())
+        x = pos.x() - m_sceneListPreviewWidget->width() - 10;
     else
         x = pos.x() + 10;
 
-    if (pos.y() + m_pScreenshotScene->height() > screenRect.height())
-        y = pos.y() - m_pScreenshotScene->height() - 10;
+    if (pos.y() + m_sceneListPreviewWidget->height() > pointInScreenRect.y() + pointInScreenRect.height())
+        y = pos.y() - m_sceneListPreviewWidget->height() - 10;
     else
         y = pos.y() + 10;
 
     pos.setX(x);
     pos.setY(y);
 
-    m_pScreenshotScene->move(pos);
-    m_pScreenshotScene->show();
-}
-
-
-void AFQSceneBottomButton::qslotSetScreenShotPreview()
-{
-    QPixmap pixmap = m_pScreenshotObj->GetPixmap();
-    m_pScreenshotScene->setPixmap(pixmap.scaled(208, 117));
+    m_sceneListPreviewWidget->move(pos);
+    m_sceneListPreviewWidget->show();
 }
 
 void AFQSceneBottomButton::mousePressEvent(QMouseEvent* event)
@@ -210,7 +173,7 @@ void AFQSceneBottomButton::enterEvent(QEnterEvent* event)
 {
     emit qsignalHoverButton(QString());
 
-    if(!m_bSelected)
+    if(!m_selected)
         _ShowPreveiw(true);
 
     QFrame::enterEvent(event);

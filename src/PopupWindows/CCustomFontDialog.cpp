@@ -4,9 +4,9 @@
 
 #include <QListView>
 
-// exist code : QStyledItemDelegate
 #include <QStyledItemDelegate>
 #include <QPainter>
+
 class NoFocusListTempDelegate : public QStyledItemDelegate {
 public:
 	using QStyledItemDelegate::QStyledItemDelegate;
@@ -20,30 +20,35 @@ public:
 
 AFQCustomFontDialog::AFQCustomFontDialog(bool* ok, const QFont& initial, const QString& title,
 									   QWidget* parent, QFontDialog::FontDialogOptions options) :
-	AFQRoundedDialogBase((QDialog*)parent),
+	AFTTopBaseDialog((QDialog*)parent),
 	ui(new Ui::AFQCustomFontDialog)
 {
 	ui->setupUi(this);
 
-	m_fontFrame = new QFontDialog(initial, this);
-	m_fontFrame->setWindowFlags(Qt::Widget);
+#ifdef _WIN32
+	ui->titleFrame->setProperty("MoveInAllArea", true);
+#elif defined(__APPLE__)
+    setWindowFlags(Qt::Window|Qt::WindowCloseButtonHint|Qt::CustomizeWindowHint);
+    ui->titleFrame->hide();
+#endif
 
-	connect(m_fontFrame, &QDialog::accepted, this, &AFQCustomFontDialog::qSlotAccept);
-	connect(m_fontFrame, &QDialog::rejected, this, &AFQCustomFontDialog::qSlotAccept);
-	connect(ui->closeButton, &QPushButton::clicked , this, &AFQCustomFontDialog::qSlotAccept);
+	m_pFontFrame = new QFontDialog(initial, this);
+	m_pFontFrame->setWindowFlags(Qt::Widget);
+
+	connect(m_pFontFrame, &QDialog::accepted, this, &AFQCustomFontDialog::qslotAccept);
+	connect(m_pFontFrame, &QDialog::rejected, this, &AFQCustomFontDialog::qslotReject);
+	connect(ui->closeButton, &QPushButton::clicked , this, &AFQCustomFontDialog::qslotReject);
 	
 	ui->labelTitle->setText(title);
-	ui->layoutFontPicker->addWidget((QWidget*)m_fontFrame);
+	ui->layoutFontPicker->addWidget((QWidget*)m_pFontFrame);
 
-	QList<QListView*> listViews = m_fontFrame->findChildren<QListView*>();
+	QList<QListView*> listViews = m_pFontFrame->findChildren<QListView*>();
 	for (QListView* listView : listViews) {
-		NoFocusListTempDelegate* delegate = new NoFocusListTempDelegate(m_fontFrame);
+		NoFocusListTempDelegate* delegate = new NoFocusListTempDelegate(m_pFontFrame);
 		listView->setItemDelegate(delegate);
 	}
 
-	setStyleSheet("AFQCustomFontDialog { border:1px solid #111 }");
-
-	this->SetWidthFixed(true);
+	SetWidthResizeEnabled(false);
 }
 
 AFQCustomFontDialog::~AFQCustomFontDialog()
@@ -57,8 +62,8 @@ QFont AFQCustomFontDialog::getFont(bool* ok, const QFont& initial, QWidget* pare
 {
 	AFQCustomFontDialog dlg(ok, initial, title, parent, options);
 
-	dlg.m_fontFrame->setOptions(options);
-	dlg.m_fontFrame->setCurrentFont(initial);
+	dlg.m_pFontFrame->setOptions(options);
+	dlg.m_pFontFrame->setCurrentFont(initial);
 	if (!title.isEmpty())
 		dlg.setWindowTitle(title);
 
@@ -66,19 +71,19 @@ QFont AFQCustomFontDialog::getFont(bool* ok, const QFont& initial, QWidget* pare
 	if (ok)
 		*ok = !!ret;
 	if (ret) {
-		return dlg.m_fontFrame->selectedFont();;
+		return dlg.m_pFontFrame->selectedFont();
 	}
 	else {
 		return initial;
 	}
 }
 
-void AFQCustomFontDialog::qSlotAccept()
+void AFQCustomFontDialog::qslotAccept()
 {
 	this->accept();
 }
 
-void AFQCustomFontDialog::qSlotReject()
+void AFQCustomFontDialog::qslotReject()
 {
 	this->reject();
 }

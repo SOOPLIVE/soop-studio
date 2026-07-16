@@ -3,12 +3,11 @@
 
 #include <QPushButton>
 #include <QTimer>
-#include <QGraphicsOpacityEffect>
 
 class AFQCustomPushbutton : public QPushButton
 {
-#pragma region QT Field
     Q_OBJECT
+
 public:
     explicit AFQCustomPushbutton(QWidget* parent = nullptr);
 
@@ -18,38 +17,30 @@ signals:
     void qsignalMouseMove();
     void qsignalMouseStop();
 	void qsignalButtonDoubleClicked();
+    void qsignalMousePressed();
+    void qsignalMouseReleased();
 
-public slots:
-    void qslotDelayTimeout();
-
-#pragma endregion QT Field
-
-#pragma region public func
 public:
-    void SetOpacityValue();
-    void SetButtonKeyValue(int keyValue) { m_iKeyValue = keyValue; };
-    int ButtonKeyValue() { return m_iKeyValue; };
-#pragma endregion public func
-
-#pragma region protected func
+    void SetButtonKeyValue(int keyValue) { m_keyValue = keyValue; };
+    int ButtonKeyValue() { return m_keyValue; };
 
 protected:
     bool event(QEvent* event) override;
-#pragma endregion protected func
 
-#pragma region private func
 private:
-    void _ChangeOpacity();
-#pragma endregion private func
-
-#pragma region private member var
-private:
-    bool m_bHoverDelay = false;
-    QTimer* m_iDelayTime = nullptr;
-    int m_iKeyValue = 0;
-    
-    QGraphicsOpacityEffect* m_qOpacityEffect = nullptr;
-#pragma endregion private member var
+    bool m_hoverDelay = false;
+    int m_keyValue = 0;
 };
 
+
+class AFQHoverOnlyPushButton : public QPushButton
+{
+    Q_OBJECT
+
+public:
+    explicit AFQHoverOnlyPushButton(QWidget* parent = nullptr);
+
+protected:
+    bool eventFilter(QObject* obj, QEvent* event);
+};
 #endif // AFQCUSTOMPUSHBUTTON_H

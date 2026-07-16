@@ -1,6 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "Application/CApplication.h"
+
+#include "MainFrame/CMainFrame.h"
 
 class AFQMustRaiseMainFrameEventFilter : public QObject
 {
@@ -16,24 +18,24 @@ protected:
     {
         if (event->type() == QEvent::Expose)
         {
-            if (m_bCeckMainRaise == false)
+            if (m_checkMainRaise == false)
             {
-                m_bCeckMainRaise = true;
-                m_bNeedMainRaise = true;
+                m_checkMainRaise = true;
+                m_needMainRaise = true;
             }
         }
         
         if (event->type() == QEvent::Type::Paint)
         {
-            if (m_bNeedMainRaise && m_bCeckMainRaise)
+            if (m_needMainRaise && m_checkMainRaise)
             {
-                m_bNeedMainRaise = false;
-                App()->GetMainView()->raise();
+                m_needMainRaise = false;
+                MAINFRAME->raise();
             }
         }
         
         if (event->type() == QEvent::Type::FocusOut)
-            m_bCeckMainRaise = false;
+            m_checkMainRaise = false;
         
         return QObject::eventFilter(obj, event);
     }
@@ -41,7 +43,7 @@ protected:
 
 #pragma region private member var
 private:
-    bool        m_bCeckMainRaise = false;
-    bool        m_bNeedMainRaise = false;
+    bool        m_checkMainRaise = false;
+    bool        m_needMainRaise = false;
 #pragma endregion private member var
 };

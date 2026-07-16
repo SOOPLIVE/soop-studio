@@ -42,8 +42,6 @@ public:
 	static std::shared_ptr<AFAuth> Create(const std::string& service);
 	static Type AuthType(const std::string& service);
 	static bool External(const std::string& service);
-	static void Load();
-	static void Save();
 #pragma endregion public func
 
 #pragma region private func

@@ -4,13 +4,13 @@
 
 #include "obs.hpp"
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 namespace Ui {
 	class AFQBasicTransform;
 }
 
-class AFQBasicTransform : public AFQRoundedDialogBase {
+class AFQBasicTransform : public AFTTopBaseDialog {
 
 #pragma region QT Field, CTOR/DTOR
 	Q_OBJECT
@@ -37,6 +37,10 @@ private slots:
 
 #pragma endregion QT Field
 
+#pragma region protected func
+protected:
+	virtual void showEvent(QShowEvent* event) override;
+#pragma endregion protected func
 
 #pragma region private func
 private:
@@ -67,7 +71,7 @@ private:
 	OBSSignal m_signalSelect;
 	OBSSignal m_signalDeselect;
 
-	std::string undo_data;
+	std::string m_undoData;
 
 	bool m_ignoreTransformSignal = false;
 	bool m_ignoreItemChange = false;

@@ -4,10 +4,7 @@
 
 #include <obs.hpp>
 
-
 class QWidget;
-
-
 class AFMultiview final
 {
 #pragma region QT Field, CTOR/DTOR
@@ -21,10 +18,10 @@ public:
     void                        Update(bool drawLabel);
     void                        Render(uint32_t cx, uint32_t cy);
     OBSSource                   GetSourceByPosition(int x, int y, QWidget* rectWidget = nullptr);
-    void                        SetOnlyRenderSources(bool value) { m_bRenderOnlySource = value; };
-    void                        SetRenderLabel(bool value) { m_bRenderLabel = value; };
-    float                       GetDpi() { return m_fDpi; };
-    void                        SetDpi(float value) { m_fDpi = value; };
+    void                        SetOnlyRenderSources(bool value) { m_renderOnlySource = value; };
+    void                        SetRenderLabel(bool value) { m_renderLabel = value; };
+    float                       GetDpi() { return m_dpi; };
+    void                        SetDpi(float value) { m_dpi = value; };
 #pragma endregion public func
 
 #pragma region private func
@@ -35,48 +32,62 @@ public:
 
 #pragma region private member var
 private:
-    bool                        m_bRenderOnlySource = false;
-    bool                        m_bRenderLabel = true;
+    bool                        m_renderOnlySource = false;
+    bool                        m_renderLabel = true;
     
     
-    size_t                      maxSrcs, numSrcs;
-    gs_vertbuffer_t*            actionSafeMargin = nullptr;
-    gs_vertbuffer_t*            graphicsSafeMargin = nullptr;
-    gs_vertbuffer_t*            fourByThreeSafeMargin = nullptr;
-    gs_vertbuffer_t*            leftLine = nullptr;
-    gs_vertbuffer_t*            topLine = nullptr;
-    gs_vertbuffer_t*            rightLine = nullptr;
+    size_t                      m_maxSrcs, m_numSrcs;
+    gs_vertbuffer_t*            m_pActionSafeMargin = nullptr;
+    gs_vertbuffer_t*            m_pGraphicsSafeMargin = nullptr;
+    gs_vertbuffer_t*            m_pFourByThreeSafeMargin = nullptr;
+    gs_vertbuffer_t*            m_pLeftLine = nullptr;
+    gs_vertbuffer_t*            m_pTopLine = nullptr;
+    gs_vertbuffer_t*            m_pRightLine = nullptr;
 
-    std::vector<OBSWeakSource>  multiviewScenes;
-    std::vector<OBSSourceAutoRelease> multiviewLabels;
+    std::vector<OBSWeakSource>  m_multiviewScenes;
+    std::vector<OBSSourceAutoRelease> m_multiviewLabels;
     
     
-    float                       m_fDpi = 1.f;
+    float                       m_dpi = 1.f;
 
-    const uint16_t              labelSize = 128;
-    const uint16_t              labelLeftMargin = 10;
-    const uint16_t              labelLeftMarginx2 = labelLeftMargin * 2;
-    const uint16_t              labeTopMargin = 4;
-    const uint16_t              labeTopMarginx2 = labeTopMargin * 2;
-    const uint16_t              guideLineSize = 5;
-    const uint16_t              guideLineSizex2 = guideLineSize * 2;
+    const uint16_t              m_labelSize = 128;
+    const uint16_t              m_labelLeftMargin = 10;
+    const uint16_t              m_labelLeftMarginx2 = m_labelLeftMargin * 2;
+    const uint16_t              m_labeTopMargin = 4;
+    const uint16_t              m_labeTopMarginx2 = m_labeTopMargin * 2;
+    const uint16_t              m_guideLineSize = 5;
+    const uint16_t              m_guideLineSizex2 = m_guideLineSize * 2;
     
     
     // Multiview position helpers
-    float                       thickness = 20;
-    float                       offset, thicknessx2 = thickness * 2,
-                                pvwprgCX, pvwprgCY, sourceX,sourceY,
-                                labelX, labelY, scenesCX, scenesCY, ppiCX, ppiCY,
-                                siX, siY, siCX, siCY, ppiScaleX, ppiScaleY, siScaleX,
-                                siScaleY, fw, fh, ratio;
+    float                       m_thickness = 20;
+    float                       m_offset, m_thicknessx2 = m_thickness * 2,
+                                m_pvwprgCX, m_pvwprgCY, m_sourceX,m_sourceY,
+                                m_labelX, m_labelY, m_scenesCX, m_scenesCY, m_ppiCX, m_ppiCY,
+                                m_x, m_y, m_cX, m_cY, m_ppiScaleX, m_ppiScaleY, m_scaleX,
+                                m_scaleY, m_w, m_h, m_ratio;
 
     // argb colors
-    static const uint32_t blackColor = 0xFF000000;
-    static const uint32_t outerColor = 0xFF24272D;
-    static const uint32_t labelColor = 0xCE000000;
-    static const uint32_t backgroundColor = 0xFF181B20;
-    static const uint32_t programColor = 0xFFD1FF01;
-    static const uint32_t previewColor = 0xFF00E0FF;
+    static const uint32_t s_blackColor = 0xFF000000;
+    static const uint32_t s_outerColor = 0xFF24272D;
+    static const uint32_t s_labelColor = 0xCE000000;
+    static const uint32_t s_backgroundColor = 0xFF181B20;
+    static const uint32_t s_programColor = 0xFF00E0FF;
+    static const uint32_t s_previewColor = 0xFFFFFFFF;
 
 #pragma endregion private member var
 };
+
+static inline void startRegion(int vX, int vY, int vCX, int vCY, float oL, float oR, float oT, float oB)
+{
+    gs_projection_push();
+    gs_viewport_push();
+    gs_set_viewport(vX, vY, vCX, vCY);
+    gs_ortho(oL, oR, oT, oB, -100.0f, 100.0f);
+}
+
+static inline void endRegion()
+{
+    gs_viewport_pop();
+    gs_projection_pop();
+}

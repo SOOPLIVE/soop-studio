@@ -4,48 +4,59 @@
 #include <QMessageBox>
 #include <QGraphicsOpacityEffect>
 
-#include "obs-properties.h"
-#include "obs-source.h"
+#include <obs-source.h>
 
+#include "obs-properties.h"
+
+#include "qt-wrappers.hpp"
 #include "Application/CApplication.h"
-#include "./MainFrame/CMainFrame.h"
-#include "CoreModel/Auth/CAuthManager.h"
+
 #include "CoreModel/Config/CConfigManager.h"
+#include "CoreModel/Auth/CAuthManager.h"
+#include "CoreModel/Locale/CLocaleTextManager.h"
+
+#include "CoreModel/OBSOutput/COutput.h"
+#include "CoreModel/Video/CVideo.h"
 
 #include "CSettingTabButton.h"
-#include "CProgramSettingAreaWidget.h"
-#include "CStreamSettingAreaWidget.h"
-#include "COutputSettingAreaWidget.h"
-#include "CAudioSettingAreaWidget.h"
-#include "CVideoSettingAreaWidget.h"
-#include "CHotkeySettingAreaWidget.h"
-#include "CAccessibilitySettingAreaWidget.h"
-#include "CAdvancedSettingAreaWidget.h"
-#include "CoreModel/Locale/CLocaleTextManager.h"
+#include "CSettingProgramAreaWidget.h"
+#include "CSettingStreamAreaWidget.h"
+#include "CSettingOutputAreaWidget.h"
+#include "CSettingAudioAreaWidget.h"
+#include "CSettingVideoAreaWidget.h"
+#include "CSettingHotkeyAreaWidget.h"
+#include "CSettingAccessibilityAreaWidget.h"
+#include "CSettingAdvancedAreaWidget.h"
 #include "UIComponent/CMessageBox.h"
 
-#include "qt-wrapper.h"
+#include "MainFrame/CMainFrame.h"
+#include "MainFrame/Output/COutput.h"
 
 AFQStudioSettingDialog::AFQStudioSettingDialog(QWidget *parent) :
-    AFQRoundedDialogBase(parent),
-    m_MainFrame(qobject_cast<AFMainFrame*>(parent)),
+    AFTTopBaseDialog(parent),
     ui(new Ui::AFQStudioSettingDialog)
 {
     ui->setupUi(this);
 
-    m_pResetButton = ui->buttonBox->button(QDialogButtonBox::Reset);
-    ChangeStyleSheet(m_pResetButton, STYLESHEET_RESET_BUTTON);
+#ifdef __APPLE__
+    setWindowFlags(Qt::Window|Qt::WindowCloseButtonHint|Qt::CustomizeWindowHint);
+    setWindowTitle(QTStr("Settings"));
+    ui->titleFrame->hide();
+#endif
+    
+    SetWidthResizeEnabled(false);
 
-    SetWidthFixed(true);
+    resetButton = ui->buttonBox->button(QDialogButtonBox::Reset);
+    ChangeStyleSheet(resetButton, STYLESHEET_RESET_BUTTON);
+
     setAttribute(Qt::WA_DeleteOnClose);
 
-
     AFMainFrame* main = reinterpret_cast<AFMainFrame*>(parent);
-    connect(main, &AFMainFrame::qsignalToggleUseVideo, this, &AFQStudioSettingDialog::qslotToggleStreamingUI);
+    connect(main, &AFMainFrame::qsignalToggleUseVideo, this, &AFQStudioSettingDialog::ToggleStreamingUI);
 
    App()->DisableHotkeys();
 
-   emit qslotToggleStreamingUI(false);
+   ToggleStreamingUI(false);
 }
 
 AFQStudioSettingDialog::~AFQStudioSettingDialog()
@@ -55,71 +66,91 @@ AFQStudioSettingDialog::~AFQStudioSettingDialog()
     delete ui;
 }
 
-void AFQStudioSettingDialog::qslotCloseSetting()
+void AFQStudioSettingDialog::CloseSetting()
 {
-    if (_AnyChanges())
-        _QueryChanges();
+    if (AnyChanges())
+        if (QueryChanges() == false)
+            return;
 
-    if (m_pProgramSettingAreaWidget)
+    if (programWidget)
     {
-        m_pProgramSettingAreaWidget->SaveProgramPageSpreadState();
-
-        config_save_safe(AFConfigManager::GetSingletonInstance().GetGlobal(), "tmp", nullptr);
+        programWidget->SaveProgramPageSpreadState();
+        config_save_safe(APPCONFIG, "tmp", nullptr);
     }
-    
+
     close();
 }
 
-void AFQStudioSettingDialog::qslotTabButtonToggled()
+void AFQStudioSettingDialog::LogoutKR()
 {
+    g_bRestart = true;
+    MAINFRAME->IsRestartConfirmationNeeded(true);
+
+    close();
+}
+
+void AFQStudioSettingDialog::ToggleTabButton()
+{
+    videoSizeValid = true;
+	 
+#if 0
     if (_AnyChanges())
-        _QueryChanges();
+        _QueryChanges(true);
 
     AFQSettingTabButton* checkedButton = reinterpret_cast<AFQSettingTabButton*>(sender());
-    QList<AFQSettingTabButton*> buttonList = ui->widget_SettingTab->findChildren<AFQSettingTabButton*>();
-    foreach(AFQSettingTabButton * button, buttonList)
-    {
-        if (button != checkedButton)
-        {
-            button->setChecked(false);
-        }
+    if (m_currentTabNum == (int)TabType::VIDEO && !videoSizeValid) {
+        checkedButton->setChecked(false);
+        return;
     }
+#else
+    bool validChanges = true;
+    if (AnyChanges())
+        validChanges = QueryChanges(true);
+
+    AFQSettingTabButton* checkedButton = reinterpret_cast<AFQSettingTabButton*>(sender());
+    if (!validChanges) {
+        checkedButton->setChecked(false);
+        return;
+    }
+#endif
+
+    QList<AFQSettingTabButton*> buttonList = ui->tabWidget->findChildren<AFQSettingTabButton*>();
+    foreach(AFQSettingTabButton * button, buttonList)
+        if (button != checkedButton)
+            button->setChecked(false);
 
     ui->buttonBox->button(QDialogButtonBox::Cancel)->show();
     ui->buttonBox->button(QDialogButtonBox::Apply)->show();
 
-    QMetaEnum TabTypeEnum = QMetaEnum::fromType<TabType>();
-    int TabTypeNum = TabTypeEnum.keyToValue(checkedButton->GetButtonType());
-    switch (TabTypeNum)
+    QMetaEnum tabTypeEnum = QMetaEnum::fromType<TabType>();
+    int tabType = tabTypeEnum.keyToValue(checkedButton->GetButtonType());
+    switch (tabType)
     {
     case TabType::PROGRAM:
     {
-        m_pProgramSettingAreaWidget->LoadMainAccount();
+        programWidget->LoadMainAccount();
         break;
     }
     case TabType::STREAM:
     {
-        m_pStreamSettingAreaWidget->LoadStreamAccountSaved();
-        ui->buttonBox->button(QDialogButtonBox::Cancel)->hide();
-        ui->buttonBox->button(QDialogButtonBox::Apply)->hide();
-        break;
+        streamWidget->LoadStreamAccountSaved();
+         break;
     }
     case TabType::OUTPUT:
     {
-        QString strAdvVEncoder = m_pVideoSettingAreaWidget->GetAdvVideoEncoder();
-        QString strAdvAEncoder = m_pAudioSettingAreaWidget->GetAdvAudioEncoder();
+        QString strAdvVEncoder = videoWidget->GetAdvVideoEncoder();
+        QString strAdvAEncoder = audioWidget->GetAdvAudioEncoder();
 
-        m_pOutputSettingAreaWidget->AdvOutEncoderData(strAdvVEncoder, strAdvAEncoder);
-
+        outputWidget->AdvOutEncoderData(strAdvVEncoder, strAdvAEncoder);
         break;
     }
     }
-    ui->stackedWidget->setCurrentIndex(TabTypeNum);
-    m_eCurrentTabNum = TabTypeNum;
-    _UpdateResetButtonVisible();
+    ui->stackedWidget->setCurrentIndex(tabType);
+    activeTabType = tabType;
+    UpdateResetButtonVisible();
 }
 
-void AFQStudioSettingDialog::qslotResetButtonClicked()
+void AFQStudioSettingDialog::ResetButtonClicked()
 {
     std::string resetLocaleKey = "Basic.Settings.Reset";
 
@@ -133,9 +164,8 @@ void AFQStudioSettingDialog::qslotResetButtonClicked()
             break;
     }
 
-    int result = AFQMessageBox::ShowMessage(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this, QTStr("Reset"),
-        QTStr(resetLocaleKey.c_str()));
+    int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+                                            QTStr("Reset"), QTStr(resetLocaleKey.c_str()));
     if (result == QDialog::Rejected) {
         return;
     }
@@ -144,237 +174,256 @@ void AFQStudioSettingDialog::qslotResetButtonClicked()
         uint32_t cx = primaryScreen->size().width();
         uint32_t cy = primaryScreen->size().height();
 
-        int curTabIndex = ui->stackedWidget->currentIndex();
-        TabType curTabType = static_cast<TabType>(curTabIndex);
         switch (curTabType) {
             case TabType::PROGRAM:
-                m_pProgramSettingAreaWidget->ResetProgramSettings();
+                programWidget->ResetProgramSettings();
                 break;
             case TabType::STREAM:
                 break;
             case TabType::OUTPUT:
             case TabType::AUDIO:
             case TabType::VIDEO:
-                AFConfigManager::GetSingletonInstance().ResetAVOutputConfig(cx, cy);
-                m_pOutputSettingAreaWidget->ResetOutputSettings();
-                m_pAudioSettingAreaWidget->ResetAudioSettings();
-                m_pVideoSettingAreaWidget->ResetVideoSettings();
+                CONFIG_CONTEXT.ResetAVOutputConfig(cx, cy);
+                outputWidget->ResetOutputSettings();
+                audioWidget->ResetAudioSettings();
+                videoWidget->ResetVideoSettings();
                 break;
             case TabType::HOTKEYS:
-                m_pHotkeysSettingAreaWidget->ClearHotkeyValues();
-                m_pHotkeysSettingAreaWidget->SaveHotkeysSettings();
-                AFConfigManager::GetSingletonInstance()
-                    .UpdateHotkeyFocusSetting(true, true);
-                m_pHotkeysSettingAreaWidget->UpdateFocusBehaviorComboBox();
+                hotkeyWidget->ClearHotkeyValues();
+                hotkeyWidget->SaveHotkeysSettings();
+                App()->UpdateHotkeyFocusSetting(true);
+                hotkeyWidget->UpdateFocusBehaviorComboBox();
                 break;
             case TabType::ACCESSIBILITY:
-                AFConfigManager::GetSingletonInstance()
-                    .ResetAccessibilityConfig();
-                m_pAccesibilitySettingAreaWidget->LoadAccessibilitySettings();
+                CONFIG_CONTEXT.ResetAccessibilityConfig();
+                accessWidget->LoadAccessibilitySettings();
                 break;
             case TabType::ADVANCED:
-                AFConfigManager::GetSingletonInstance().ResetAdvancedConfig();
-                m_pAdvancedSettingAreaWidget->LoadAdvancedSettings();
+                CONFIG_CONTEXT.ResetAdvancedConfig();
+                advanceWidget->LoadAdvancedSettings();
                 break;
         }
 
-        App()->GetMainView()->GetMainWindow()->GetVideoUtil()->ResetVideo();
+        AFVideoUtil::ResetVideo();
 
-        _ClearChanged();
-        _ApplyDisable();
+        ClearChanged();
+        ApplyDisable();
 
-        bool bLanguageChanged =
-            m_pProgramSettingAreaWidget->CheckLanguageRestartRequired();
-        bool bAudioRestart =
-            m_pAudioSettingAreaWidget->CheckAudioRestartRequired();
-        bool bHWAcceelChanged =
-            m_pAdvancedSettingAreaWidget
-                ->CheckBrowserHardwareAccelerationRestartRequired();
+        bool langChanged = programWidget->CheckLanguageRestartRequired();
+        bool audioRestart = audioWidget->CheckAudioRestartRequired();
+        bool hwAcceelChanged = advanceWidget->CheckBrowserHardwareAccelerationRestartRequired();
 
-        g_bRestart = bLanguageChanged || bAudioRestart || bHWAcceelChanged;
+        g_bRestart = langChanged || audioRestart || hwAcceelChanged;
     }
 }
 
-void AFQStudioSettingDialog::qslotResetDownscales(int cx, int cy)
+void AFQStudioSettingDialog::ResetDownScales(int cx, int cy)
 {
-    uint32_t outCx = m_pVideoSettingAreaWidget->GetVideoOutputCx();
-    uint32_t outCy = m_pVideoSettingAreaWidget->GetVideoOutputCy();
-    QComboBox* outRescaleCombobox = m_pVideoSettingAreaWidget->GetOutResolutionComboBox();
+    uint32_t outCx = videoWidget->GetVideoOutputCx();
+    uint32_t outCy = videoWidget->GetVideoOutputCy();
+    QComboBox* outRescaleCombobox = videoWidget->GetOutResolutionComboBox();
     
-    m_pOutputSettingAreaWidget->OutputResolution(outCx, outCy);
-    m_pOutputSettingAreaWidget->RefreshDownscales(cx, cy, outRescaleCombobox);
+    outputWidget->OutputResolution(outCx, outCy);
+    //outputWidget->ResetDownscales(cx, cy, true);
+    outputWidget->RefreshDownscales(cx, cy, outRescaleCombobox);
 }
 
-void AFQStudioSettingDialog::qslotSettingPageDataChanged()
+void AFQStudioSettingDialog::ChangeSettingPageData()
 {
-    _ApplyEnable();
+    ApplyEnable();
 }
 
-void AFQStudioSettingDialog::qslotChangeSettingModeToSimple()
+void AFQStudioSettingDialog::ChangeSimpleMode()
 {
-    if (m_pAudioSettingAreaWidget == nullptr ||
-        m_pVideoSettingAreaWidget == nullptr ||
-        m_pOutputSettingAreaWidget == nullptr)
+    if (audioWidget == nullptr ||
+        videoWidget == nullptr ||
+        outputWidget == nullptr)
         return;
 
-    m_pAudioSettingAreaWidget->ChangeSettingModeToSimple();
-    m_pVideoSettingAreaWidget->ChangeSettingModeToSimple();
-    m_pOutputSettingAreaWidget->ChangeSettingModeToSimple();
+    audioWidget->ChangeSettingModeToSimple();
+    videoWidget->ChangeSettingModeToSimple();
+    outputWidget->ChangeSettingModeToSimple();
+
+    audioWidget->SetAudioDataChangedVal(true);
+    videoWidget->SetVideoDataChanged(true);
+    outputWidget->SetOutputDataChangedVal(true);
+
+    MAIN_OUTPUT->ResetOutputs();
+}
+
+void AFQStudioSettingDialog::ChangeAdvanceMode()
+{
+    if (audioWidget == nullptr ||
+        videoWidget == nullptr ||
+        outputWidget == nullptr)
+        return;
+
+    audioWidget->ChangeSettingModeToAdvanced();
+    videoWidget->ChangeSettingModeToAdvanced();
+    outputWidget->ChangeSettingModeToAdvanced();
+
+    audioWidget->SetAudioDataChangedVal(true);
+    videoWidget->SetVideoDataChanged(true);
+    outputWidget->SetOutputDataChangedVal(true);
     
-    App()->GetMainView()->ResetOutputs();
+    MAIN_OUTPUT->ResetOutputs();
 }
 
-void AFQStudioSettingDialog::qslotChangeSettingModeToAdvanced()
+void AFQStudioSettingDialog::ChangeSimpleReplayBuffer()
 {
-    if (m_pAudioSettingAreaWidget == nullptr ||
-        m_pVideoSettingAreaWidget == nullptr ||
-        m_pOutputSettingAreaWidget == nullptr)
+    if (outputWidget == nullptr)
         return;
 
-    m_pAudioSettingAreaWidget->ChangeSettingModeToAdvanced();
-    m_pVideoSettingAreaWidget->ChangeSettingModeToAdvanced();
-    m_pOutputSettingAreaWidget->ChangeSettingModeToAdvanced();
-    
-    App()->GetMainView()->ResetOutputs();
+    outputWidget->qslotSimpleReplayBufferChanged();
 }
 
-void AFQStudioSettingDialog::qslotSimpleReplayBufferChanged()
+void AFQStudioSettingDialog::ChangeAdvanceReplayBuffer()
 {
-    if (m_pOutputSettingAreaWidget == nullptr)
+    if (outputWidget == nullptr)
         return;
 
-    m_pOutputSettingAreaWidget->qslotSimpleReplayBufferChanged();
+    outputWidget->qslotAdvReplayBufferChanged();
 }
 
-void AFQStudioSettingDialog::qslotAdvReplayBufferChanged()
+void AFQStudioSettingDialog::ChangeSimpleOutVEncoder(QString vEncoder)
 {
-    if (m_pOutputSettingAreaWidget == nullptr)
+    if (outputWidget == nullptr)
         return;
 
-    m_pOutputSettingAreaWidget->qslotAdvReplayBufferChanged();
+    outputWidget->SimpleOutVEncoder(vEncoder);
 }
 
-void AFQStudioSettingDialog::qslotSimpleOutVEncoderChanged(QString vEncoder)
+void AFQStudioSettingDialog::ChangeSimpleOutAEncoder(QString aEncoder)
 {
-    if (m_pOutputSettingAreaWidget == nullptr)
+    if (outputWidget == nullptr)
         return;
 
-    m_pOutputSettingAreaWidget->SimpleOutVEncoder(vEncoder);
+    outputWidget->SimpleOutAEncoder(aEncoder);
 }
 
-void AFQStudioSettingDialog::qslotSimpleOutAEncoderChanged(QString aEncoder)
+void AFQStudioSettingDialog::ChangeSimpleOutVBitrate(int vBitrate)
 {
-    if (m_pOutputSettingAreaWidget == nullptr)
+    if (outputWidget == nullptr)
         return;
 
-    m_pOutputSettingAreaWidget->SimpleOutAEncoder(aEncoder);
+    outputWidget->SimpleOutVBitrate(vBitrate);
 }
 
-void AFQStudioSettingDialog::qslotSimpleOutVBitrateChanged(int vBitrate)
+void AFQStudioSettingDialog::ChangeSimpleOutABitrate(int aBitrate)
 {
-    if (m_pOutputSettingAreaWidget == nullptr)
+    if (outputWidget == nullptr)
         return;
 
-    m_pOutputSettingAreaWidget->SimpleOutVBitrate(vBitrate);
+    outputWidget->SimpleOutABitrate(aBitrate);
 }
-
-void AFQStudioSettingDialog::qslotSimpleOutABitrateChanged(int aBitrate)
+void AFQStudioSettingDialog::ChangeImpleRecordingEncoder()
 {
-    if (m_pOutputSettingAreaWidget == nullptr)
+    if (outputWidget == nullptr)
         return;
 
-    m_pOutputSettingAreaWidget->SimpleOutABitrate(aBitrate);
-}
-void AFQStudioSettingDialog::qslotSimpleRecordingEncoderChanged()
-{
-    if (m_pOutputSettingAreaWidget == nullptr)
-        return;
-
-    m_pOutputSettingAreaWidget->qslotSimpleRecordingEncoderChanged();
+    outputWidget->qslotSimpleRecordingEncoderChanged();
 }
 
-void AFQStudioSettingDialog::qslotStreamEncoderPropsChanged()
+void AFQStudioSettingDialog::ChangeStreamEncoderProps()
 {
-    if (m_pVideoSettingAreaWidget == nullptr ||
-        m_pOutputSettingAreaWidget == nullptr)
+    if (videoWidget == nullptr ||
+        outputWidget == nullptr)
         return;
     
-   int vbitrate = m_pVideoSettingAreaWidget->VideoAdvBitrate();
-   const char* rateControl = m_pVideoSettingAreaWidget->VideoAdvRateControl();
+   int vbitrate = videoWidget->VideoAdvBitrate();
+   const char* rateControl = videoWidget->VideoAdvRateControl();
 
     if (vbitrate == 0 && rateControl == "")
     {
-        m_pOutputSettingAreaWidget->HasStreamEncoder(false);
+        outputWidget->HasStreamEncoder(false);
     }
     else
     {
-        m_pOutputSettingAreaWidget->HasStreamEncoder(true);
-        m_pOutputSettingAreaWidget->StreamEncoderData(vbitrate, rateControl);
+        outputWidget->HasStreamEncoder(true);
+        outputWidget->StreamEncoderData(vbitrate, rateControl);
     }
 
-    m_pOutputSettingAreaWidget->qslotUpdateStreamDelayEstimate();
-    m_pOutputSettingAreaWidget->qslotAdvReplayBufferChanged();
+    outputWidget->qslotUpdateStreamDelayEstimate();
+    outputWidget->qslotAdvReplayBufferChanged();
 }
 
-void AFQStudioSettingDialog::qslotUpdateStreamDelayEstimate()
+void AFQStudioSettingDialog::UpdateStreamDelayEstimate()
 {
-    if (m_pOutputSettingAreaWidget == nullptr)
+    if (outputWidget == nullptr)
         return;
 
-    m_pOutputSettingAreaWidget->qslotUpdateStreamDelayEstimate();
+    outputWidget->qslotUpdateStreamDelayEstimate();
 }
 
-void AFQStudioSettingDialog::qslotButtonBoxClicked(QAbstractButton* button)
+void AFQStudioSettingDialog::ButtonBoxClicked(QAbstractButton* button)
 {
     QDialogButtonBox::ButtonRole val = ui->buttonBox->buttonRole(button);
+    bool saved = true;
 
-    if (val == QDialogButtonBox::ApplyRole ||
-        val == QDialogButtonBox::AcceptRole)
+    if (val == QDialogButtonBox::ApplyRole || val == QDialogButtonBox::AcceptRole)
     {
-        if (!_QueryAllowedToClose())
+        if (!QueryAllowedToClose())
             return;
 
-        _SaveSettings();
-        _ClearChanged();
-        _ApplyDisable();
-    }
+        saved = SaveSettings();
 
-    if (val == QDialogButtonBox::AcceptRole ||
-        val == QDialogButtonBox::RejectRole) 
-    {
-        if (val == QDialogButtonBox::RejectRole)
+        //UpdateYouTubeAppDockSettings();
+        if (saved)
         {
+            ClearChanged();
+            ApplyDisable();
+
+            bool langChanged = programWidget->CheckLanguageRestartRequired();
+            if (langChanged) {
+                int result = AFQMessageBox::ShowMessageWithButtonText(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+                                                                      QTStr(""), QTStr("LanguageChange.Restart"), QTStr("Restart"));
+
+                if (result == QDialog::Accepted) 
+                {
+                    g_bRestart = true;
+                    MAINFRAME->IsRestartConfirmationNeeded(true);
+                    CloseSetting();
+                }
+            }
         }
-        qslotCloseSetting();
+        else
+        {
+            return;
+        }
+    }
+
+    if (val == QDialogButtonBox::AcceptRole || val == QDialogButtonBox::RejectRole) 
+    {
+        CloseSetting();
     }
 }
 
-void AFQStudioSettingDialog::qslotSetAutoRemuxText(QString autoRemuxText) 
+void AFQStudioSettingDialog::SetAutoRemuxText(QString autoRemuxText)
 {
-    if (!m_pAdvancedSettingAreaWidget)
+    if (!advanceWidget)
         return;
-    m_pAdvancedSettingAreaWidget->SetAutoRemuxText(autoRemuxText);
+    advanceWidget->SetAutoRemuxText(autoRemuxText);
 }
 
-void AFQStudioSettingDialog::qslotToggleStreamingUI(bool streaming)
+void AFQStudioSettingDialog::ToggleStreamingUI(bool streaming)
 {
-    if (m_pProgramSettingAreaWidget)
-        m_pProgramSettingAreaWidget->ToggleOnStreaming(streaming);
+    if (programWidget)
+        programWidget->ToggleOnStreaming(streaming);
 
-    if (m_pStreamSettingAreaWidget)
-        m_pStreamSettingAreaWidget->ToggleOnStreaming(streaming);
+    if (streamWidget)
+        streamWidget->ToggleOnStreaming(streaming);
 
-    if (m_pOutputSettingAreaWidget)
-        m_pOutputSettingAreaWidget->ToggleOnStreaming(streaming);
+    if (outputWidget)
+        outputWidget->ToggleOnStreaming(streaming);
 
-    if (m_pAudioSettingAreaWidget)
-        m_pAudioSettingAreaWidget->ToggleOnStreaming(streaming);
+    if (audioWidget)
+        audioWidget->ToggleOnStreaming(streaming);
 
-    if (m_pVideoSettingAreaWidget)
-        m_pVideoSettingAreaWidget->ToggleOnStreaming(streaming);
+    if (videoWidget)
+        videoWidget->ToggleOnStreaming(streaming);
 
-    if (m_pAdvancedSettingAreaWidget)
-        m_pAdvancedSettingAreaWidget->ToggleOnStreaming(streaming);
+    if (advanceWidget)
+        advanceWidget->ToggleOnStreaming(streaming);
 
     bool useVideo = obs_video_active() ? false : true;
     ui->buttonBox->button(QDialogButtonBox::Reset)->setEnabled(useVideo);
@@ -382,507 +431,622 @@ void AFQStudioSettingDialog::qslotToggleStreamingUI(bool streaming)
 
 void AFQStudioSettingDialog::AFQStudioSettingDialogInit(int type)
 {
-    ui->label_Title->setText(QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Settings")));
-    ui->buttonBox->button(QDialogButtonBox::Ok)->setText(QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("OK")));
-    ui->buttonBox->button(QDialogButtonBox::Cancel)->setText(QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Cancel")));
-    ui->buttonBox->button(QDialogButtonBox::Apply)->setText(QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Apply")));
-    ui->buttonBox->button(QDialogButtonBox::Reset)->setText(QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Reset")));
+    ui->titleLabel->setText(QTStr("Settings"));
+    ui->buttonBox->button(QDialogButtonBox::Ok)->setText(QTStr("OK"));
+    ui->buttonBox->button(QDialogButtonBox::Cancel)->setText(QTStr("Cancel"));
+    ui->buttonBox->button(QDialogButtonBox::Apply)->setText(QTStr("Apply"));
+    ui->buttonBox->button(QDialogButtonBox::Reset)->setText(QTStr("Reset"));
 
-    _SetTabButtons();
-    _SetSettingAreaWidget();
-    _SetSettingDialogSignal();
+    SetTabButtons();
+    SetSettingAreaWidget();
+    SetSettingDialogSignal();
 
     switch (type)
     {
     case 0:
-        ui->tabButtonProgram->clicked();
+        ui->programButton->clicked();
         break;
     case 1:
-        ui->tabButtonStream->clicked();
+        ui->streamButton->clicked();
         break;
     case 2:
-        ui->tabButtonOutput->clicked();
+        ui->outputButton->clicked();
         break;
     case 3:
-        ui->tabButtonAudio->clicked();
+        ui->audioButton->clicked();
         break;
     case 4:
-        ui->tabButtonVideo->clicked();
+        ui->videoButton->clicked();
         break;
     case 5:
-        ui->tabButtonHotkeys->clicked();
+        ui->hotkeyButton->clicked();
         break;
     case 6:
-        ui->tabButtonAccessibilty->clicked();
+        ui->accessButton->clicked();
         break;
     case 7:
-        ui->tabButtonAdvanced->clicked();
+        ui->advanceButton->clicked();
         break;
+    }
+
+    if (type == 5) // Call From OverlayWidget
+    {
+        if (hotkeyWidget != nullptr)
+            hotkeyWidget->SetVerticalScrollBarPosition();
     }
 }
 
 QString AFQStudioSettingDialog::GetCurrentAudioBitrate()
 {
-    if (m_pAudioSettingAreaWidget != nullptr)
+    if (audioWidget != nullptr)
     {
-        return m_pAudioSettingAreaWidget->CurrentAudioBitRate();
+        return audioWidget->CurrentAudioBitRate();
     }
     return "";
 }
 
-void AFQStudioSettingDialog::SetID(QString id)
+void AFQStudioSettingDialog::SetID(QString id, QString platform)
 {
-    if (m_pStreamSettingAreaWidget != nullptr)
+    if (streamWidget != nullptr)
     {
-        m_pStreamSettingAreaWidget->FindAccountButtonWithID(id);
+        streamWidget->FindAccountButtonWithID(id, platform);
     }
 }
 
-void AFQStudioSettingDialog::reject() {
+#if 0
+void AFQStudioSettingDialog::reject() 
+{
     if (_AnyChanges()) {
         _QueryChanges();
     }
-
     QDialog::reject();
 }
+#endif
 
-void AFQStudioSettingDialog::_SetSettingAreaWidget() {
-    if (!m_pProgramSettingAreaWidget)
-        m_pProgramSettingAreaWidget = new AFQProgramSettingAreaWidget(this);
-
-    if (!m_pStreamSettingAreaWidget)
-        m_pStreamSettingAreaWidget = new AFQStreamSettingAreaWidget(this);
-
-    if (!m_pOutputSettingAreaWidget)
-        m_pOutputSettingAreaWidget = new AFQOutputSettingAreaWidget(this);
-
-    if (!m_pAudioSettingAreaWidget)
-        m_pAudioSettingAreaWidget = new AFQAudioSettingAreaWidget(this);
-
-    if (!m_pVideoSettingAreaWidget)
-        m_pVideoSettingAreaWidget = new AFQVideoSettingAreaWidget(this);
-
-    if (!m_pHotkeysSettingAreaWidget)
-        m_pHotkeysSettingAreaWidget = new AFQHotkeySettingAreaWidget(this);
-
-    if (!m_pAccesibilitySettingAreaWidget)
-        m_pAccesibilitySettingAreaWidget =
-            new AFQAccessibilitySettingAreaWidget(this);
-
-    if (!m_pAdvancedSettingAreaWidget)
-        m_pAdvancedSettingAreaWidget = new AFQAdvancedSettingAreaWidget(this);
-
-    connect(m_pProgramSettingAreaWidget,
-            &AFQProgramSettingAreaWidget::qsignalProgramDataChanged, this,
-            &AFQStudioSettingDialog::qslotSettingPageDataChanged);
-    connect(
-        m_pOutputSettingAreaWidget,
-        &AFQOutputSettingAreaWidget::qsignalUpdateReplayBufferStream,
-        m_pProgramSettingAreaWidget,
-        &AFQProgramSettingAreaWidget::UpdateAutomaticReplayBufferCheckboxes);
-    connect(m_pOutputSettingAreaWidget,
-            &AFQOutputSettingAreaWidget::qsignalSimpleModeClicked, this,
-            &AFQStudioSettingDialog::qslotChangeSettingModeToSimple);
-    connect(m_pOutputSettingAreaWidget,
-            &AFQOutputSettingAreaWidget::qsignalAdvancedModeClicked, this,
-            &AFQStudioSettingDialog::qslotChangeSettingModeToAdvanced);
-    connect(m_pOutputSettingAreaWidget,
-            &AFQOutputSettingAreaWidget::qsignalOutputDataChanged, this,
-            &AFQStudioSettingDialog::qslotSettingPageDataChanged);
-    connect(m_pOutputSettingAreaWidget,
-            &AFQOutputSettingAreaWidget::qsignalSetAutoRemuxText, this,
-            &AFQStudioSettingDialog::qslotSetAutoRemuxText);
-
-    connect(m_pAudioSettingAreaWidget,
-            &AFQAudioSettingAreaWidget::qsignalCallSimpleReplayBufferChanged,
-            this, &AFQStudioSettingDialog::qslotSimpleReplayBufferChanged);
-    connect(
-        m_pAudioSettingAreaWidget,
-        &AFQAudioSettingAreaWidget::qsignalCallSimpleRecordingEncoderChanged,
-        this, &AFQStudioSettingDialog::qslotSimpleRecordingEncoderChanged);
-    connect(m_pAudioSettingAreaWidget,
-            &AFQAudioSettingAreaWidget::qsignalCallUpdateStreamDelayEstimate,
-            this, &AFQStudioSettingDialog::qslotUpdateStreamDelayEstimate);
-    connect(m_pAudioSettingAreaWidget,
-            &AFQAudioSettingAreaWidget::qsignalSimpleModeClicked, this,
-            &AFQStudioSettingDialog::qslotChangeSettingModeToSimple);
-    connect(m_pAudioSettingAreaWidget,
-            &AFQAudioSettingAreaWidget::qsignalAdvancedModeClicked, this,
-            &AFQStudioSettingDialog::qslotChangeSettingModeToAdvanced);
-    connect(m_pAudioSettingAreaWidget,
-            &AFQAudioSettingAreaWidget::qsignalSimpleEncoderChanged, this,
-            &AFQStudioSettingDialog::qslotSimpleOutAEncoderChanged);
-    connect(m_pAudioSettingAreaWidget,
-            &AFQAudioSettingAreaWidget::qsignalSimpleBitrateChanged, this,
-            &AFQStudioSettingDialog::qslotSimpleOutABitrateChanged);
-    connect(m_pAudioSettingAreaWidget,
-            &AFQAudioSettingAreaWidget::qsignalAudioDataChanged, this,
-            &AFQStudioSettingDialog::qslotSettingPageDataChanged);
-
-    connect(m_pVideoSettingAreaWidget,
-            &AFQVideoSettingAreaWidget::qsignalBaseResolutionChanged, this,
-            &AFQStudioSettingDialog::qslotResetDownscales);
-    connect(m_pVideoSettingAreaWidget,
-            &AFQVideoSettingAreaWidget::qsignalCallSimpleReplayBufferChanged,
-            this, &AFQStudioSettingDialog::qslotSimpleReplayBufferChanged);
-    connect(
-        m_pVideoSettingAreaWidget,
-        &AFQVideoSettingAreaWidget::qsignalCallSimpleRecordingEncoderChanged,
-        this, &AFQStudioSettingDialog::qslotSimpleRecordingEncoderChanged);
-    connect(m_pVideoSettingAreaWidget,
-            &AFQVideoSettingAreaWidget::qsignalCallStreamEncoderPropChanged,
-            this, &AFQStudioSettingDialog::qslotStreamEncoderPropsChanged);
-    connect(m_pVideoSettingAreaWidget,
-            &AFQVideoSettingAreaWidget::qsignalCallUpdateStreamDelayEstimate,
-            this, &AFQStudioSettingDialog::qslotUpdateStreamDelayEstimate);
-    connect(m_pVideoSettingAreaWidget,
-            &AFQVideoSettingAreaWidget::qsignalSimpleModeClicked, this,
-            &AFQStudioSettingDialog::qslotChangeSettingModeToSimple);
-    connect(m_pVideoSettingAreaWidget,
-            &AFQVideoSettingAreaWidget::qsignalAdvancedModeClicked, this,
-            &AFQStudioSettingDialog::qslotChangeSettingModeToAdvanced);
-    connect(m_pVideoSettingAreaWidget,
-            &AFQVideoSettingAreaWidget::qsignalSimpleEncoderChanged, this,
-            &AFQStudioSettingDialog::qslotSimpleOutVEncoderChanged);
-    connect(m_pVideoSettingAreaWidget,
-            &AFQVideoSettingAreaWidget::qsignalSimpleBitrateChanged, this,
-            &AFQStudioSettingDialog::qslotSimpleOutVBitrateChanged);
-    connect(m_pVideoSettingAreaWidget,
-            &AFQVideoSettingAreaWidget::qsignalVideoDataChanged, this,
-            &AFQStudioSettingDialog::qslotSettingPageDataChanged);
-
-    connect(m_pHotkeysSettingAreaWidget,
-            &AFQHotkeySettingAreaWidget::qsignalHotkeyChanged, this,
-            &AFQStudioSettingDialog::qslotSettingPageDataChanged);
-
-    connect(m_pAccesibilitySettingAreaWidget,
-            &AFQAccessibilitySettingAreaWidget::qsignalA11yDataChanged, this,
-            &AFQStudioSettingDialog::qslotSettingPageDataChanged);
-
-    connect(m_pAdvancedSettingAreaWidget,
-            &AFQAdvancedSettingAreaWidget::
-                qsignalCallOutputSettingUpdateStreamDelayEstimate,
-            this, &AFQStudioSettingDialog::qslotUpdateStreamDelayEstimate);
-    connect(m_pAdvancedSettingAreaWidget,
-            &AFQAdvancedSettingAreaWidget::qsignalAdvancedDataChanged, this,
-            &AFQStudioSettingDialog::qslotSettingPageDataChanged);
-
-    m_pProgramSettingAreaWidget->ProgramSettingAreaInit();
-    QVBoxLayout* ProgramLayout = new QVBoxLayout(ui->programSettingArea);
-    ProgramLayout->setContentsMargins(0, 0, 0, 0);
-    ProgramLayout->addWidget(m_pProgramSettingAreaWidget);
-    ui->programSettingArea->setLayout(ProgramLayout);
-
-    m_pStreamSettingAreaWidget->StreamSettingAreaInit();
-    QVBoxLayout* StreamLayout = new QVBoxLayout(ui->streamSettingArea);
-    StreamLayout->setContentsMargins(0, 0, 0, 0);
-    StreamLayout->addWidget(m_pStreamSettingAreaWidget);
-    ui->streamSettingArea->setLayout(StreamLayout);
-
-    m_pOutputSettingAreaWidget->LoadOutputSettings();
-    QVBoxLayout* OutputLayout = new QVBoxLayout(ui->outputSettingArea);
-    OutputLayout->addWidget(m_pOutputSettingAreaWidget);
-    OutputLayout->setContentsMargins(0, 0, 0, 0);
-    ui->outputSettingArea->setLayout(OutputLayout);
-
-    m_pAudioSettingAreaWidget->LoadAudioSettings();
-    QVBoxLayout* vLayoutAudio = new QVBoxLayout(ui->audioSettingArea);
-    vLayoutAudio->addWidget(m_pAudioSettingAreaWidget);
-    vLayoutAudio->setContentsMargins(0, 0, 0, 0);
-    ui->audioSettingArea->setLayout(vLayoutAudio);
-
-    m_pVideoSettingAreaWidget->LoadVideoSettings();
-    QVBoxLayout* vLayoutVideo = new QVBoxLayout(ui->videoSettingArea);
-    vLayoutVideo->addWidget(m_pVideoSettingAreaWidget);
-    vLayoutVideo->setContentsMargins(0, 0, 0, 0);
-    ui->videoSettingArea->setLayout(vLayoutVideo);
-
-    m_pHotkeysSettingAreaWidget->LoadHotkeysSettings();
-    QVBoxLayout* HotkeyLayout = new QVBoxLayout(ui->accessibiltySettingArea);
-    HotkeyLayout->addWidget(m_pHotkeysSettingAreaWidget);
-    HotkeyLayout->setContentsMargins(0, 0, 0, 0);
-    ui->hotkeysSettingArea->setLayout(HotkeyLayout);
-
-    m_pAccesibilitySettingAreaWidget->LoadAccessibilitySettings();
-    QVBoxLayout* AccessLayout = new QVBoxLayout(ui->accessibiltySettingArea);
-    AccessLayout->addWidget(m_pAccesibilitySettingAreaWidget);
-    AccessLayout->setContentsMargins(0, 0, 0, 0);
-    ui->accessibiltySettingArea->setLayout(AccessLayout);
-
-    m_pAdvancedSettingAreaWidget->AdvancedSettingAreaInit();
-    QVBoxLayout* AdvancedLayout = new QVBoxLayout(ui->advancedSettingArea);
-    AdvancedLayout->setContentsMargins(0, 0, 0, 0);
-    AdvancedLayout->addWidget(m_pAdvancedSettingAreaWidget);
-    ui->advancedSettingArea->setLayout(AdvancedLayout);
-}
-
-void AFQStudioSettingDialog::_SetTabButtons()
+void AFQStudioSettingDialog::keyPressEvent(QKeyEvent* event)
 {
-    ui->tabButtonProgram->SetButton("PROGRAM", 
-        QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Settings.Program")));
-    ui->tabButtonStream->SetButton("STREAM",
-        QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Settings.Stream.Stream")));
-    ui->tabButtonOutput->SetButton("OUTPUT",
-        QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Settings.Output.Adv.Recording")));
-    ui->tabButtonAudio->SetButton("AUDIO",
-        QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Settings.Audio")));
-    ui->tabButtonVideo->SetButton("VIDEO",
-        QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Settings.Video")));
-    ui->tabButtonHotkeys->SetButton("HOTKEYS",
-        QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Settings.Hotkeys")));
-    ui->tabButtonAccessibilty->SetButton("ACCESSIBILITY",
-        QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Settings.Accessibility")));
-    ui->tabButtonAdvanced->SetButton("ADVANCED",
-        QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Settings.Advanced")));
+    if (event->key() == Qt::Key_Enter || 
+        event->key() == Qt::Key_Escape ||
+        event->key() == Qt::Key_Space) {
+        event->ignore();
+    }
+    else {
+        QWidget::keyPressEvent(event);
+    }
 }
 
-void AFQStudioSettingDialog::_SetSettingDialogSignal()
+void AFQStudioSettingDialog::showEvent(QShowEvent* event)
+{
+    if (MAINFRAME->IsSmallResolution())
+    {
+        resize(800, 550);
+        setFixedWidth(800);
+    }
+    else
+    {    
+        resize(940, 760);
+        setFixedWidth(940);
+    }
+
+    setMinimumHeight(550);
+    int posX = MAINFRAME->x() + (MAINFRAME->width() / 2) - (this->width() / 2);
+    int posY = MAINFRAME->y() + (MAINFRAME->height() / 2) - (this->height() / 2);
+
+    move(posX, posY);
+
+    EnsureDialogVisible(this);
+
+}
+
+
+void AFQStudioSettingDialog::SetSettingAreaWidget() {
+
+    // Create Widgets (0. Program ~ 7. Advanced)
+    if (!programWidget)
+        programWidget = new AFQProgramSettingAreaWidget(this);
+
+    if (!streamWidget)
+        streamWidget = new AFQStreamSettingAreaWidget(this);
+
+    if (!outputWidget)
+        outputWidget = new AFQOutputSettingAreaWidget(this);
+
+    if (!audioWidget)
+        audioWidget = new AFQAudioSettingAreaWidget(this);
+
+    if (!videoWidget)
+        videoWidget = new AFQVideoSettingAreaWidget(this);
+
+    if (!hotkeyWidget)
+        hotkeyWidget = new AFQHotkeySettingAreaWidget(this);
+
+    if (!accessWidget)
+        accessWidget = new AFQAccessibilitySettingAreaWidget(this);
+
+    if (!advanceWidget)
+        advanceWidget = new AFQAdvancedSettingAreaWidget(this);
+
+    // Connect Signals (0. Program ~ 7. Advanced)
+    connect(programWidget, &AFQProgramSettingAreaWidget::qsignalProgramDataChanged, 
+            this, &AFQStudioSettingDialog::ChangeSettingPageData);
+    connect(programWidget, &AFQProgramSettingAreaWidget::qsignalLogoutKR,
+            this, &AFQStudioSettingDialog::LogoutKR);
+
+    connect(streamWidget, &AFQStreamSettingAreaWidget::qsignalStreamDataChanged,
+            this, &AFQStudioSettingDialog::ChangeSettingPageData);
+
+    connect(outputWidget, &AFQOutputSettingAreaWidget::qsignalUpdateReplayBufferStream,
+            programWidget, &AFQProgramSettingAreaWidget::UpdateAutomaticReplayBufferCheckboxes);
+    connect(outputWidget, &AFQOutputSettingAreaWidget::qsignalSimpleModeClicked,
+            this, &AFQStudioSettingDialog::ChangeSimpleMode);
+    connect(outputWidget, &AFQOutputSettingAreaWidget::qsignalAdvancedModeClicked,
+            this, &AFQStudioSettingDialog::ChangeAdvanceMode);
+    connect(outputWidget, &AFQOutputSettingAreaWidget::qsignalOutputDataChanged,
+            this, &AFQStudioSettingDialog::ChangeSettingPageData);
+    connect(outputWidget, &AFQOutputSettingAreaWidget::qsignalSetAutoRemuxText,
+            this, &AFQStudioSettingDialog::SetAutoRemuxText);
+
+    connect(audioWidget, &AFQAudioSettingAreaWidget::qsignalCallSimpleReplayBufferChanged,
+            this, &AFQStudioSettingDialog::ChangeSimpleReplayBuffer);
+    connect(audioWidget, &AFQAudioSettingAreaWidget::qsignalCallSimpleRecordingEncoderChanged,
+            this, &AFQStudioSettingDialog::ChangeImpleRecordingEncoder);
+    connect(audioWidget, &AFQAudioSettingAreaWidget::qsignalCallUpdateStreamDelayEstimate,
+            this, &AFQStudioSettingDialog::UpdateStreamDelayEstimate);
+    connect(audioWidget, &AFQAudioSettingAreaWidget::qsignalSimpleModeClicked,
+            this, &AFQStudioSettingDialog::ChangeSimpleMode);
+    connect(audioWidget, &AFQAudioSettingAreaWidget::qsignalAdvancedModeClicked,
+            this, &AFQStudioSettingDialog::ChangeAdvanceMode);
+    connect(audioWidget, &AFQAudioSettingAreaWidget::qsignalSimpleEncoderChanged,
+            this, &AFQStudioSettingDialog::ChangeSimpleOutAEncoder);
+    connect(audioWidget, &AFQAudioSettingAreaWidget::qsignalSimpleBitrateChanged,
+            this, &AFQStudioSettingDialog::ChangeSimpleOutABitrate);
+    connect(audioWidget, &AFQAudioSettingAreaWidget::qsignalAudioDataChanged,
+            this, &AFQStudioSettingDialog::ChangeSettingPageData);
+
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalBaseResolutionChanged,
+            this, &AFQStudioSettingDialog::ResetDownScales);
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalCallSimpleReplayBufferChanged,
+            this, &AFQStudioSettingDialog::ChangeSimpleReplayBuffer);
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalCallSimpleRecordingEncoderChanged,
+            this, &AFQStudioSettingDialog::ChangeImpleRecordingEncoder);
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalCallStreamEncoderPropChanged,
+            this, &AFQStudioSettingDialog::ChangeStreamEncoderProps);
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalCallUpdateStreamDelayEstimate,
+            this, &AFQStudioSettingDialog::UpdateStreamDelayEstimate);
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalSimpleModeClicked,
+            this, &AFQStudioSettingDialog::ChangeSimpleMode);
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalAdvancedModeClicked,
+            this, &AFQStudioSettingDialog::ChangeAdvanceMode);
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalSimpleEncoderChanged,
+            this, &AFQStudioSettingDialog::ChangeSimpleOutVEncoder);
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalSimpleBitrateChanged,
+            this,  &AFQStudioSettingDialog::ChangeSimpleOutVBitrate);
+    connect(videoWidget, &AFQVideoSettingAreaWidget::qsignalVideoDataChanged,
+            this, &AFQStudioSettingDialog::ChangeSettingPageData);
+
+    connect(hotkeyWidget, &AFQHotkeySettingAreaWidget::qsignalHotkeyChanged,
+            this, &AFQStudioSettingDialog::ChangeSettingPageData);
+
+    connect(accessWidget, &AFQAccessibilitySettingAreaWidget::qsignalA11yDataChanged,
+            this, &AFQStudioSettingDialog::ChangeSettingPageData);
+
+    connect(advanceWidget, &AFQAdvancedSettingAreaWidget::qsignalCallOutputSettingUpdateStreamDelayEstimate,
+            this, &AFQStudioSettingDialog::UpdateStreamDelayEstimate);
+    connect(advanceWidget, &AFQAdvancedSettingAreaWidget::qsignalAdvancedDataChanged,
+            this, &AFQStudioSettingDialog::ChangeSettingPageData);
+
+    // Load
+    programWidget->ProgramSettingAreaInit();
+    QVBoxLayout* ProgramLayout = new QVBoxLayout(ui->programPage);
+    ProgramLayout->setContentsMargins(0, 0, 0, 0);
+    ProgramLayout->addWidget(programWidget);
+    ui->programPage->setLayout(ProgramLayout);
+
+    streamWidget->StreamSettingAreaInit();
+    QVBoxLayout* StreamLayout = new QVBoxLayout(ui->streamPage);
+    StreamLayout->setContentsMargins(0, 0, 0, 0);
+    StreamLayout->addWidget(streamWidget);
+    ui->streamPage->setLayout(StreamLayout);
+
+    outputWidget->LoadOutputSettings();
+    QVBoxLayout* OutputLayout = new QVBoxLayout(ui->outputPage);
+    OutputLayout->addWidget(outputWidget);
+    OutputLayout->setContentsMargins(0, 0, 0, 0);
+    ui->outputPage->setLayout(OutputLayout);
+
+    audioWidget->LoadAudioSettings();
+    QVBoxLayout* vLayoutAudio = new QVBoxLayout(ui->audioPage);
+    vLayoutAudio->addWidget(audioWidget);
+    vLayoutAudio->setContentsMargins(0, 0, 0, 0);
+    ui->audioPage->setLayout(vLayoutAudio);
+
+    videoWidget->LoadVideoSettings();
+    QVBoxLayout* vLayoutVideo = new QVBoxLayout(ui->videoPage);
+    vLayoutVideo->addWidget(videoWidget);
+    vLayoutVideo->setContentsMargins(0, 0, 0, 0);
+    ui->videoPage->setLayout(vLayoutVideo);
+
+    hotkeyWidget->LoadHotkeysSettings();
+    QVBoxLayout* HotkeyLayout = new QVBoxLayout(ui->hotkeyPage);
+    HotkeyLayout->addWidget(hotkeyWidget);
+    HotkeyLayout->setContentsMargins(0, 0, 0, 0);
+    ui->hotkeyPage->setLayout(HotkeyLayout);
+
+    accessWidget->LoadAccessibilitySettings();
+    QVBoxLayout* AccessLayout = new QVBoxLayout(ui->accessPage);
+    AccessLayout->addWidget(accessWidget);
+    AccessLayout->setContentsMargins(0, 0, 0, 0);
+    ui->accessPage->setLayout(AccessLayout);
+
+    advanceWidget->AdvancedSettingAreaInit();
+    QVBoxLayout* AdvancedLayout = new QVBoxLayout(ui->advancePage);
+    AdvancedLayout->setContentsMargins(0, 0, 0, 0);
+    AdvancedLayout->addWidget(advanceWidget);
+    ui->advancePage->setLayout(AdvancedLayout);
+    //
+}
+
+void AFQStudioSettingDialog::SetTabButtons()
+{
+    if (MAINFRAME->IsSmallResolution())
+    {
+        ui->programButton->setFixedSize(100, 84);
+        ui->streamButton->setFixedSize(100, 84);
+        ui->outputButton->setFixedSize(100, 84);
+        ui->audioButton->setFixedSize(100, 84);
+        ui->videoButton->setFixedSize(100, 84);
+        ui->hotkeyButton->setFixedSize(100, 84);
+        ui->accessButton->setFixedSize(100, 84);
+        ui->advanceButton->setFixedSize(100, 84);
+    }
+
+    ui->programButton->SetButton("PROGRAM", QTStr("Basic.Settings.Program"));
+    ui->streamButton->SetButton("STREAM", QTStr("Basic.Settings.Stream.Stream"));
+    ui->outputButton->SetButton("OUTPUT", QTStr("Basic.Settings.Output.Adv.Recording"));
+    ui->audioButton->SetButton("AUDIO", QTStr("Basic.Settings.Audio"));
+    ui->videoButton->SetButton("VIDEO", QTStr("Basic.Settings.Video"));
+    ui->hotkeyButton->SetButton("HOTKEYS", QTStr("Basic.Settings.Hotkeys"));
+    ui->accessButton->SetButton("ACCESSIBILITY", QTStr("Basic.Settings.Accessibility"));
+    ui->advanceButton->SetButton("ADVANCED", QTStr("Basic.Settings.Advanced"));
+}
+
+void AFQStudioSettingDialog::SetSettingDialogSignal()
 {
     ui->buttonBox->button(QDialogButtonBox::Apply)->setFixedSize(128,40);
     
-    _ApplyDisable();
+    ApplyDisable();
 
-    QList<AFQSettingTabButton*> buttonList = ui->widget_SettingTab->findChildren<AFQSettingTabButton*>();
-    foreach(AFQSettingTabButton * button, buttonList)
+    QList<AFQSettingTabButton*> buttonLists = ui->tabWidget->findChildren<AFQSettingTabButton*>();
+    foreach(AFQSettingTabButton * button, buttonLists)
     {
-        connect(button, &AFQSettingTabButton::qsignalButtonClicked, this, &AFQStudioSettingDialog::qslotTabButtonToggled);
+        connect(button, &AFQSettingTabButton::ButtonClicked, this, &AFQStudioSettingDialog::ToggleTabButton);
     }
 
-    connect(ui->buttonBox, &QDialogButtonBox::clicked, this,
-            &AFQStudioSettingDialog::qslotButtonBoxClicked);
-    ui->buttonBox->button(QDialogButtonBox::Reset)->setFixedSize(128, 40);
-    connect(m_pResetButton, &QPushButton::clicked, this,
-            &AFQStudioSettingDialog::qslotResetButtonClicked);
+    connect(ui->buttonBox, &QDialogButtonBox::clicked, this, &AFQStudioSettingDialog::ButtonBoxClicked);
+    connect(resetButton, &QPushButton::clicked, this, &AFQStudioSettingDialog::ResetButtonClicked);
+    connect(ui->closeButton, &QPushButton::clicked, this, &AFQStudioSettingDialog::CloseSetting);
 
-    connect(ui->pushButton_Close, &QPushButton::clicked, this, &AFQStudioSettingDialog::qslotCloseSetting);
+    ui->buttonBox->button(QDialogButtonBox::Reset)->setFixedSize(128, 40);
 }
 
-void AFQStudioSettingDialog::_SaveSettings()
+bool AFQStudioSettingDialog::SaveSettings()
 {
-    if(m_pProgramSettingAreaWidget)
-        if (m_pProgramSettingAreaWidget->ProgramDataChanged())
+    bool retVal = true;
+
+    if(programWidget)
+        if (programWidget->ProgramDataChanged())
         {
-            m_pProgramSettingAreaWidget->SaveProgramSettings();
+            programWidget->SaveProgramSettings();
+
+            //System Tray Disable
+            /*if (programWidget->CheckSystemTrayToggle())
+            {
+                m_pMainFrame->SystemTray(false);
+            }*/
         }
 
-    if (m_pOutputSettingAreaWidget)
-        if (m_pOutputSettingAreaWidget->OutputDataChanged())
-            m_pOutputSettingAreaWidget->SaveOutputSettings();
+    if (outputWidget)
+            outputWidget->SaveOutputSettings();
 
-    if (m_pAudioSettingAreaWidget)
-        if(m_pAudioSettingAreaWidget->AudioDataChanged())
-            m_pAudioSettingAreaWidget->SaveAudioSettings();
+    if (audioWidget)
+            audioWidget->SaveAudioSettings();
 
-    if (m_pVideoSettingAreaWidget)
-        if(m_pVideoSettingAreaWidget->VideoDataChanged())
-            m_pVideoSettingAreaWidget->SaveVideoSettings();
+    if (videoWidget)
+            videoWidget->SaveVideoSettings();
 
-    if (m_pHotkeysSettingAreaWidget)
-        if (m_pHotkeysSettingAreaWidget->HotkeysDataChanged())
-            m_pHotkeysSettingAreaWidget->SaveHotkeysSettings();
+    if (hotkeyWidget)
+            hotkeyWidget->SaveHotkeysSettings();
 
-    if (m_pAccesibilitySettingAreaWidget)
-        if (m_pAccesibilitySettingAreaWidget->AccessibilityDataChanged())
-            m_pAccesibilitySettingAreaWidget->SaveAccessibilitySettings();
+    if (accessWidget)
+            accessWidget->SaveAccessibilitySettings();
 
-    if (m_pAdvancedSettingAreaWidget)
-        if (m_pAdvancedSettingAreaWidget->AdvancedDataChanged())
-            m_pAdvancedSettingAreaWidget->SaveAdvancedSettings();
+    if (advanceWidget)
+            advanceWidget->SaveAdvancedSettings();
 
-    if (m_pStreamSettingAreaWidget)
-        if (m_eCurrentTabNum == TabType::STREAM)
-            m_pStreamSettingAreaWidget->SaveStreamSettings();
+    if (streamWidget)
+        if (activeTabType == TabType::STREAM)
+            streamWidget->SaveStreamSettings();
 
-    if (m_pOutputSettingAreaWidget->OutputDataChanged() ||
-        m_pAudioSettingAreaWidget->AudioDataChanged() ||
-        m_pVideoSettingAreaWidget->VideoDataChanged())
-        App()->GetMainView()->ResetOutputs();
+    // KR Broad Info
+    if (streamWidget && streamWidget->BroadDataChanged())
+        streamWidget->SaveBroadInfoSettings();
+    
+    
+    //Save Project
+    //main->SaveProject();
 
-    if (m_pVideoSettingAreaWidget->VideoDataChanged() || 
-        m_pAdvancedSettingAreaWidget->AdvancedDataChanged())
+    //log
+    /*if (Changed()) {
+        std::string changed;
+        if (generalChanged)
+            AddChangedVal(changed, "general");
+        if (stream1Changed)
+            AddChangedVal(changed, "stream 1");
+        if (outputsChanged)
+            AddChangedVal(changed, "outputs");
+        if (audioChanged)
+            AddChangedVal(changed, "audio");
+        if (videoChanged)
+            AddChangedVal(changed, "video");
+        if (hotkeysChanged)
+            AddChangedVal(changed, "hotkeys");
+        if (a11yChanged)
+            AddChangedVal(changed, "a11y");
+        if (advancedChanged)
+            AddChangedVal(changed, "advanced");
+
+        blog(LOG_INFO, "Settings changed (%s)", changed.c_str());
+        blog(LOG_INFO, MINOR_SEPARATOR);
+    }*/
+
+    if (outputWidget->OutputDataChanged() ||
+        audioWidget->AudioDataChanged() ||
+        videoWidget->VideoDataChanged())
+        MAIN_OUTPUT->ResetOutputs();
+
+    if (videoWidget->VideoDataChanged() || 
+        advanceWidget->AdvancedDataChanged())
     {
-        App()->GetMainView()->GetMainWindow()->GetVideoUtil()->ResetVideo();
+        AFVideoUtil::ResetVideo();
     }
 
-    config_save_safe(AFConfigManager::GetSingletonInstance().GetGlobal(), "tmp", nullptr);
-    config_save_safe(AFConfigManager::GetSingletonInstance().GetBasic(), "tmp", nullptr);
-    App()->GetMainView()->qslotSaveProject();
+    // Save Config
+    config_save_safe(ACTIVECONFIG, "tmp", nullptr);
+    config_save_safe(USERCONFIG, "tmp", nullptr);
+    MAINFRAME->qslotSaveProject();
 
-    auto& auth = AFAuthManager::GetSingletonInstance();
-    auth.FlushAuthMain();
+    auto& auth = AUTH_CONTEXT;
+    //auth.FlushAuthCache();
     auth.SaveAllAuthed();
 
-    App()->GetMainView()->SetStreamingOutput();
-    App()->GetMainView()->LoadAccounts();
+    MAIN_OUTPUT->SetStreamingOutput();
+    MAINFRAME->LoadAccounts();
 
-    bool bLanguageChanged = m_pProgramSettingAreaWidget->CheckLanguageRestartRequired();
-    bool bAudioRestart = m_pAudioSettingAreaWidget->CheckAudioRestartRequired();
-    bool bHWAcceelChanged = m_pAdvancedSettingAreaWidget->CheckBrowserHardwareAccelerationRestartRequired();
+    bool bLanguageChanged = programWidget->CheckLanguageRestartRequired();
+    bool bAudioRestart = audioWidget->CheckAudioRestartRequired();
+    bool bHWAcceelChanged = advanceWidget->CheckBrowserHardwareAccelerationRestartRequired();
 
     g_bRestart = bLanguageChanged || bAudioRestart || bHWAcceelChanged;
+
+    return retVal;
 }
 
-void AFQStudioSettingDialog::_ApplyDisable()
+void AFQStudioSettingDialog::SaveStreamSettings()
+{
+    if (streamWidget && activeTabType == TabType::STREAM)
+        streamWidget->SaveStreamSettings();
+
+    AUTH_CONTEXT.SaveAllAuthed();
+}
+
+void AFQStudioSettingDialog::ApplyDisable()
 {
     ui->buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
-    QGraphicsOpacityEffect* effect = new QGraphicsOpacityEffect();
-    effect->setOpacity(0.3);
-    ui->buttonBox->button(QDialogButtonBox::Apply)->setGraphicsEffect(effect);
 }
 
-void AFQStudioSettingDialog::_ApplyEnable()
+void AFQStudioSettingDialog::ApplyEnable()
 {
     ui->buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true);
-    QGraphicsOpacityEffect* opacityEffect = reinterpret_cast<QGraphicsOpacityEffect*>
-        (ui->buttonBox->button(QDialogButtonBox::Apply)->graphicsEffect());
-    opacityEffect->setOpacity(1);
 }
 
-void AFQStudioSettingDialog::_ClearChanged()
+void AFQStudioSettingDialog::ClearChanged()
 {
-    if (m_pProgramSettingAreaWidget)
-        m_pProgramSettingAreaWidget->SetProgramDataChangedVal(false);
-    if(m_pStreamSettingAreaWidget)
-        m_pStreamSettingAreaWidget->SetStreamDataChangedVal(false);
-    if (m_pOutputSettingAreaWidget)
-        m_pOutputSettingAreaWidget->SetOutputDataChangedVal(false);
-    if (m_pAudioSettingAreaWidget)
-        m_pAudioSettingAreaWidget->SetAudioDataChangedVal(false);
-    if (m_pVideoSettingAreaWidget)
-        m_pVideoSettingAreaWidget->SetVideoDataChangedVal(false);
-    if (m_pHotkeysSettingAreaWidget)
-        m_pHotkeysSettingAreaWidget->SetHotkeysDataChangedVal(false);
-    if (m_pAccesibilitySettingAreaWidget)
-        m_pAccesibilitySettingAreaWidget->SetAccessibilityDataChangedVal(false);
-    if (m_pAdvancedSettingAreaWidget)
-        m_pAdvancedSettingAreaWidget->SetAdvancedDataChangedVal(false);
+    if (programWidget)
+        programWidget->SetProgramDataChangedVal(false);
+    if (streamWidget) {
+        streamWidget->SetStreamDataChangedVal(false);
+        streamWidget->SetBroadDataChangedVal(false);
+    }
+    if (outputWidget)
+        outputWidget->SetOutputDataChangedVal(false);
+    if (audioWidget)
+        audioWidget->SetAudioDataChangedVal(false);
+    if (videoWidget)
+        videoWidget->SetVideoDataChangedVal(false);
+    if (hotkeyWidget)
+        hotkeyWidget->SetHotkeysDataChangedVal(false);
+    if (accessWidget)
+        accessWidget->SetAccessibilityDataChangedVal(false);
+    if (advanceWidget)
+        advanceWidget->SetAdvancedDataChangedVal(false);
 
     ui->buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 }
 
-bool AFQStudioSettingDialog::_QueryChanges()
+bool AFQStudioSettingDialog::QueryChanges(bool isTriggeredByTabChange)
 {
     int result = QDialog::Accepted;
-    if (m_eCurrentTabNum != TabType::STREAM)
-    {
-        result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
-            this, QTStr("Basic.Settings.ConfirmTitle"),
-            QTStr("Basic.Settings.Confirm"));
+
+#if 1
+    SaveStreamSettings();
+
+    if (isTriggeredByTabChange) {
+        if (!QueryAllowedToClose())
+            return false;
+        return true;
     }
+
+    if (ui->buttonBox->button(QDialogButtonBox::Apply)->isEnabled())
+    {
+        result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+                                            QTStr("Basic.Settings.ConfirmTitle"), QTStr("Basic.Settings.Confirm"));
+    }
+
+#else
+    if (m_currentTabNum != TabType::STREAM)
+    {
+        result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+                                            QTStr("Basic.Settings.ConfirmTitle"), QTStr("Basic.Settings.Confirm"));
+    }
+    else 
+    {
+        // KR
+        if (MAINFRAME->IsGlobal() == false)
+        {
+            if (streamWidget &&
+                streamWidget->BroadDataChanged()) 
+            {
+                result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+                                                    QTStr("Basic.Settings.ConfirmTitle"), QTStr("Basic.Settings.Confirm"));
+
+                // Save Stream Settings
+                if (result == QDialog::Rejected) 
+                    _SaveStreamSettings();
+            }
+        }
+    }
+#endif
 
     if (result == QDialog::Rejected) {
-        _ReloadTabConfig();
-        _ClearChanged();
-        return false;
+        ReloadTabConfig();
+        ClearChanged();
+        return true;
     }
     else if (result == QDialog::Accepted) {
-        if (!_QueryAllowedToClose())
+        if (!QueryAllowedToClose())
             return false;
 
-        _SaveSettings();
-        _ClearChanged();
+        if (!SaveSettings())
+            return false;
+        ClearChanged();
     }
     else {
+        //if (savedTheme != App()->GetTheme())
+        //    App()->SetTheme(savedTheme);
+
+        //LoadSettings(true);
+        //restart = false;
     }
 
     return true;
 }
 
-bool AFQStudioSettingDialog::_QueryAllowedToClose()
+bool AFQStudioSettingDialog::QueryAllowedToClose()
 {
-    bool simple = m_pOutputSettingAreaWidget->IsAdvancedMode() == false;
+    bool simple = outputWidget->IsAdvancedMode() == false;
 
     bool invalidEncoder = false;
     bool invalidFormat = false;
     bool invalidTracks = false;
     bool invalidRecPath = false;
+    bool invalidOutputResolution = false;
 
     if (simple) 
     {
-        QString strSimpleVEncoder = m_pVideoSettingAreaWidget->GetSimpleVideoEncoder();
-        QString strSimpleAEncoder = m_pAudioSettingAreaWidget->GetSimpleAudioEncoder();
-        QString strSimpleRecVEncoder = m_pOutputSettingAreaWidget->GetSimpleVideoRecEncoder();
-        QString strSimpleRecAEncoder = m_pOutputSettingAreaWidget->GetSimpleAudioRecEncoder();
+        QString strSimpleVEncoder = videoWidget->GetSimpleVideoEncoder();
+        QString strSimpleAEncoder = audioWidget->GetSimpleAudioEncoder();
+        QString strSimpleRecVEncoder = outputWidget->GetSimpleVideoRecEncoder();
+        QString strSimpleRecAEncoder = outputWidget->GetSimpleAudioRecEncoder();
 
-        if (strSimpleRecVEncoder == "" ||
-            strSimpleVEncoder == "" ||
-            strSimpleRecAEncoder == "" ||
-            strSimpleAEncoder == "")
+        if (strSimpleRecVEncoder == "" || strSimpleVEncoder == "" ||
+            strSimpleRecAEncoder == "" || strSimpleAEncoder == "")
             invalidEncoder = true;
 
         if (strSimpleRecVEncoder == "")
             invalidFormat = true;
 
-        QString qual = m_pOutputSettingAreaWidget->GetSimpleRecQuality();
-        QString format = m_pOutputSettingAreaWidget->GetSimpleRecFormat();
-        if (m_pOutputSettingAreaWidget->qslotSimpleOutGetSelectedAudioTracks() == 0 &&
-            qual != "Stream" && format != "flv")
+        QString qual = outputWidget->GetSimpleRecQuality();
+        QString format = outputWidget->GetSimpleRecFormat();
+        if (outputWidget->qslotSimpleOutGetSelectedAudioTracks() == 0 && qual != "Stream" && format != "flv")
             invalidTracks = true;
     
-        if (m_pOutputSettingAreaWidget->GetSimpleOutputPath() == "")
+        if (outputWidget->GetSimpleOutputPath() == "")
             invalidRecPath = true;
     }
     else 
     {
-        QString strAdvVEncoder = m_pVideoSettingAreaWidget->GetAdvVideoEncoder();
-        QString strAdvAEncoder = m_pAudioSettingAreaWidget->GetAdvAudioEncoder();
-        QString strAdvRecVEncoder = m_pOutputSettingAreaWidget->GetAdvVideoRecEncoder();
-        QString strAdvRecAEncoder = m_pOutputSettingAreaWidget->GetAdvAudioRecEncoder();
+        QString strAdvVEncoder = videoWidget->GetAdvVideoEncoder();
+        QString strAdvAEncoder = audioWidget->GetAdvAudioEncoder();
+        QString strAdvRecVEncoder = outputWidget->GetAdvVideoRecEncoder();
+        QString strAdvRecAEncoder = outputWidget->GetAdvAudioRecEncoder();
 
-        if (strAdvRecVEncoder == "" ||
-            strAdvVEncoder == "" ||
-            strAdvRecAEncoder == "" ||
-            strAdvAEncoder == "")
+        if (strAdvRecVEncoder == "" || strAdvVEncoder == "" ||
+            strAdvRecAEncoder == "" || strAdvAEncoder == "")
             invalidEncoder = true;
 
-        QString format = m_pOutputSettingAreaWidget->GetAdvRecFormat();
-        if (m_pOutputSettingAreaWidget->qslotAdvOutGetSelectedAudioTracks() == 0 && format != "flv")
+        QString format = outputWidget->GetAdvRecFormat();
+        if (outputWidget->qslotAdvOutGetSelectedAudioTracks() == 0 && format != "flv")
             invalidTracks = true;
 
-        if (m_pOutputSettingAreaWidget->IsCustomFFmpeg())
+        if (outputWidget->IsCustomFFmpeg())
         {
-            if (m_pOutputSettingAreaWidget->GetAdvOutFFPath() == "")
+            if (outputWidget->GetAdvOutFFPath() == "")
                 invalidRecPath = true;
         }
         else
         {
-            if (m_pOutputSettingAreaWidget->GetAdvOutRecPath() == "")
+            if (outputWidget->GetAdvOutRecPath() == "")
                 invalidRecPath = true;
         }
     }
 
+    // Check Video Output Resolution
+    videoSizeValid = videoWidget->IsValidAspectRatios();
+    invalidOutputResolution = !videoSizeValid;
+
     if (invalidEncoder) {
-        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok,
-            this, "",
-            QTStr("CodecCompat.CodecMissingOnExit.Text"));
+        // Warning
+        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+                                   //QTStr("CodecCompat.CodecMissingOnExit.Title"),
+                                   "", QTStr("CodecCompat.CodecMissingOnExit.Text"));
         return false;
     }
     else if (invalidFormat) {
-        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok,
-            this, "",
-            QTStr("CodecCompat.ContainerMissingOnExit.Text"));
+        // Warning
+        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+                                   //QTStr("CodecCompat.ContainerMissingOnExit.Title"),
+                                   "", QTStr("CodecCompat.ContainerMissingOnExit.Text"));
         return false;
     }
     else if (invalidTracks) {
-        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok,
-            this,
-            "",
-            QTStr("OutputWarnings.NoTracksSelectedOnExit.Text"));
+        // Warning
+        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+                                   //QTStr("OutputWarnings.NoTracksSelectedOnExit.Title"),
+                                   "", QTStr("OutputWarnings.NoTracksSelectedOnExit.Text"));
         return false;
     }
     else if (invalidRecPath)
     {
-        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok,
-            this,
-            "",
-            QTStr("OutputWarnings.NoRecPathOnExit.Text"));
+        // Warning
+        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+                                   //QTStr("OutputWarnings.NoTracksSelectedOnExit.Title"),
+                                   "", QTStr("OutputWarnings.NoRecPathOnExit.Text"));
+        return false;
+    }
+    else if (invalidOutputResolution)
+    {
+        // Warning
+        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+                                   "", QTStr("Basic.Settings.Video.InvalidResolutionRatio"));
+
+        videoWidget->HighLightResolution();
         return false;
     }
 
     return true;
 }
 
-QString AFQStudioSettingDialog::_GetTabName(TabType type) {
+QString AFQStudioSettingDialog::GetTabName(TabType type) {
     std::string key;
 
     switch (type) {
@@ -912,39 +1076,33 @@ QString AFQStudioSettingDialog::_GetTabName(TabType type) {
             break;
     }
 
-    return QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str(key.data()));
+    return QTStr(key.data());
 }
 
-bool AFQStudioSettingDialog::_AnyChanges() {
-    if (m_pProgramSettingAreaWidget &&
-        m_pProgramSettingAreaWidget->ProgramDataChanged())
+bool AFQStudioSettingDialog::AnyChanges() {
+    if (programWidget && programWidget->ProgramDataChanged())
         return true;
-    if (m_pStreamSettingAreaWidget &&
-        m_pStreamSettingAreaWidget->StreamDataChanged())
+    if (streamWidget && streamWidget->StreamDataChanged())
         return true;
-    if (m_pOutputSettingAreaWidget &&
-        m_pOutputSettingAreaWidget->OutputDataChanged())
+    if (streamWidget && streamWidget->BroadDataChanged())
         return true;
-    if (m_pAudioSettingAreaWidget &&
-        m_pAudioSettingAreaWidget->AudioDataChanged())
+    if (outputWidget && outputWidget->OutputDataChanged())
         return true;
-    if (m_pVideoSettingAreaWidget &&
-        m_pVideoSettingAreaWidget->VideoDataChanged())
+    if (audioWidget && audioWidget->AudioDataChanged())
         return true;
-    if (m_pHotkeysSettingAreaWidget &&
-        m_pHotkeysSettingAreaWidget->HotkeysDataChanged())
+    if (videoWidget && videoWidget->VideoDataChanged())
         return true;
-    if (m_pAccesibilitySettingAreaWidget &&
-        m_pAccesibilitySettingAreaWidget->AccessibilityDataChanged())
+    if (hotkeyWidget && hotkeyWidget->HotkeysDataChanged())
         return true;
-    if (m_pAdvancedSettingAreaWidget &&
-        m_pAdvancedSettingAreaWidget->AdvancedDataChanged())
+    if (accessWidget && accessWidget->AccessibilityDataChanged())
+        return true;
+    if (advanceWidget && advanceWidget->AdvancedDataChanged())
         return true;
 
     return false;
 }
 
-void AFQStudioSettingDialog::_ReloadTabConfig() {
+void AFQStudioSettingDialog::ReloadTabConfig() {
     int curTabIndex = ui->stackedWidget->currentIndex();
     TabType curTabType = static_cast<TabType>(curTabIndex);
     std::string key;
@@ -955,46 +1113,48 @@ void AFQStudioSettingDialog::_ReloadTabConfig() {
 
     switch (curTabType) {
         case TabType::PROGRAM:
-            AFConfigManager::GetSingletonInstance().SetProgramConfig();
-            m_pProgramSettingAreaWidget->LoadProgramSettings();
+            CONFIG_CONTEXT.SetProgramConfig();
+            programWidget->LoadProgramSettings();
             break;
         case TabType::STREAM:
-            AFConfigManager::GetSingletonInstance().SetStreamConfig();
+            CONFIG_CONTEXT.SetStreamConfig();
+            streamWidget->ReloadBroadInfo();
             break;
         case TabType::OUTPUT:
-            AFConfigManager::GetSingletonInstance().SetOutputConfig();
-            m_pOutputSettingAreaWidget->ResetOutputSettings();
+            CONFIG_CONTEXT.SetOutputConfig();
+            outputWidget->ResetOutputSettings();
             break;
         case TabType::AUDIO:
-            AFConfigManager::GetSingletonInstance().SetAudioConfig();
-            m_pAudioSettingAreaWidget->ResetAudioSettings();
+            CONFIG_CONTEXT.SetAudioConfig();
+            audioWidget->ResetAudioSettings();
             break;
         case TabType::VIDEO:
-            AFConfigManager::GetSingletonInstance().SetVideoConfig(cx, cy);
-            m_pVideoSettingAreaWidget->ResetVideoSettings();
+            CONFIG_CONTEXT.SetVideoConfig(cx, cy);
+            videoWidget->ResetVideoSettings();
             break;
         case TabType::HOTKEYS:
+            // TODO: implement?
             break;
         case TabType::ACCESSIBILITY:
-            AFConfigManager::GetSingletonInstance().SetAccessibilityConfig();
-            m_pAccesibilitySettingAreaWidget->LoadAccessibilitySettings();
+            CONFIG_CONTEXT.InitAccessibilityConfig();
+            accessWidget->LoadAccessibilitySettings();
             break;
         case TabType::ADVANCED:
-            AFConfigManager::GetSingletonInstance().SetAdvancedConfig();
-            m_pAdvancedSettingAreaWidget->LoadAdvancedSettings();
+            CONFIG_CONTEXT.SetAdvancedConfig();
+            advanceWidget->LoadAdvancedSettings();
             break;
     }
 }
 
-void AFQStudioSettingDialog::_UpdateResetButtonVisible() {
+void AFQStudioSettingDialog::UpdateResetButtonVisible() {
     int curTabIndex = ui->stackedWidget->currentIndex();
     TabType curTabType = static_cast<TabType>(curTabIndex);
     switch (curTabType) {
         case TabType::STREAM:
-            m_pResetButton->setVisible(false);
+            resetButton->setVisible(false);
             break;
         default:
-            m_pResetButton->setVisible(true);
+            resetButton->setVisible(true);
             break;
     }
 }

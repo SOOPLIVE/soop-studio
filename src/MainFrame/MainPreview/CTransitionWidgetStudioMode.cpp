@@ -17,7 +17,7 @@ void AFTransitionWidgetStudioMode::paintEvent(QPaintEvent* event)
     {
         QPen pen;
         pen.setWidth(1);
-        pen.setColor(m_LineColor);
+        pen.setColor(m_lineColor);
         
         p.setPen(pen);
         p.setBrush(Qt::NoBrush);

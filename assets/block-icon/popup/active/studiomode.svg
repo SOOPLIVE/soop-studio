@@ -1,33 +1,3 @@
-<svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect x="4.5" y="0.5" width="47" height="47" rx="11.5" fill="#4F4F4F" stroke="#828282"/>
-<g opacity="0.6" filter="url(#filter0_d_211_3491)">
-<rect x="30" y="7" width="17" height="34" rx="6" fill="white"/>
-</g>
-<g opacity="0.8" filter="url(#filter1_d_211_3491)">
-<rect x="9" y="7" width="17" height="34" rx="6" fill="white"/>
-</g>
-<circle cx="27.5" cy="53.5" r="1.5" fill="white"/>
-<circle cx="27.5" cy="53.5" r="2" stroke="black" stroke-opacity="0.05"/>
-<defs>
-<filter id="filter0_d_211_3491" x="26" y="5" width="25" height="42" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-<feFlood flood-opacity="0" result="BackgroundImageFix"/>
-<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-<feOffset dy="2"/>
-<feGaussianBlur stdDeviation="2"/>
-<feComposite in2="hardAlpha" operator="out"/>
-<feColorMatrix type="matrix" values="0 0 0 0 0.297166 0 0 0 0 0.297166 0 0 0 0 0.297166 0 0 0 1 0"/>
-<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_211_3491"/>
-<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_211_3491" result="shape"/>
-</filter>
-<filter id="filter1_d_211_3491" x="5" y="5" width="25" height="42" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-<feFlood flood-opacity="0" result="BackgroundImageFix"/>
-<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-<feOffset dy="2"/>
-<feGaussianBlur stdDeviation="2"/>
-<feComposite in2="hardAlpha" operator="out"/>
-<feColorMatrix type="matrix" values="0 0 0 0 0.297166 0 0 0 0 0.297166 0 0 0 0 0.297166 0 0 0 1 0"/>
-<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_211_3491"/>
-<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_211_3491" result="shape"/>
-</filter>
-</defs>
+<svg width="32" height="33" viewBox="0 0 32 33" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M23 7.5C24.6569 7.5 26 8.84315 26 10.5V22.5L25.9961 22.6543C25.9184 24.1883 24.6883 25.4184 23.1543 25.4961L23 25.5H9L8.8457 25.4961C7.31166 25.4184 6.08163 24.1883 6.00391 22.6543L6 22.5V10.5C6 8.84315 7.34315 7.5 9 7.5H23ZM8 22.5C8 23.0523 8.44772 23.5 9 23.5H23C23.5523 23.5 24 23.0523 24 22.5V19.5H8V22.5ZM17 17.5H24V10.5C24 9.94771 23.5523 9.5 23 9.5H17V17.5ZM9 9.5C8.44772 9.5 8 9.94772 8 10.5V17.5H15V9.5H9Z" fill="#0182FF"/>
 </svg>

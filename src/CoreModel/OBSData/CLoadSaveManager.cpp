@@ -1,150 +1,88 @@
 ﻿#include "CLoadSaveManager.h"
 
+#include <util/profiler.hpp>
 
 #include "Common/SettingsMiscDef.h"
-#include "CoreModel/Audio/CAudio.h"
-#include "CoreModel/Config/CArgOption.h"
-#include "CoreModel/Config/CConfigManager.h"
-#include "CoreModel/Config/CStateAppContext.h"
-#include "CoreModel/Scene/CScene.h"
-#include "CoreModel/Scene/CSceneContext.h"
-
+#include "Common/StudioDefine.h"
 
 #include "Application/CApplication.h"
+
+#include "CoreModel/Audio/CAudio.h"
+#include "CoreModel/Config/CConfigManager.h"
+#include "CoreModel/Config/CArgOption.h"
+#include "CoreModel/Config/CStateAppContext.h"
+#include "CoreModel/Scene/CSceneContext.h"
+#include "CoreModel/Source/CSource.h"
+#include "CoreModel/Profile/CProfile.h"
+#include "CoreModel/SOOPSource/CSoopMediaSourceManager.h"
+
 #include "MainFrame/DynamicCompose/CMainDynamicComposit.h"
 #include "Utils/importers/importers.hpp"
 
+#include "MainFrame/Profile/CMainProfile.h"
+#include "MainFrame/SceneCollection/CMainSceneCollection.h"
+#include "MainFrame/AudioSource/CAudioSource.h"
+#include "MainFrame/SceneSource/CMainSceneSource.h"
 
 
-void AFLoadSaveManager::EnumProfiles(std::function<bool(const char *, const char *)> &&cb)
+bool AFLoadSaveManager::InitLoadSave()
 {
-    char path[512];
-    os_glob_t *glob;
+	bool firstOpen = false;
 
-    int ret = AFConfigManager::GetSingletonInstance().
-                GetConfigPath(path, sizeof(path),
-                              "SOOPStudio/basic/profiles/*");
-    if (ret <= 0) {
-        blog(LOG_WARNING, "Failed to get profiles config path");
-        return;
+	const char* sceneCollectionFile = config_get_string(USERCONFIG, "Basic", "SceneCollectionFile");
+	char savePath[1024];
+	char fileName[1024];
+	int ret;
+
+	if (!sceneCollectionFile)
+		throw "Failed to get scene collection name";
+
+    ret = snprintf(fileName, sizeof(fileName), (LOCAL_FOLDER_NAME + "/basic/scenes/%s").c_str(), sceneCollectionFile);
+
+	if (ret <= 0)
+		throw "Failed to create scene collection file name";
+
+	ret = GetAppConfigPath(savePath, sizeof(savePath), fileName);
+	if (ret <= 0)
+		throw "Failed to get scene collection json file path";
+	//
+
+	ProfileScope("AFLoadSaveManager::Load");
+
+    const char* sceneCollectionRaw = config_get_string(App()->GetUserConfig(), "Basic", "SceneCollection");
+    const std::string sceneCollectionName{ sceneCollectionRaw ? sceneCollectionRaw : "" };        
+
+    const std::optional<OBSSceneCollection> configuredCollection =
+        MAIN_SCENECOLLECTION->GetSceneCollectionByName(sceneCollectionName);
+
+    if (configuredCollection) {
+        MAIN_SCENECOLLECTION->ActivateSceneCollection(configuredCollection.value());
+    }
+    else {
+        DecreaseCheckSaveCnt();
+        MAIN_SCENECOLLECTION->SetupNewSceneCollection(sceneCollectionName);
+        IncreaseCheckSaveCnt();
+        config_save_safe(USERCONFIG, "tmp", nullptr);
+        firstOpen = true;
     }
 
-    if (os_glob(path, 0, &glob) != 0) {
-        blog(LOG_WARNING, "Failed to glob profiles");
-        return;
+    if (configuredCollection) {
+        DecreaseCheckSaveCnt();
+        MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_SCENE_COLLECTION_LIST_CHANGED);
+        MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED);
+        MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_SCENE_CHANGED);
+        MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED);
+        IncreaseCheckSaveCnt();
     }
 
-    for (size_t i = 0; i < glob->gl_pathc; i++) {
-        const char *filePath = glob->gl_pathv[i].path;
-        const char *dirName = strrchr(filePath, '/') + 1;
+    MAIN_SCENECOLLECTION->RefreshSceneCollections();
+    MAIN_PROFILE->RefreshProfiles();
+	DecreaseCheckSaveCnt();
 
-        if (!glob->gl_pathv[i].directory)
-            continue;
-
-        if (strcmp(dirName, ".") == 0 || strcmp(dirName, "..") == 0)
-            continue;
-
-        std::string file = filePath;
-        file += "/basic.ini";
-
-        ConfigFile config;
-        int ret = config.Open(file.c_str(), CONFIG_OPEN_EXISTING);
-        if (ret != CONFIG_SUCCESS)
-            continue;
-
-        const char *name = config_get_string(config, "General", "Name");
-        if (!name)
-            name = strrchr(filePath, '/') + 1;
-
-        if (!cb(name, filePath))
-            break;
-    }
-
-    os_globfree(glob);
+    return firstOpen;
 }
 
-bool AFLoadSaveManager::GetProfileDir(const char* findName, const char*& profileDir)
-{
-    bool found = false;
-    auto func = [&](const char *name, const char *path) {
-        if (strcmp(name, findName) == 0) {
-            found = true;
-            profileDir = strrchr(path, '/') + 1;
-            return false;
-        }
-        return true;
-    };
-
-    EnumProfiles(func);
-    return found;
-}
-
-bool AFLoadSaveManager::ProfileExists(const char* findName)
-{
-    const char* profileDir = nullptr;
-    return GetProfileDir(findName, profileDir);
-}
-
-void AFLoadSaveManager::EnumSceneCollections(std::function<bool(const char *, const char *)> &&cb)
-{
-    char path[512];
-    os_glob_t *glob;
-
-    int ret = AFConfigManager::GetSingletonInstance().
-                GetConfigPath(path, sizeof(path),
-                              "SOOPStudio/basic/scenes/*.json");
-    if (ret <= 0) {
-        blog(LOG_WARNING, "Failed to get config path for scene "
-                  "collections");
-        return;
-    }
-
-    if (os_glob(path, 0, &glob) != 0) {
-        blog(LOG_WARNING, "Failed to glob scene collections");
-        return;
-    }
-
-    for (size_t i = 0; i < glob->gl_pathc; i++) {
-        const char *filePath = glob->gl_pathv[i].path;
-
-        if (glob->gl_pathv[i].directory)
-            continue;
-
-        OBSDataAutoRelease data =
-            obs_data_create_from_json_file_safe(filePath, "bak");
-        std::string name = obs_data_get_string(data, "name");
-
-        /* if no name found, use the file name as the name
-         * (this only happens when switching to the new version) */
-        if (name.empty()) {
-            name = strrchr(filePath, '/') + 1;
-            name.resize(name.size() - 5);
-        }
-
-        if (!cb(name.c_str(), filePath))
-            break;
-    }
-
-    os_globfree(glob);
-}
-
-bool AFLoadSaveManager::SceneCollectionExists(const char* findName)
-{
-    bool found = false;
-    auto func = [&](const char *name, const char *) {
-        if (strcmp(name, findName) == 0) {
-            found = true;
-            return false;
-        }
-
-        return true;
-    };
-
-    EnumSceneCollections(func);
-    return found;
-}
-
-bool AFLoadSaveManager::Load(const char* file)
+bool AFLoadSaveManager::Load(const char* file, bool remigrate)
 {
     IncreaseCheckSaveCnt();
 
@@ -153,8 +91,10 @@ bool AFLoadSaveManager::Load(const char* file)
         DecreaseCheckSaveCnt();
         blog(LOG_INFO, "No scene file found, creating default scene");
         
-        m_pMainUI->GetMainWindow()->CreateDefaultScene(true);
-        m_pMainUI->qslotSaveProject();
+
+        MAIN_SCENESOURCE->CreateDefaultScene(true);
+        MAINFRAME->qslotSaveProject();
+        MAINFRAME->RefreshSceneUI();
         //
         return true;
     }
@@ -163,16 +103,25 @@ bool AFLoadSaveManager::Load(const char* file)
     return false;
 }
 
+bool AFLoadSaveManager::CheckCanSaveProject()
+{
+    if(m_disableSaving.load())
+        return false;
+
+    m_projectChanged = true;
+
+    return true;
+};
 
 void AFLoadSaveManager::ForceSaveProjectNow()
 {
-    long prevDisableVal = m_DisableSaving.load();
+    long prevDisableVal = m_disableSaving.load();
     
-    m_DisableSaving.store(0);
+    m_disableSaving.store(0);
     
     SaveProjectNow();
     
-    m_DisableSaving.store(prevDisableVal);
+    m_disableSaving.store(prevDisableVal);
 }
 
 void AFLoadSaveManager::SaveProjectNow()
@@ -183,44 +132,97 @@ void AFLoadSaveManager::SaveProjectNow()
 
 void AFLoadSaveManager::SaveProjectDeferred()
 {
-    if (m_DisableSaving.load())
+    if (m_disableSaving.load())
         return;
 
-    if (!m_bProjectChanged)
+    if (!m_projectChanged)
         return;
 
-    m_bProjectChanged = false;
+    m_projectChanged = false;
+        
 
-    
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    
-    const char* sceneCollection = config_get_string(confManager.GetGlobal(),
-                                                    "Basic", "SceneCollectionFile");
+    try {
+        const OBSSceneCollection& currentCollection = MAIN_SCENECOLLECTION->GetCurrentSceneCollection();
 
-    char savePath[1024];
-    char fileName[1024];
-    int ret;
+        _Save(currentCollection.collectionFile.u8string().c_str());
+    }
+    catch (const std::invalid_argument& error) {
+        blog(LOG_ERROR, "%s", error.what());
+    }
 
-    if (!sceneCollection)
-        return;
-
-    ret = snprintf(fileName, sizeof(fileName),
-                   "SOOPStudio/basic/scenes/%s.json", sceneCollection);
-    if (ret <= 0)
-        return;
-
-    ret = confManager.GetConfigPath(savePath, sizeof(savePath), fileName);
-    if (ret <= 0)
-        return;
-
-    _Save(savePath);
 }
 
-void AFLoadSaveManager::_LoadTransitions(obs_data_array_t *transitions,
-                                          obs_load_source_cb cb, void *private_data)
+//Need Change if backup has same name
+void AFLoadSaveManager::MoveProfileToBackup(std::string remainID)
 {
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
+    _CheckBackupDir(remainID);
+
+    char sceneDir[1024];
+    int ret;
+
+    std::string profilePath = LOCAL_FOLDER_NAME + "/backup/" + remainID + "/profiles/";
+
+    //Backup Folder/account/scene Check
+    char backupDir[1024];
+    ret = GetAppConfigPath(backupDir, sizeof(backupDir), profilePath.c_str());
+    if (!std::filesystem::exists(backupDir))
+        std::filesystem::create_directory(backupDir);
+
+    //Move SceneCollection
+    ret = GetAppConfigPath(sceneDir, sizeof(sceneDir), (LOCAL_FOLDER_NAME + "/basic/profiles").c_str());
+    std::string strBackupDir(backupDir);
+
+    for (const auto& entry : std::filesystem::directory_iterator(sceneDir))
+    {
+        const std::filesystem::path filePath(strBackupDir + "/" + entry.path().filename().string());
+        std::filesystem::rename(entry.path(), filePath);
+    }
+}
+
+void AFLoadSaveManager::MoveSceneCollectionToBackup(std::string remainID)
+{
+    _CheckBackupDir(remainID);
+
+    char sceneDir[1024];
+    int ret;
+
+    std::string scenePath = LOCAL_FOLDER_NAME + "/backup/" + remainID + "/scenes/";
+
+    //Backup Folder/account/scene Check
+    char backupDir[1024];
+    ret = GetAppConfigPath(backupDir, sizeof(backupDir), scenePath.c_str());
+
     
+    if (!std::filesystem::exists(backupDir))
+        std::filesystem::create_directory(backupDir);
+
+    //Move SceneCollection
+    ret = GetAppConfigPath(sceneDir, sizeof(sceneDir), (LOCAL_FOLDER_NAME + "/basic/scenes").c_str());
+    std::string strBackupDir(backupDir);
+
+    for (const auto& entry : std::filesystem::directory_iterator(sceneDir))
+    {
+        if (std::filesystem::is_regular_file(entry.path()))
+        {
+            const std::filesystem::path filePath(strBackupDir + "/" + entry.path().filename().string());
+
+            if (std::filesystem::exists(filePath))
+            {
+                std::filesystem::remove(filePath);
+            }
+
+            std::filesystem::rename(entry.path(), filePath);
+        }
+    }
+
+    //Set SceneCollection to default
+    config_t* userConfig = USERCONFIG;
+    config_set_string(userConfig, "Basic", "SceneCollection", Str("Untitled"));
+    config_set_string(userConfig, "Basic", "SceneCollectionFile", Str("Untitled"));
+}
+
+void AFLoadSaveManager::_LoadTransitions(obs_data_array_t *transitions, obs_load_source_cb cb, void *private_data)
+{
     size_t count = obs_data_array_count(transitions);
 
     for (size_t i = 0; i < count; i++) {
@@ -233,8 +235,8 @@ void AFLoadSaveManager::_LoadTransitions(obs_data_array_t *transitions,
         OBSSourceAutoRelease source =
             obs_source_create_private(id, name, settings);
         if (!obs_obj_invalid(source)) {
-            sceneContext.InitTransition(source);
-            sceneContext.AddTransition(source.Get());
+            SCENE_CONTEXT.InitTransition(source);
+            SCENE_CONTEXT.AddTransition(source.Get());
 
             if (cb)
                 cb(private_data, source);
@@ -244,8 +246,7 @@ void AFLoadSaveManager::_LoadTransitions(obs_data_array_t *transitions,
 
 void AFLoadSaveManager::_LoadSceneListOrder(obs_data_array_t *array)
 {
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
-    SceneItemVector& sceneItems = sceneContext.GetSceneItemVector();
+    SceneItemVector& sceneItems = SCENE_CONTEXT.GetSceneItemVector();
     
     size_t num = obs_data_array_count(array);
 
@@ -275,10 +276,7 @@ void AFLoadSaveManager::_LoadSceneListOrder(obs_data_array_t *array)
 
 void AFLoadSaveManager::_LoadData(obs_data_t* data, const char* file)
 {
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
-    
-    m_pMainUI->ClearSceneData(true);
+    MAINFRAME->ClearSceneData(true);
     //ClearContextBar();
 
     /* Exit OBS if clearing scene data failed for some reason. */
@@ -289,9 +287,10 @@ void AFLoadSaveManager::_LoadData(obs_data_t* data, const char* file)
 //        return;
 //    }
 
+    auto& sceneContext = SCENE_CONTEXT;
     sceneContext.InitDefaultTransition();
 
-    m_pMainUI->WaitDevicePropertiesThread();
+    MAIN_PROFILE->WaitDevicePropertiesThread();
 
 //    OBSDataAutoRelease modulesObj = obs_data_get_obj(data, "modules");
 //    if (api)
@@ -311,15 +310,12 @@ void AFLoadSaveManager::_LoadData(obs_data_t* data, const char* file)
     const char *programSceneName = obs_data_get_string(data, "current_program_scene");
     const char *transitionName = obs_data_get_string(data, "current_transition");
 
-    AFArgOption* tmpArgOption = AFConfigManager::GetSingletonInstance().GetArgOption();
-    AFStateAppContext* tmpStateApp = AFConfigManager::GetSingletonInstance().GetStates();
-    
-    std::string tmpOptStartingScene = tmpArgOption->GetStartingScene();
-    if (tmpOptStartingScene.empty() == false)
+    auto& optStartingScene = ARGOPTION.startingScene();
+    if (optStartingScene.empty() == false)
     {
-        programSceneName = tmpOptStartingScene.c_str();
-        if (tmpStateApp->IsPreviewProgramMode() == false)
-            sceneName = tmpOptStartingScene.c_str();
+        programSceneName = optStartingScene.c_str();
+        if (STATEAPP.IsPreviewProgramMode() == false)
+            sceneName = optStartingScene.c_str();
     }
 
     int newDuration = (int)obs_data_get_int(data, "transition_duration");
@@ -329,9 +325,7 @@ void AFLoadSaveManager::_LoadData(obs_data_t* data, const char* file)
     if (!transitionName)
         transitionName = obs_source_get_name(sceneContext.GetFadeTransition());
     
-    const char *curSceneCollection = config_get_string(confManager.GetGlobal(),
-                                                       "Basic", "SceneCollection");
-
+    const char *curSceneCollection = config_get_string(USERCONFIG, "Basic", "SceneCollection");
     obs_data_set_default_string(data, "name", curSceneCollection);
 
     const char *name = obs_data_get_string(data, "name");
@@ -342,12 +336,12 @@ void AFLoadSaveManager::_LoadData(obs_data_t* data, const char* file)
     if (!name || !*name)
         name = curSceneCollection;
 
-    LoadAudioDevice(DESKTOP_AUDIO_1, 1, data);
-    LoadAudioDevice(DESKTOP_AUDIO_2, 2, data);
-    LoadAudioDevice(AUX_AUDIO_1, 3, data);
-    LoadAudioDevice(AUX_AUDIO_2, 4, data);
-    LoadAudioDevice(AUX_AUDIO_3, 5, data);
-    LoadAudioDevice(AUX_AUDIO_4, 6, data);
+    AFAudioUtil::LoadAudioDevice(DESKTOP_AUDIO_1, 1, data);
+    AFAudioUtil::LoadAudioDevice(DESKTOP_AUDIO_2, 2, data);
+    AFAudioUtil::LoadAudioDevice(AUX_AUDIO_1, 3, data);
+    AFAudioUtil::LoadAudioDevice(AUX_AUDIO_2, 4, data);
+    AFAudioUtil::LoadAudioDevice(AUX_AUDIO_3, 5, data);
+    AFAudioUtil::LoadAudioDevice(AUX_AUDIO_4, 6, data);
 
     if (!sources)
         sources = std::move(groups);
@@ -356,21 +350,20 @@ void AFLoadSaveManager::_LoadData(obs_data_t* data, const char* file)
     
 
     obs_missing_files_t *files = obs_missing_files_create();
-    obs_load_sources(sources, AddMissingFiles, files);
+    obs_load_sources(sources, AFProfileUtil::AddMissingFiles, files);
 
     if (transitions)
-        _LoadTransitions(transitions, AddMissingFiles, files);
+        _LoadTransitions(transitions, AFProfileUtil::AddMissingFiles, files);
     if (sceneOrder)
         _LoadSceneListOrder(sceneOrder);
 
     curTransition = sceneContext.FindTransition(transitionName);
     if (!curTransition)
         curTransition = sceneContext.GetFadeTransition();
-//
-//    ui->transitionDuration->setValue(newDuration);
-    
+ 
     sceneContext.SetCurTransition(curTransition);
-    AFSceneUtil::SetTransition(curTransition);
+    sceneContext.SetCurDuration(newDuration);
+    sceneContext.SetTransition(curTransition);
 
 retryScene:
     curScene = obs_get_source_by_name(sceneName);
@@ -378,31 +371,63 @@ retryScene:
 
     /* if the starting scene command line parameter is bad at all,
      * fall back to original settings */
-    if (tmpOptStartingScene.empty() == false &&
+    if (optStartingScene.empty() == false &&
         (!curScene || !curProgramScene))
     {
         sceneName = obs_data_get_string(data, "current_scene");
         programSceneName = obs_data_get_string(data, "current_program_scene");
         
-        tmpOptStartingScene.clear();
-        tmpArgOption->SetStartingScene("");
+        optStartingScene.clear();
+        ARGOPTION.startingScene("");
         goto retryScene;
     }
-    
-    m_pMainUI->GetMainWindow()->SetCurrentScene(curScene.Get(), true);
-    
-    m_pMainUI->RefreshSceneUI();
+
+    /* if current_scene& current_program_scene is not matched */ 
+    if (!curScene || !curProgramScene)
+    {
+        obs_frontend_source_list scenes = {};
+        obs_frontend_get_scenes(&scenes);
+
+        if (scenes.sources.num > 0 && scenes.sources.array[0]) {
+            obs_source_t* firstScene = scenes.sources.array[0];
+            const char* firstName = obs_source_get_name(firstScene);
+
+            sceneName = firstName;
+            programSceneName = firstName;
+
+            obs_frontend_source_list_free(&scenes);
+            goto retryScene;
+        }
+
+        obs_frontend_source_list_free(&scenes);
+    }
+
+    DYNAMIC_COMPOSIT->SetCurrentScene(curScene.Get(), true);    
+    MAINFRAME->RefreshSceneUI();
     //
 
     if (!curProgramScene)
         curProgramScene = std::move(curScene);
-    if (tmpStateApp->IsPreviewProgramMode())
-        AFSceneUtil::TransitionToScene(curProgramScene.Get(), true);
+    if (STATEAPP.IsPreviewProgramMode())
+        sceneContext.TransitionToScene(curProgramScene.Get(), true);
+
+
+    // Attach SOOP Media Source
+    OBSScene changeScene = obs_scene_from_source(curScene.Get());
+    obs_scene_enum_items(changeScene, [](obs_scene_t* scene, obs_sceneitem_t* item, void* param) {
+        obs_source_t* source = obs_sceneitem_get_source(item);
+        if (source) {
+            if (AFSourceUtil::IsSoopMediaSource(source)) {
+                SOOP_SRC_MANAGER.SetSoopMediaSource(source);
+                return false;
+            }
+        }
+        return true;
+        }, NULL);
 
     /* ------------------- */
 
-//    bool projectorSave = config_get_bool(GetGlobalConfig(), "BasicWindow",
-//                         "SaveProjectors");
+//    bool projectorSave = config_get_bool(USERCONFIG, "BasicWindow", "SaveProjectors");
 
 //    if (projectorSave) {
 //        OBSDataArrayAutoRelease savedProjectors =
@@ -418,13 +443,12 @@ retryScene:
     /* ------------------- */
 
     std::string file_base = strrchr(file, '/') + 1;
-    file_base.erase(file_base.size() - 5, 5);
+    
+    config_t* userConfig = USERCONFIG;
+    config_set_string(userConfig, "Basic", "SceneCollection", name);
+    config_set_string(userConfig, "Basic", "SceneCollectionFile", file_base.c_str());
 
-    config_set_string(confManager.GetGlobal(), "Basic", "SceneCollection", name);
-    config_set_string(confManager.GetGlobal(), "Basic", "SceneCollectionFile", file_base.c_str());
-
-    OBSDataArrayAutoRelease quickTransitionData =
-        obs_data_get_array(data, "quick_transitions");
+    OBSDataArrayAutoRelease quickTransitionData = obs_data_get_array(data, "quick_transitions");
     //LoadQuickTransitions(quickTransitionData);
 
     //RefreshQuickTransitions();
@@ -447,33 +471,29 @@ retryScene:
     //ui->preview->SetFixedScaling(fixedScaling);
     //emit ui->preview->DisplayResized();
 
-//    if (vcamEnabled) {
-//        OBSDataAutoRelease obj =
-//            obs_data_get_obj(data, "virtual-camera");
-//
-//        vcamConfig.type =
-//            (VCamOutputType)obs_data_get_int(obj, "type2");
-//        if (vcamConfig.type == VCamOutputType::Invalid)
-//            vcamConfig.type =
-//                (VCamOutputType)obs_data_get_int(obj, "type");
-//
-//        if (vcamConfig.type == VCamOutputType::Invalid) {
-//            VCamInternalType internal =
-//                (VCamInternalType)obs_data_get_int(obj,
-//                                   "internal");
-//
-//            switch (internal) {
-//            case VCamInternalType::Default:
-//                vcamConfig.type = VCamOutputType::ProgramView;
-//                break;
-//            case VCamInternalType::Preview:
-//                vcamConfig.type = VCamOutputType::PreviewOutput;
-//                break;
-//            }
-//        }
-//        vcamConfig.scene = obs_data_get_string(obj, "scene");
-//        vcamConfig.source = obs_data_get_string(obj, "source");
-//    }
+    bool vcamEnabled = MAINFRAME->VirtualCamEnabled();
+    VCamConfig& config = MAINFRAME->VirtualCamConfig();
+    if (vcamEnabled) {
+        OBSDataAutoRelease obj = obs_data_get_obj(data, "virtual-camera");
+        config.type = (VCamOutputType)obs_data_get_int(obj, "type2");
+        if (config.type == VCamOutputType::Invalid)
+            config.type = (VCamOutputType)obs_data_get_int(obj, "type");
+        //
+        if (config.type == VCamOutputType::Invalid) {
+            VCamInternalType internal = (VCamInternalType)obs_data_get_int(obj, "internal");
+
+            switch (internal) {
+            case VCamInternalType::Default:
+                config.type = VCamOutputType::ProgramView;
+                break;
+            case VCamInternalType::Preview:
+                config.type = VCamOutputType::PreviewOutput;
+                break;
+            }
+        }
+        config.scene = obs_data_get_string(obj, "scene");
+        config.source = obs_data_get_string(obj, "source");
+    }
 
     /* ---------------------- */
 
@@ -514,18 +534,17 @@ retryScene:
 
     //LogScenes();
 
-    if (tmpArgOption->GetDisableMissingFilesCheck() == false)
-        m_pMainUI->ShowMissingFilesDialog(files);
+    if (ARGOPTION.GetDisableMissingFilesCheck() == false)
+        MAINFRAME->ShowMissingFilesDialog(files);
 
     DecreaseCheckSaveCnt();
 
-//    if (vcamEnabled)
-//        outputHandler->UpdateVirtualCamOutputSource();
+    if (vcamEnabled) {
+        MAINFRAME->UpdateVirtualCamConfig(config);
+    }
 //
-//    if (api) {
-//        api->on_event(OBS_FRONTEND_EVENT_SCENE_CHANGED);
-//        api->on_event(OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED);
-//    }
+    MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_SCENE_CHANGED);
+    MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED);
 }
 
 void AFLoadSaveManager::_SaveAudioDevice(const char *name, int channel, obs_data_t *parent,
@@ -581,6 +600,21 @@ obs_data_t* AFLoadSaveManager::_GenerateSaveData(obs_data_array_t* sceneOrder,
         },
         static_cast<void *>(&FilterAudioSources));
 
+    /* reset soop media source */
+    const size_t count = obs_data_array_count(sourcesArray);
+    for (size_t i = 0; i < count; i++) {
+        OBSDataAutoRelease sourceData = obs_data_array_item(sourcesArray, i);     
+        const char* id = obs_data_get_string(sourceData, "id");
+        if (id && AFSourceUtil::IsSoopMediaSource(id)) {
+            obs_data_set_string(sourceData, "name", obs_source_get_display_name(id));
+
+            OBSDataAutoRelease settings = obs_data_get_obj(sourceData, "settings");
+            obs_data_set_string(settings, "input", "");
+            obs_data_set_int(settings, "cpNo", 0);
+            obs_data_set_int(settings, "idx", 0);
+        }
+    }
+
     /* -------------------------------- */
     /* save group sources separately    */
 
@@ -598,8 +632,7 @@ obs_data_t* AFLoadSaveManager::_GenerateSaveData(obs_data_array_t* sceneOrder,
     const char* sceneName = obs_source_get_name(currentScene);
     const char* programName = obs_source_get_name(curProgramScene);
 
-    const char* sceneCollection = config_get_string(AFConfigManager::GetSingletonInstance().GetGlobal(),
-                                                    "Basic", "SceneCollection");
+    const char* sceneCollection = config_get_string(USERCONFIG, "Basic", "SceneCollection");
 
     obs_data_set_string(saveData, "current_scene", sceneName);
     obs_data_set_string(saveData, "current_program_scene", programName);
@@ -613,8 +646,7 @@ obs_data_t* AFLoadSaveManager::_GenerateSaveData(obs_data_array_t* sceneOrder,
     obs_data_array_release(sourcesArray);
     obs_data_array_release(groupsArray);
 
-    obs_data_set_string(saveData, "current_transition",
-                obs_source_get_name(transition));
+    obs_data_set_string(saveData, "current_transition", obs_source_get_name(transition));
     obs_data_set_int(saveData, "transition_duration", transitionDuration);
 
     return saveData;
@@ -624,8 +656,7 @@ obs_data_array_t* AFLoadSaveManager::_SaveSceneListOrder()
 {
     obs_data_array_t *sceneOrder = obs_data_array_create();
 
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
-    SceneItemVector& sceneItems = sceneContext.GetSceneItemVector();
+    SceneItemVector& sceneItems = SCENE_CONTEXT.GetSceneItemVector();
     
     if (sceneItems.empty() == false)
     {
@@ -646,8 +677,7 @@ obs_data_array_t* AFLoadSaveManager::_SaveTransitions()
 {
     obs_data_array_t *transitions = obs_data_array_create();
 
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
-    std::vector<OBSSource>& tmpTransitions = sceneContext.GetRefTransitions();
+    std::vector<OBSSource>& tmpTransitions = SCENE_CONTEXT.GetRefTransitions();
     
     for (int i = 0; i < tmpTransitions.size(); i++)
     {
@@ -670,6 +700,7 @@ obs_data_array_t* AFLoadSaveManager::_SaveTransitions()
 
 obs_data_array_t* AFLoadSaveManager::_SaveQuickTransitions()
 {
+
     obs_data_array_t *array = obs_data_array_create();
 
 //    for (QuickTransition &qt : quickTransitions) {
@@ -691,20 +722,24 @@ obs_data_array_t* AFLoadSaveManager::_SaveQuickTransitions()
 
 void AFLoadSaveManager::_Save(const char* file)
 {
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
-    
-    OBSScene scene = sceneContext.GetCurrOBSScene();
-    OBSSource curProgramScene = OBSGetStrongRef(sceneContext.GetProgramOBSScene());
+    auto& sceneContext = SCENE_CONTEXT;
+    //
+    OBSScene scene = sceneContext.GetCurrentScene();
+    OBSSource curProgramScene = sceneContext.GetProgramSource();
     if (!curProgramScene)
         curProgramScene = obs_scene_get_source(scene);
+
+    int transDuration = sceneContext.GetCurDuraition();
 
     OBSDataArrayAutoRelease sceneOrder = _SaveSceneListOrder();
     OBSDataArrayAutoRelease transitions = _SaveTransitions();
     OBSDataArrayAutoRelease quickTrData = _SaveQuickTransitions();
+
     //OBSDataArrayAutoRelease savedProjectorList = SaveProjectors();
     OBSDataAutoRelease saveData = _GenerateSaveData(
-        sceneOrder, quickTrData, 200/*ui->transitionDuration->value()*/,
+        sceneOrder, quickTrData, transDuration,
         transitions, scene, curProgramScene, nullptr/*savedProjectorList*/);
+
 
 //    obs_data_set_bool(saveData, "preview_locked", ui->preview->Locked());
 //    obs_data_set_bool(saveData, "scaling_enabled",
@@ -716,27 +751,26 @@ void AFLoadSaveManager::_Save(const char* file)
 //    obs_data_set_double(saveData, "scaling_off_y",
 //                ui->preview->GetScrollY());
 
-//    if (vcamEnabled) {
-//        OBSDataAutoRelease obj = obs_data_create();
-//
-//        obs_data_set_int(obj, "type2", (int)vcamConfig.type);
-//        switch (vcamConfig.type) {
-//        case VCamOutputType::Invalid:
-//        case VCamOutputType::ProgramView:
-//        case VCamOutputType::PreviewOutput:
-//            break;
-//        case VCamOutputType::SceneOutput:
-//            obs_data_set_string(obj, "scene",
-//                        vcamConfig.scene.c_str());
-//            break;
-//        case VCamOutputType::SourceOutput:
-//            obs_data_set_string(obj, "source",
-//                        vcamConfig.source.c_str());
-//            break;
-//        }
-//
-//        obs_data_set_obj(saveData, "virtual-camera", obj);
-//    }
+    if (MAINFRAME->VirtualCamEnabled()) {
+        OBSDataAutoRelease obj = obs_data_create();
+        VCamConfig& config = MAINFRAME->VirtualCamConfig();
+        obs_data_set_int(obj, "type2", (int)config.type);
+        switch (config.type) {
+        case VCamOutputType::Invalid:
+        case VCamOutputType::ProgramView:
+        case VCamOutputType::PreviewOutput:
+            break;
+        case VCamOutputType::SceneOutput:
+            obs_data_set_string(obj, "scene", config.scene.c_str());
+            break;
+        case VCamOutputType::SourceOutput:
+            obs_data_set_string(obj, "source", config.source.c_str());
+            break;
+        }
+        //
+        obs_data_set_obj(saveData, "virtual-camera", obj);
+    }
+
 
 //    if (api) {
 //        if (safeModeModuleData) {
@@ -756,4 +790,25 @@ void AFLoadSaveManager::_Save(const char* file)
 
     if (!obs_data_save_json_safe(saveData, file, "tmp", "bak"))
         blog(LOG_ERROR, "Could not save scene data to %s", file);
+}
+
+void AFLoadSaveManager::_CheckBackupDir(std::string remainID)
+{
+    char sceneDir[1024];
+    int ret;
+
+    std::string backupPath = LOCAL_FOLDER_NAME + "/backup/";
+    std::string accountPath = LOCAL_FOLDER_NAME + "/backup/" + remainID;
+
+    //Backup Folder Check
+    char backupDir[1024];
+    ret = GetAppConfigPath(backupDir, sizeof(backupDir), backupPath.c_str());
+    if (!std::filesystem::exists(backupDir))
+        std::filesystem::create_directory(backupDir);
+
+    //Backup Folder/account Check
+    ret = GetAppConfigPath(backupDir, sizeof(backupDir), accountPath.c_str());
+
+    if (!std::filesystem::exists(backupDir))
+        std::filesystem::create_directory(backupDir);
 }

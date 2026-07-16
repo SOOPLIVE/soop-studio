@@ -5,12 +5,9 @@
 #include <QToolButton>
 #include <QFileDialog>
 
-
-#include "qt-wrapper.h"
-
-
 #include <util/platform.h>
 
+#include "Application/CApplication.h"
 
 #include "CoreModel/Locale/CLocaleTextManager.h"
 #include "CoreModel/Icon/CIconContext.h"
@@ -34,12 +31,12 @@ enum MissingFilesRole { EntryStateRole = Qt::UserRole, NewPathsToProcessRole };
 
 
 AFQMissingFilesDialog::AFQMissingFilesDialog(obs_missing_files_t *files, QWidget *parent)
-    : AFQRoundedDialogBase(parent, Qt::WindowFlags(), false),
+    : AFTTopBaseDialog(parent),
       ui(new Ui::AFQMissingFilesDialog)
 {
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
-
     ui->setupUi(this);
+    setModal(false);
+    setWindowFlags(Qt::Window);
 
     for (size_t i = 0; i < obs_missing_files_count(files); i++) {
         obs_missing_file_t *f =
@@ -50,22 +47,18 @@ AFQMissingFilesDialog::AFQMissingFilesDialog(obs_missing_files_t *files, QWidget
 
         AFQMissingFileColumnWidget* widget = new AFQMissingFileColumnWidget(this);
         widget->AddMissingFileWidget(name, oldPath);
-        m_qFiles.insert(i, widget);
+        m_files.insert(i, widget);
         ui->widget_Contents->layout()->addWidget(widget);
     }
-    
-    
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-    
-
+ 
     QString found =
-        QT_UTF8(localeManager.Str("MissingFiles.NumFound"))
+        QTStr("MissingFiles.NumFound")
             .arg("0",
                  QString::number(obs_missing_files_count(files)));
 
     ui->found->setText(found);
 
-    fileStore = files;
+    m_pFileStore = files;
 
     connect(ui->doneButton, &QPushButton::clicked, this,
         &AFQMissingFilesDialog::saveFiles);
@@ -78,26 +71,24 @@ AFQMissingFilesDialog::AFQMissingFilesDialog(obs_missing_files_t *files, QWidget
 
     ui->pushButton_Close->setProperty("buttonType", "closeButton");
 
-    this->SetHeightFixed(true);
-    this->SetWidthFixed(true);
-
-    
+    SetWidthResizeEnabled(false);
+    SetHeightResizeEnabled(false);
 }
 
 AFQMissingFilesDialog::~AFQMissingFilesDialog()
 {
-    obs_missing_files_destroy(fileStore);
+    obs_missing_files_destroy(m_pFileStore);
 }
 
 void AFQMissingFilesDialog::saveFiles()
 {
-    for (int i = 0; i < m_qFiles.length(); i++) {
-        MissingFilesState state = m_qFiles[i]->GetState();
+    for (int i = 0; i < m_files.length(); i++) {
+        MissingFilesState state = m_files[i]->GetState();
         if (state != MissingFilesState::Missing) {
             obs_missing_file_t *f =
-                obs_missing_files_get_file(fileStore, i);
+                obs_missing_files_get_file(m_pFileStore, i);
 
-            QString path = m_qFiles[i]->GetNewName();
+            QString path = m_files[i]->GetNewName();
 
             if (state == MissingFilesState::Cleared) {
                 obs_missing_file_issue_callback(f, "");
@@ -114,11 +105,8 @@ void AFQMissingFilesDialog::saveFiles()
 
 void AFQMissingFilesDialog::browseFolders()
 {
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-    
-    
     QString dir = QFileDialog::getExistingDirectory(
-        this, QT_UTF8(localeManager.Str("MissingFiles.SelectDir")), "",
+        this, QTStr("MissingFiles.SelectDir"), "",
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
 
     if (dir != "") {
@@ -129,9 +117,7 @@ void AFQMissingFilesDialog::browseFolders()
 
 void AFQMissingFilesDialog::_FileCheckLoop(QString path, bool skipPrompt)
 {
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-
-    m_bLoop = false;
+    m_loop = false;
     QUrl url = QUrl().fromLocalFile(path);
     QString dir =
         url.toDisplayString(QUrl::RemoveScheme | QUrl::RemoveFilename |
@@ -139,11 +125,11 @@ void AFQMissingFilesDialog::_FileCheckLoop(QString path, bool skipPrompt)
 
     bool prompted = skipPrompt;
 
-    for (int i = 0; i < m_qFiles.length(); i++) {
-        if (m_qFiles[i]->GetState() != MissingFilesState::Missing)
+    for (int i = 0; i < m_files.length(); i++) {
+        if (m_files[i]->GetState() != MissingFilesState::Missing)
             continue;
 
-        QUrl origFile = QUrl().fromLocalFile(m_qFiles[i]->GetOriginalName());
+        QUrl origFile = QUrl().fromLocalFile(m_files[i]->GetOriginalName());
         QString filename = origFile.fileName();
         QString testFile = dir + filename;
 
@@ -152,54 +138,55 @@ void AFQMissingFilesDialog::_FileCheckLoop(QString path, bool skipPrompt)
                 int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                     this,
                     "",
-                    QT_UTF8(localeManager.Str("MissingFiles.AutoSearchText")));
+                    QTStr("MissingFiles.AutoSearchText"));
 
                 if (result == QDialog::Rejected)
                     break;
 
                 prompted = true;
             }
-            m_qFiles[i]->SetNewName(testFile);
-            m_qFiles[i]->qslotEditingFinished();
+            m_files[i]->SetNewName(testFile);
+            m_files[i]->qslotEditingFinished();
         }
     }
-    m_bLoop = true;
+    m_loop = true;
 }
 
 void AFQMissingFileColumnWidget::AddMissingFileWidget(const char* name, const char* oldPath)
 {
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-
     QHBoxLayout* totalLayout = new QHBoxLayout();
     totalLayout->setSpacing(10);
     totalLayout->setContentsMargins(27, 0, 30, 0);
 
-    m_qChangedCheck = new QPushButton(this);
-    m_qChangedCheck->setCheckable(true);
-    m_qChangedCheck->setChecked(false);
-    m_qChangedCheck->setFixedSize(18, 18);
-    m_qChangedCheck->setEnabled(false);
-    m_qChangedCheck->setObjectName("pushButton_Checked");
-    totalLayout->addWidget(m_qChangedCheck);
+    m_pChangedCheck = new QPushButton(this);
+    m_pChangedCheck->setCheckable(true);
+    m_pChangedCheck->setChecked(false);
+    m_pChangedCheck->setFixedSize(18, 18);
+    m_pChangedCheck->setEnabled(false);
+    m_pChangedCheck->setObjectName("pushButton_Checked");
+    totalLayout->addWidget(m_pChangedCheck);
 
     ///////NAME///////
     QHBoxLayout* namelayout = new QHBoxLayout();
     namelayout->setSpacing(6);
     namelayout->setContentsMargins(8, 0, 8, 0);
 
-    AFIconContext& iconContext = AFIconContext::GetSingletonInstance();
-
     OBSSourceAutoRelease source = obs_get_source_by_name(name);
-    QIcon sourceicon = iconContext.GetSourceIcon(obs_source_get_id(source));
-    QLabel* iconLabel = new QLabel(this);
-    iconLabel->setPixmap(sourceicon.pixmap(18,18)); 
-    iconLabel->setFixedSize(18, 18);
-    m_qSourceName = new AFQElidedSlideLabel(this);
-    m_qSourceName->setText(name);
-    m_qSourceName->setToolTip(name);
+    if (source)
+    {
+        QIcon sourceicon = ICON_CONTEXT.GetSourceIcon(obs_source_get_id(source));
+        QLabel* iconLabel = new QLabel(this);
+        iconLabel->setPixmap(sourceicon.pixmap(24, 24));
+        iconLabel->setFixedSize(24, 24);
 
-    namelayout->addWidget(iconLabel);
-    namelayout->addWidget(m_qSourceName);
+        namelayout->addWidget(iconLabel);
+    }
+
+    m_pSourceName = new AFQElidedSlideLabel(this);
+    m_pSourceName->setText(name);
+    m_pSourceName->setToolTip(name);
+
+    namelayout->addWidget(m_pSourceName);
 
     QWidget* nameWidget = new QWidget(this);
     nameWidget->setObjectName("widget_SourceName");
@@ -214,12 +201,12 @@ void AFQMissingFileColumnWidget::AddMissingFileWidget(const char* name, const ch
     missinglayout->setSpacing(6);
     missinglayout->setContentsMargins(8, 0, 8, 0);
 
-    m_qMissingPath = new AFQElidedSlideLabel(this);
+    m_pMissingPath = new AFQElidedSlideLabel(this);
 
     QFileInfo fi(oldPath);
-    m_qMissingPath->setText(fi.fileName());
-    m_qMissingPath->setToolTip(oldPath);
-    missinglayout->addWidget(m_qMissingPath);
+    m_pMissingPath->setText(fi.fileName());
+    m_pMissingPath->setToolTip(oldPath);
+    missinglayout->addWidget(m_pMissingPath);
 
     QWidget* missingWidget = new QWidget(this);
     missingWidget->setObjectName("widget_MissingPathDir");
@@ -234,27 +221,27 @@ void AFQMissingFileColumnWidget::AddMissingFileWidget(const char* name, const ch
     newLayout->setSpacing(3);
     newLayout->setContentsMargins(0, 0, 8, 0);
 
-    m_qNewFilePath = new QLineEdit(this);
-    m_qNewFilePath->setObjectName("lineEdit_NewPath");
-    m_qNewFilePath->setFixedHeight(40);
-    connect(m_qNewFilePath, &QLineEdit::editingFinished,
+    m_pNewFilePath = new QLineEdit(this);
+    m_pNewFilePath->setObjectName("lineEdit_NewPath");
+    m_pNewFilePath->setFixedHeight(40);
+    connect(m_pNewFilePath, &QLineEdit::editingFinished,
         this, &AFQMissingFileColumnWidget::qslotEditingFinished);
 
-    m_qFindPathButton = new QPushButton(this);
-    m_qFindPathButton->setFixedSize(30, 30);
-    m_qFindPathButton->setObjectName("pushButton_FindPath");
-    connect(m_qFindPathButton, &QPushButton::clicked,
+    m_pFindPathButton = new QPushButton(this);
+    m_pFindPathButton->setFixedSize(30, 30);
+    m_pFindPathButton->setObjectName("pushButton_FindPath");
+    connect(m_pFindPathButton, &QPushButton::clicked,
         this, &AFQMissingFileColumnWidget::qslotBrowseFilePath);
 
-    m_qPathResetButton = new QPushButton(this);
-    m_qPathResetButton->setFixedSize(30, 30);
-    m_qPathResetButton->setObjectName("pushButton_ResetPath");
-    connect(m_qPathResetButton, &QPushButton::clicked,
+    m_pPathResetButton = new QPushButton(this);
+    m_pPathResetButton->setFixedSize(30, 30);
+    m_pPathResetButton->setObjectName("pushButton_ResetPath");
+    connect(m_pPathResetButton, &QPushButton::clicked,
         this, &AFQMissingFileColumnWidget::qslotClearFilePath);
 
-    newLayout->addWidget(m_qNewFilePath);
-    newLayout->addWidget(m_qFindPathButton);
-    newLayout->addWidget(m_qPathResetButton);
+    newLayout->addWidget(m_pNewFilePath);
+    newLayout->addWidget(m_pFindPathButton);
+    newLayout->addWidget(m_pPathResetButton);
 
     QWidget* newWidget = new QWidget(this);
     newWidget->setObjectName("widget_NewPathDir");
@@ -269,12 +256,12 @@ void AFQMissingFileColumnWidget::AddMissingFileWidget(const char* name, const ch
     statusLayout->setSpacing(0);
     statusLayout->setContentsMargins(8, 0, 8, 0);
 
-    m_qStatusLabel = new AFQElidedSlideLabel(this);
-    m_qStatusLabel->setText(localeManager.Str("MissingFiles.Missing"));
-    m_qStatusLabel->setToolTip(m_qStatusLabel->text());
-    m_State = MissingFilesState::Missing;
+    m_pStatusLabel = new AFQElidedSlideLabel(this);
+    m_pStatusLabel->setText(Str("MissingFiles.Missing"));
+    m_pStatusLabel->setToolTip(m_pStatusLabel->text());
+    m_state = MissingFilesState::Missing;
 
-    statusLayout->addWidget(m_qStatusLabel);
+    statusLayout->addWidget(m_pStatusLabel);
 
     QWidget* statusWidget = new QWidget(this);
     statusWidget->setObjectName("widget_Status");
@@ -290,16 +277,14 @@ void AFQMissingFileColumnWidget::AddMissingFileWidget(const char* name, const ch
 
 void AFQMissingFileColumnWidget::qslotBrowseFilePath()
 {
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-
-    QString currentPath = m_qNewFilePath->text();
+    QString currentPath = m_pNewFilePath->text();
     /*if (currentPath.isEmpty() ||
         currentPath.compare(QT_UTF8(localeManager.Str("MissingFiles.Clear"))) == 0)
         currentPath = defaultPath;*/
 
     bool isSet = false;
     QString newPath = QFileDialog::getOpenFileName(
-        this, QT_UTF8(localeManager.Str("MissingFiles.SelectFile")),
+        this, QTStr("MissingFiles.SelectFile"),
         currentPath, nullptr);
 
 #ifdef __APPLE__
@@ -308,62 +293,57 @@ void AFQMissingFileColumnWidget::qslotBrowseFilePath()
 #endif
 
     if (!newPath.isEmpty()) {
-        m_qNewFilePath->setText(newPath);
-        m_qChangedCheck->setChecked(true);
-        auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-
+        m_pNewFilePath->setText(newPath);
+        m_pChangedCheck->setChecked(true);
 
         QFileInfo fi(newPath);
-        if (m_qMissingPath->text().compare(fi.fileName()) == 0)
+        if (m_pMissingPath->text().compare(fi.fileName()) == 0)
         {
-            m_qStatusLabel->setText(localeManager.Str("MissingFiles.Found"));
-            m_qStatusLabel->setToolTip(m_qStatusLabel->text());
-            m_State = MissingFilesState::Found;
+            m_pStatusLabel->setText(Str("MissingFiles.Found"));
+            m_pStatusLabel->setToolTip(m_pStatusLabel->text());
+            m_state = MissingFilesState::Found;
         }
         else
         {
-            m_qStatusLabel->setText(localeManager.Str("MissingFiles.Replaced"));
-            m_qStatusLabel->setToolTip(m_qStatusLabel->text());
-            m_State = MissingFilesState::Replaced;
+            m_pStatusLabel->setText(Str("MissingFiles.Replaced"));
+            m_pStatusLabel->setToolTip(m_pStatusLabel->text());
+            m_state = MissingFilesState::Replaced;
         }
     }
 }
 
 void AFQMissingFileColumnWidget::qslotClearFilePath()
 {
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-    m_qChangedCheck->setChecked(true);
-    m_qNewFilePath->clear();
-    m_qNewFilePath->setText(localeManager.Str("MissingFiles.Cleared"));
-    m_qStatusLabel->setText(localeManager.Str("MissingFiles.Cleared"));
-    m_State = MissingFilesState::Cleared;
-    m_qStatusLabel->setToolTip(m_qStatusLabel->text());
+    m_pChangedCheck->setChecked(true);
+    m_pNewFilePath->clear();
+    m_pNewFilePath->setText(Str("MissingFiles.Cleared"));
+    m_pStatusLabel->setText(Str("MissingFiles.Cleared"));
+    m_state = MissingFilesState::Cleared;
+    m_pStatusLabel->setToolTip(m_pStatusLabel->text());
 }
 
 void AFQMissingFileColumnWidget::qslotEditingFinished()
 {
-    auto& localeManager = AFLocaleTextManager::GetSingletonInstance();
-
-    if (m_qNewFilePath->text().isNull() || m_qNewFilePath->text().isEmpty())
+    if (m_pNewFilePath->text().isNull() || m_pNewFilePath->text().isEmpty())
     {
-        m_qStatusLabel->setText(localeManager.Str("MissingFiles.Missing"));
-        m_qStatusLabel->setToolTip(m_qStatusLabel->text());
-        m_State = MissingFilesState::Missing;
+        m_pStatusLabel->setText(Str("MissingFiles.Missing"));
+        m_pStatusLabel->setToolTip(m_pStatusLabel->text());
+        m_state = MissingFilesState::Missing;
         return;
     }
 
-    QFileInfo fi(m_qNewFilePath->text());
-    if (m_qMissingPath->text().compare(fi.fileName()) == 0)
+    QFileInfo fi(m_pNewFilePath->text());
+    if (m_pMissingPath->text().compare(fi.fileName()) == 0)
     {
-        m_qStatusLabel->setText(localeManager.Str("MissingFiles.Found"));
-        m_qStatusLabel->setToolTip(m_qStatusLabel->text());
-        m_State = MissingFilesState::Found;
+        m_pStatusLabel->setText(Str("MissingFiles.Found"));
+        m_pStatusLabel->setToolTip(m_pStatusLabel->text());
+        m_state = MissingFilesState::Found;
     }
     else
     {
-        m_qStatusLabel->setText(localeManager.Str("MissingFiles.Replaced"));
-        m_qStatusLabel->setToolTip(m_qStatusLabel->text());
-        m_State = MissingFilesState::Replaced;
+        m_pStatusLabel->setText(Str("MissingFiles.Replaced"));
+        m_pStatusLabel->setToolTip(m_pStatusLabel->text());
+        m_state = MissingFilesState::Replaced;
     }
-    m_qChangedCheck->setChecked(true);
+    m_pChangedCheck->setChecked(true);
 }

@@ -6,7 +6,7 @@
 
 #include <QDialog>
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 #include "obs.hpp"
 
@@ -17,7 +17,7 @@ namespace Ui {
 	class AFQBrowserInteraction;
 }
 
-class AFQBrowserInteraction : public AFQRoundedDialogBase
+class AFQBrowserInteraction : public AFTTopBaseDialog
 {
 	Q_OBJECT
 
@@ -37,8 +37,7 @@ signals:
 protected:
 
 	virtual void closeEvent(QCloseEvent* event) override;
-	virtual bool nativeEvent(const QByteArray& eventType, void* message,
-						     qintptr* result) override;
+	virtual bool nativeEvent(const QByteArray& eventType, void* message, qintptr* result) override;
 
 private:
 	static void SourceRemoved(void* data, calldata_t* params);
@@ -65,13 +64,12 @@ private:
 	std::unique_ptr<OBSEventFilter> m_eventFilter;
 
 	using properties_delete_t = decltype(&obs_properties_destroy);
-	using properties_t =
-		std::unique_ptr<obs_properties_t, properties_delete_t>;
+	using properties_t = std::unique_ptr<obs_properties_t, properties_delete_t>;
 
 	properties_t m_props;
 
 #ifdef _WIN32
-	CDummyInteraction* m_dummyInteraction = nullptr;
+	CDummyInteraction* m_pDummyInteraction = nullptr;
 #endif
 };
 
@@ -100,7 +98,7 @@ public:
 	}
 	LRESULT  BrowserInteractionProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 	HWND	 GetHwnd() { return m_hwnd; }
-	QWidget* GetWidget() { return m_widgetContainter; }
+	QWidget* GetWidget() { return m_pWidgetContainter; }
 
 private:
 	void _CreateInterationWindow();
@@ -109,8 +107,8 @@ private:
 	HWND	  m_hwnd = NULL;
 	OBSSource m_obsSource = nullptr;
 
-	QWidget* m_parent = nullptr;
-	QWindow* m_qWindow = nullptr;
-	QWidget* m_widgetContainter = nullptr;
+	QWidget* m_pParent = nullptr;
+	QWindow* m_pWindow = nullptr;
+	QWidget* m_pWidgetContainter = nullptr;
 };
 #endif

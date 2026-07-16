@@ -17,18 +17,14 @@
 #pragma comment(lib, "shell32")
 #endif
 
-
-
+#include "qt-wrappers.hpp"
 #include "Application/CApplication.h"
-#include "qt-wrapper.h"
-
 
 #include "Utils/OBF/obf.h"
 
 #include "ViewModel/Auth/CAuthListener.hpp"
 
 #include "CoreModel/Auth/SBaseAuth.h"
-#include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
 #include "CoreModel/Browser/CCefManager.h"
 
@@ -39,25 +35,12 @@
 
 using namespace json11;
 
-/* ------------------------------------------------------------------------- */
-#define TWITCH_CLIENTID				""
-#define TWITCH_CLIENT_SECRET        ""
-//
-#define TWITCH_HASH					0x0
-#define TWITCH_SCOPE_VERSION		1
-
-#define TWITCH_RTM_URL				"rtmp://live.twitch.tv/app"
-
-#define TWITCH_CHAT_DOCK_NAME		"twitchChat"
-#define TWITCH_INFO_DOCK_NAME		"twitchInfo"
-#define TWITCH_STATS_DOCK_NAME		"twitchStats"
-#define TWITCH_FEED_DOCK_NAME		"twitchFeed"
 
 TwitchAuth::TwitchAuth(const Def& d, AFAddStreamWidget* widget)
 	: AFOAuthStreamKey(d),
-	m_widget(widget)
+	m_pWidget(widget)
 {
-	QCef* cef = AFCefManager::GetSingletonInstance().GetCef();
+	QCef* cef = CEFMANAGER.GetCef();
 	if(!cef)
 		return;
 
@@ -81,9 +64,9 @@ TwitchAuth::~TwitchAuth()
 
 bool TwitchAuth::Login()
 {
-	DeleteCookies();
+	//DeleteCookies();
 	//
-	if(!m_widget)
+	if(!m_pWidget)
 		return false;
 
 	QString url_template;
@@ -91,23 +74,26 @@ bool TwitchAuth::Login()
 	url_template += "?response_type=code";
 	url_template += "&client_id=%2";
 	url_template += "&redirect_uri=%3";
-	url_template += "&scope=channel:manage:polls+channel:read:polls+channel:read:stream_key";
+	url_template += "&scope=channel:manage:broadcast+chat:edit+channel:read:stream_key";
+	
 	QString url = url_template.arg(TWITCH_AUTH_URL, TWITCH_CLIENTID, TWITCH_REDIRECT_URL);
 
-	QCefWidget* cefWidget = m_widget->GetLoginCefWidget(nullptr, url.toStdString());
+	QCefWidget* cefWidget = m_pWidget->GetLoginCefWidget(nullptr, url.toStdString());
 	if(!cefWidget)
 		return false;
-
+	
 	connect(cefWidget, SIGNAL(urlChanged(const QString&)), this, SLOT(qslotUrlChanged(const QString&)));
+
+	cefWidget->setFocusPolicy(Qt::StrongFocus);
+	cefWidget->raise();
+	cefWidget->setFocus(Qt::ActiveWindowFocusReason);
 	//
 	return true;
 }
 void TwitchAuth::DeleteCookies()
 {
-	auto& cefManager = AFCefManager::GetSingletonInstance();
-	cefManager.InitPanelCookieManager();
-	QCefCookieManager* panel_cookies = cefManager.GetCefCookieManager();
-
+	CEFMANAGER.InitPanelCookieManager();
+	QCefCookieManager* panel_cookies = CEFMANAGER.GetCefCookieManager();
 	if(panel_cookies) {
 		panel_cookies->DeleteCookies("twitch.tv", std::string());
 	}
@@ -116,171 +102,103 @@ void TwitchAuth::DeleteCookies()
 //
 void TwitchAuth::qslotUrlChanged(const QString& url)
 {
-	if(!m_widget)
+	if (!m_pWidget)
 		return;
+
+	if (url.contains("error=access_denied") || !GetParseKey(url, std::string("error=")).isEmpty()) {
+		m_pWidget->reject();
+		return;
+	}
 
 	std::string access_token;
 	std::string refresh_token;
-	uint64_t expire_time = 0;
-	std::string id;
 	std::string channel_id;
+	std::string id;
 	std::string nick;
-	std::string stream_url;
 
-	// access_token
-	QString parseKey = GetParseKey(url, std::string("access_token="));
-	if(parseKey.isEmpty())
+	QString parseCode = GetParseKey(url, std::string("code="));
+	if (parseCode.isEmpty())
 		return;
 
-	access_token = parseKey.toStdString();
+	std::string auth_code = parseCode.toStdString();
 
-	// refresh_token
-	parseKey = GetParseKey(url, std::string("refresh_token="));
-	if(parseKey.isEmpty())
-		return;
+	std::string token_body;
+	token_body = "grant_type=authorization_code";
+	token_body += "&code=" + auth_code;
+	token_body += "&client_id=" + std::string(TWITCH_CLIENTID);
+	token_body += "&client_secret=" + std::string(TWITCH_CLIENT_SECRET);
+	token_body += "&redirect_uri=" + std::string(TWITCH_REDIRECT_URL);
 
-	refresh_token = parseKey.toStdString();
+	std::string token_output;
+	std::string token_error;
+	std::vector<std::string> token_headers;
 
-	m_code = access_token.c_str();
+	bool token_success = GetRemoteFile(TWITCH_TOKEN_URL, token_output, token_error, nullptr,
+		"application/x-www-form-urlencoded", "",
+		token_body.c_str(),
+		token_headers, nullptr, 10, true, token_body.length());
 
-
-	std::string output;
-	std::string error;
-	std::string desc;
-
-	bool success = false;
-
-
-	std::vector<std::string> headers;
-	headers.push_back(std::string("Client-ID: ") + TWITCH_CLIENTID);
-	headers.push_back(std::string("Authorization: Bearer ") + m_code.toStdString());
-
-	// user info
-	success = GetRemoteFile("https://api.twitch.tv/helix/users", output, error, nullptr,
-							"application/json", "",
-							nullptr,
-							headers, nullptr, 10, true, 0);
-
-	json11::Json json = json11::Json::parse(output, error);
-	if(!error.empty())
-		throw ErrorInfo("Failed to parse json", error);
-
-	if(!json["data"].is_array() ||
-	   !json["data"][0]["id"].is_string()) {
-		// error
+	if (!token_success) {
+		blog(LOG_WARNING, "Twitch token exchange failed: %s", token_error.c_str());
 		return;
 	}
 
-	channel_id = json["data"][0]["id"].string_value();
-	id = json["data"][0]["login"].string_value();
-	nick = json["data"][0]["display_name"].string_value();
-
-	output.clear();
-	error.clear();
-
-	// stream key
-	std::string strUrl = "https://api.twitch.tv/helix/streams/key?broadcaster_id=";
-	strUrl += channel_id;
-
-	success = GetRemoteFile(strUrl.c_str(), output, error, nullptr,
-							"application/json", "",
-							nullptr,
-							headers, nullptr, 10, true, 0);
-
-	json = json11::Json::parse(output, error);
-	output.clear();
-	error.clear();
-
-	if(!json["data"].is_array() ||
-	   !json["data"][0]["stream_key"].is_string()) {
-		// error
-		return;
-	}
-
-	key_ = json["data"][0]["stream_key"].string_value();
-
-	m_widget->SetAuthData(access_token, refresh_token,
-						  0, id, nick,
-						  key_,
-						  TWITCH_RTM_URL);
+	m_pWidget->SetAuthData(access_token, refresh_token,
+						   0, id, nick,
+                           m_key,
+						   TWITCH_RTM_URL);
 }
 
 std::string TwitchAuth::GetUrlProfileImg()
 {
+	GetChannelInfo();
+
     std::string resUrl;
     resUrl.clear();
     
     AFBasicAuth* pConnectedAuthData = nullptr;
     GetConnectedAFBasicAuth(pConnectedAuthData);
     
-    // Refresh Token
-    if (pConnectedAuthData != nullptr)
-    {
-        std::string _body;
-        std::string _output;
-        std::string _error;
-        
-        
-        _body = "grant_type=refresh_token&refresh_token=";
-        _body += pConnectedAuthData->strRefreshToken;
-        _body += "&client_id=";
-        _body += TWITCH_CLIENTID;
-        _body += "&client_secret=";
-        _body += TWITCH_CLIENT_SECRET;
-        
-        
-        std::vector<std::string> _headers;
-        bool _success = GetRemoteFile(TWITCH_TOKEN_URL, _output, _error, nullptr,
-                                      "application/x-www-form-urlencoded", "",
-                                      _body.c_str(),
-                                      _headers, nullptr, 10, true, _body.length());
-
-        json11::Json _json = json11::Json::parse(_output, _error);
-        
-        if (_success)
-        {
-            pConnectedAuthData->strAccessToken = _json["access_token"].string_value();
-            pConnectedAuthData->strRefreshToken = _json["refresh_token"].string_value();
-            token = pConnectedAuthData->strAccessToken;
-        }
-    }
-    
-    
-    
-    bool success = false;
-    std::string output;
-    std::string error;
-    
-    std::vector<std::string> headers;
-    headers.push_back(std::string("Client-ID: ") + TWITCH_CLIENTID);
-    headers.push_back(std::string("Authorization: Bearer ") + token);
-
-
-    // token
-    success = GetRemoteFile("https://api.twitch.tv/helix/users", output, error, nullptr,
-                            "application/json", "",
-                            nullptr,
-                            headers, nullptr, 10, true, 0);
-
-    if (!success)
-        return resUrl;
-
-    json11::Json json = json11::Json::parse(output, error);
-
-    if(!error.empty())
-        throw ErrorInfo("Failed to parse json", error);
-
-    if(!json["data"].is_array() ||
-       !json["data"][0]["id"].is_string()) {
-        // error
-        return resUrl;
-    }
-    
-
-    resUrl = json["data"][0]["profile_image_url"].string_value();
-    
-    
     return resUrl;
+}
+
+bool TwitchAuth::SendChatMessage(std::string message)
+{
+	std::string client_id = TWITCH_CLIENTID;
+	//deobfuscate_str(&client_id[0], TWITCH_HASH);
+
+	if (!GetToken(TWITCH_TOKEN_URL, client_id, TWITCH_SCOPE_VERSION))
+		return false;
+	if (m_token.empty())
+		return false;
+	
+	Json json;
+	bool success = MakeApiRequest("users", json);
+	if (!success)
+		return false;
+
+	std::string _body;
+	std::string _output;
+	std::string _error;
+
+	_body = "broadcaster_id=" + json["data"][0]["id"].string_value();
+	_body += "&sender_id=" + json["data"][0]["id"].string_value();
+	_body += "&message=" + message;
+
+	std::vector<std::string> _headers;
+	_headers.push_back(std::string("Client-ID: ") + client_id);
+	_headers.push_back(std::string("Authorization: Bearer ") + m_token);
+	//_headers.push_back(std::string("Content-Type: application/json"));
+
+	bool _success = GetRemoteFile("https://api.twitch.tv/helix/chat/messages", _output, _error, nullptr,
+		"application/x-www-form-urlencoded", "",
+		_body.c_str(),
+		_headers, nullptr, 10, true, _body.length());
+
+	if (!success)
+		return false;
+
+	return true;
 }
 
 //
@@ -311,7 +229,7 @@ void TwitchAuth::TryLoadSecondaryUIPanes()
 		}
 	};
 
-	QCefCookieManager* panel_cookies = AFCefManager::GetSingletonInstance().GetCefCookieManager();
+	QCefCookieManager* panel_cookies = CEFMANAGER.GetCefCookieManager();
 	panel_cookies->CheckForCookie("https://www.twitch.tv", "auth-token", cb);
 }
 void TwitchAuth::LoadSecondaryUIPanes()
@@ -421,17 +339,13 @@ void TwitchAuth::LoadSecondaryUIPanes()
 	//	stats->setVisible(false);
 	//	feed->setVisible(false);
 	//} else {
-	//	uint32_t lastVersion = config_get_int(App()->GlobalConfig(),
-	//						  "General", "LastVersion");
-
+	//	uint32_t lastVersion = config_get_int(APPCONFIG, "General", "LastVersion");
 	//	if(lastVersion <= MAKE_SEMANTIC_VERSION(23, 0, 2)) {
 	//		feed->setVisible(false);
 	//	}
 
-	//	const char* dockStateStr = config_get_string(
-	//		main->Config(), service(), "DockState");
-	//	QByteArray dockState =
-	//		QByteArray::fromBase64(QByteArray(dockStateStr));
+	//	const char* dockStateStr = config_get_string(USERCONFIG, service(), "DockState");
+	//	QByteArray dockState = QByteArray::fromBase64(QByteArray(dockStateStr));
 
 	//	if(main->isVisible() || !main->isMaximized())
 	//		main->restoreState(dockState);
@@ -441,14 +355,14 @@ void TwitchAuth::LoadSecondaryUIPanes()
 //
 bool TwitchAuth::RetryLogin()
 {
-	if(!m_widget)
+	if(!m_pWidget)
 		return false;
 
-	QCefWidget* cefWidget = m_widget->GetLoginCefWidget(nullptr, TWITCH_AUTH_URL);
+	QCefWidget* cefWidget = m_pWidget->GetLoginCefWidget(nullptr, TWITCH_AUTH_URL);
 	if(!cefWidget)
 		return false;
 
-	if(m_widget->exec() == QDialog::Rejected) {
+	if(m_pWidget->exec() == QDialog::Rejected) {
 		return false;
 	}
 
@@ -461,24 +375,25 @@ bool TwitchAuth::RetryLogin()
 
 void TwitchAuth::SaveInternal()
 {
-	AFMainDynamicComposit* composit = App()->GetMainView()->GetMainWindow();
-	config_set_string(GetBasicConfig(), service(), "Name", m_name.c_str());
-	config_set_string(GetBasicConfig(), service(), "UUID", m_uuid.c_str());
+	auto activeConfig = ACTIVECONFIG;
+	//
+	config_set_string(activeConfig, service(), "Name", m_name.c_str());
+	config_set_string(activeConfig, service(), "UUID", m_uuid.c_str());
 
 	if(m_uiLoaded) {
-		config_set_string(GetBasicConfig(), service(), "DockState",
-				  composit->saveState().toBase64().constData());
+		config_set_string(activeConfig, service(), "DockState",
+						  DYNAMIC_COMPOSIT->saveState().toBase64().constData());
 	}
 	AFOAuthStreamKey::SaveInternal();
 }
 bool TwitchAuth::LoadInternal()
 {
-	QCef* cef = AFCefManager::GetSingletonInstance().GetCef();
+	QCef* cef = CEFMANAGER.GetCef();
 	if(!cef)
 		return false;
 
-	m_name = config_get_string(GetBasicConfig(), service(), "Name");
-	m_uuid = config_get_string(GetBasicConfig(), service(), "UUID");
+	m_name = config_get_string(ACTIVECONFIG, service(), "Name");
+	m_uuid = config_get_string(ACTIVECONFIG, service(), "UUID");
 
 	m_firstLoad = false;
 	return AFOAuthStreamKey::LoadInternal();
@@ -503,7 +418,7 @@ bool TwitchAuth::MakeApiRequest(const char* path, json11::Json& json_out)
 
 	std::vector<std::string> headers;
 	headers.push_back(std::string("Client-ID: ") + client_id);
-	headers.push_back(std::string("Authorization: Bearer ") + token);
+	headers.push_back(std::string("Authorization: Bearer ") + m_token);
 
 	std::string output;
 	std::string error;
@@ -525,10 +440,11 @@ bool TwitchAuth::MakeApiRequest(const char* path, json11::Json& json_out)
 					   Str("TwitchAuth.TwoFactorFail.Title"),
 					   Str("TwitchAuth.TwoFactorFail.Text"),
 					   true);*/
-		blog(LOG_WARNING, "%s: %s", __FUNCTION__,
+		blog(LOG_WARNING, "%s: %s. API response: %s", __FUNCTION__,
 			 "Got 403 from Twitch, user probably does not "
 			 "have two-factor authentication enabled on "
-			 "their account");
+			 "their account",
+			 output.empty() ? "<none>" : output.c_str());
 		return false;
 	}
 
@@ -553,9 +469,9 @@ try {
 
 	if(!GetToken(TWITCH_TOKEN_URL, client_id, TWITCH_SCOPE_VERSION))
 		return false;
-	if(token.empty())
+	if(m_token.empty())
 		return false;
-	if(!key_.empty())
+	if(!m_key.empty())
 		return true;
 
 	Json json;
@@ -572,7 +488,7 @@ try {
 	if(!success)
 		return false;
 
-	key_ = json["data"][0]["stream_key"].string_value();
+    m_key = json["data"][0]["stream_key"].string_value();
 
 	return true;
 
@@ -604,83 +520,3 @@ QString TwitchAuth::GetParseKey(const QString &data, const std::string &token)
 		parseKey = data.right(data.size() - code_idx);
 	return parseKey;
 }
-
-//#ifdef BROWSER_AVAILABLE
-//void YoutubeChatDock::SetWidget(QCefWidget *widget_)
-//{
-//	lineEdit = new LineEditAutoResize();
-//	lineEdit->setVisible(false);
-//	lineEdit->setMaxLength(200);
-//	lineEdit->setPlaceholderText(QTStr("YouTube.Chat.Input.Placeholder"));
-//	sendButton = new QPushButton(QTStr("YouTube.Chat.Input.Send"));
-//	sendButton->setVisible(false);
-//
-//	chatLayout = new QHBoxLayout();
-//	chatLayout->setContentsMargins(0, 0, 0, 0);
-//	chatLayout->addWidget(lineEdit, 1);
-//	chatLayout->addWidget(sendButton);
-//
-//	QVBoxLayout *layout = new QVBoxLayout();
-//	layout->setContentsMargins(0, 0, 0, 0);
-//	layout->addWidget(widget_, 1);
-//	layout->addLayout(chatLayout);
-//
-//	QWidget *widget = new QWidget();
-//	widget->setLayout(layout);
-//	setWidget(widget);
-//
-//	QWidget::connect(lineEdit, &LineEditAutoResize::returnPressed, this,
-//			 &YoutubeChatDock::SendChatMessage);
-//	QWidget::connect(sendButton, &QPushButton::pressed, this,
-//			 &YoutubeChatDock::SendChatMessage);
-//
-//	cefWidget.reset(widget_);
-//}
-//
-//void YoutubeChatDock::SetApiChatId(const std::string &id)
-//{
-//	this->apiChatId = id;
-//	QMetaObject::invokeMethod(this, "EnableChatInput",
-//				  Qt::QueuedConnection);
-//}
-//
-//void YoutubeChatDock::SendChatMessage()
-//{
-//	const QString message = lineEdit->text();
-//	if (message == "")
-//		return;
-//
-//	OBSBasic *main = OBSBasic::Get();
-//	YoutubeApiWrappers *apiYouTube(
-//		dynamic_cast<YoutubeApiWrappers *>(main->GetAuth()));
-//
-//	ExecuteFuncSafeBlock([&]() {
-//		lineEdit->setText("");
-//		lineEdit->setPlaceholderText(
-//			QTStr("YouTube.Chat.Input.Sending"));
-//		if (apiYouTube->SendChatMessage(apiChatId, message)) {
-//			os_sleep_ms(3000);
-//		} else {
-//			QString error = apiYouTube->GetLastError();
-//			apiYouTube->GetTranslatedError(error);
-//			QMetaObject::invokeMethod(
-//				this, "ShowErrorMessage", Qt::QueuedConnection,
-//				Q_ARG(const QString &, error));
-//		}
-//		lineEdit->setPlaceholderText(
-//			QTStr("YouTube.Chat.Input.Placeholder"));
-//	});
-//}
-//
-//void YoutubeChatDock::ShowErrorMessage(const QString &error)
-//{
-//	QMessageBox::warning(this, QTStr("YouTube.Chat.Error.Title"),
-//			     QTStr("YouTube.Chat.Error.Text").arg(error));
-//}
-//
-//void YoutubeChatDock::EnableChatInput()
-//{
-//	lineEdit->setVisible(true);
-//	sendButton->setVisible(true);
-//}
-//#endif

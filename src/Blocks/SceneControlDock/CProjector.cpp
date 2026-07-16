@@ -6,19 +6,17 @@
 #include <QGuiApplication>
 #include <QMouseEvent>
 #include <QScreen>
-#include "qt-wrapper.h"
 
-
-#include <platform.hpp>
-
+#include "qt-wrappers.hpp"
+#include "platform/platform.hpp"
+#include "display-helpers.hpp"
 
 #include "Common/MathMiscUtils.h"
 #include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Config/CStateAppContext.h"
-#include "CoreModel/Graphics/CGraphicsMiscUtils.inl"
+#include "CoreModel/Graphics/CGraphicsContext.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
 #include "CoreModel/OBSData/CInhibitSleepContext.h"
-#include "CoreModel/Scene/CScene.h"
 #include "CoreModel/Scene/CSceneContext.h"
 
 
@@ -38,11 +36,13 @@ static bool updatingMultiview = false, mouseSwitching, transitionOnDoubleClick;
 AFQProjector::AFQProjector(QWidget *widget, obs_source_t *source_, int monitor,
                            ProjectorType type_)
     : AFQTDisplay(widget, Qt::Window),
-      weakSource(OBSGetWeakRef(source_))
+      m_weakSource(OBSGetWeakRef(source_))
 {
+    setAttribute(Qt::WA_DontCreateNativeAncestors);
+
     OBSSource source = GetSource();
     if (source)
-        destroyedSignal.Connect(obs_source_get_signal_handler(source),
+        m_destroyedSignal.Connect(obs_source_get_signal_handler(source),
                                 "destroy", _OBSSourceDestroyed, this);
 
     // Mark the window as a projector so SetDisplayAffinity
@@ -54,7 +54,7 @@ AFQProjector::AFQProjector(QWidget *widget, obs_source_t *source_, int monitor,
     setAttribute(Qt::WA_PaintOnScreen, false);
 #endif
 
-    type = type_;
+    m_type = type_;
 
 
     if (monitor != -1)
@@ -70,7 +70,7 @@ AFQProjector::AFQProjector(QWidget *widget, obs_source_t *source_, int monitor,
     addAction(action);
     connect(action, &QAction::triggered, this,
             &AFQProjector::qslotEscapeTriggered);
-
+    
     setAttribute(Qt::WA_DeleteOnClose, true);
 
     //disable application quit when last window closed
@@ -81,20 +81,24 @@ AFQProjector::AFQProjector(QWidget *widget, obs_source_t *source_, int monitor,
     connect(qobject_cast<QApplication*>(QCoreApplication::instance()), &QGuiApplication::screenRemoved, this,
             &AFQProjector::qslotScreenRemoved);
 
-    if (type == ProjectorType::Multiview) {
-        multiview = new AFMultiview();
+    if (m_type == ProjectorType::Multiview) {
+        m_pMultiview = new AFMultiview();
 
         _UpdateMultiview();
 
         multiviewProjectors.push_back(this);
     }
 
-    AFInhibitSleepContext::GetSingletonInstance().IncrementSleepInhibition();
-
+    INHIBITSLEEP_CONTEXT.IncrementSleepInhibition();
     if (source)
         obs_source_inc_showing(source);
 
-    ready = true;
+    m_ready = true;
+
+    //need to show(activatewindow) before inserting to block to show properly, but it blinks
+    setWindowFlag(Qt::FramelessWindowHint);
+    setGeometry(0, 0, 1, 1);
+    //make it frameless and 1px to hide the blink
 
     show();
 
@@ -104,7 +108,7 @@ AFQProjector::AFQProjector(QWidget *widget, obs_source_t *source_, int monitor,
 
 AFQProjector::~AFQProjector()
 {
-    bool isMultiview = type == ProjectorType::Multiview;
+    bool isMultiview = m_type == ProjectorType::Multiview;
     
     DisconnectRenderCallback();
 
@@ -114,24 +118,25 @@ AFQProjector::~AFQProjector()
 
     if (isMultiview)
     {
-        delete multiview;
+        delete m_pMultiview;
         multiviewProjectors.removeAll(this);
     }
 
-    AFInhibitSleepContext::GetSingletonInstance().DecrementSleepInhibition();
+    INHIBITSLEEP_CONTEXT.DecrementSleepInhibition();
 
-    screen = nullptr;
+    m_pScreen = nullptr;
 }
 
 void AFQProjector::qslotEscapeTriggered()
 {
     this->window()->close();
+    this->window()->deleteLater();
 }
 
 void AFQProjector::qslotOpenFullScreenProjector()
 {
     if (!isFullScreen())
-        prevGeometry = this->window()->geometry();
+        m_prevGeometry = this->window()->geometry();
 
     int monitor = sender()->property("monitor").toInt();
     _SetMonitor(monitor);
@@ -162,8 +167,7 @@ void AFQProjector::qslotResizeToContent()
     }
 
     QSize size = this->size();
-    GetScaleAndCenterPos(targetCX, targetCY, size.width(), size.height(), x,
-                         y, scale);
+    GetScaleAndCenterPos(targetCX, targetCY, size.width(), size.height(), x, y, scale);
 
     QSize winSize = this->window()->size();
     float winNewX = winSize.width() - (x * 2);
@@ -178,31 +182,31 @@ void AFQProjector::qslotOpenWindowedProjector()
     showNormal();
     setCursor(Qt::ArrowCursor);
 
-    if (!prevGeometry.isNull())
-        this->window()->setGeometry(prevGeometry);
+    if (!m_prevGeometry.isNull())
+        this->window()->setGeometry(m_prevGeometry);
     else
-        resize(480, 270);
+        this->window()->resize(480, 270);
 
-    savedMonitor = -1;
+    m_savedMonitor = -1;
+    emit qsignalWindowProjector();
 
     OBSSource source = GetSource();
     _UpdateProjectorTitle(QT_UTF8(obs_source_get_name(source)));
-    screen = nullptr;
+    m_pScreen = nullptr;
 }
 
 void AFQProjector::qslotAlwaysOnTopToggled(bool isAlwaysOnTop)
 {
     SetIsAlwaysOnTop(isAlwaysOnTop, true);
-    config_set_bool(AFConfigManager::GetSingletonInstance().GetGlobal(),
-                    "BasicWindow", "ProjectorAlwaysOnTop", isAlwaysOnTop);
+    config_set_bool(USERCONFIG, "BasicWindow", "ProjectorAlwaysOnTop", isAlwaysOnTop);
 }
 
 void AFQProjector::qslotScreenRemoved(QScreen *screen_)
 {
-    if (GetMonitor() < 0 || !screen)
+    if (GetMonitor() < 0 || !m_pScreen)
         return;
 
-    if (screen == screen_)
+    if (m_pScreen == screen_)
         qslotEscapeTriggered();
 }
 
@@ -230,13 +234,11 @@ void AFQProjector::RenameProjector(QString oldName, QString newName)
 
 void AFQProjector::SetHideCursor()
 {
-    if (savedMonitor == -1)
+    if (m_savedMonitor == -1)
         return;
 
-    bool hideCursor = config_get_bool(AFConfigManager::GetSingletonInstance().GetGlobal(),
-                                      "BasicWindow", "HideProjectorCursor");
-
-    if (hideCursor && type != ProjectorType::Multiview)
+    bool hideCursor = config_get_bool(USERCONFIG, "BasicWindow", "HideProjectorCursor");
+    if (hideCursor && m_type != ProjectorType::Multiview)
         setCursor(Qt::BlankCursor);
     else
         setCursor(Qt::ArrowCursor);
@@ -244,27 +246,15 @@ void AFQProjector::SetHideCursor()
 
 void AFQProjector::SetIsAlwaysOnTop(bool isAlwaysOnTop, bool isOverridden)
 {
-    this->isAlwaysOnTop = isAlwaysOnTop;
-    this->isAlwaysOnTopOverridden = isOverridden;
+    this->m_isAlwaysOnTop = isAlwaysOnTop;
+    this->m_isAlwaysOnTopOverridden = isOverridden;
 
     SetAlwaysOnTop(this, isAlwaysOnTop);
 }
 
-void AFQProjector::RenderModeOnlySources()
-{
-    if (multiview != nullptr)
-        multiview->SetOnlyRenderSources(true);
-}
-
-void AFQProjector::RenderModeDefault()
-{
-    if (multiview != nullptr)
-        multiview->SetOnlyRenderSources(false);
-}
-
 void AFQProjector::DisconnectRenderCallback()
 {
-    bool isMultiview = type == ProjectorType::Multiview;
+    bool isMultiview = m_type == ProjectorType::Multiview;
     obs_display_remove_draw_callback(GetDisplay(),
                                      isMultiview ? _OBSRenderMultiview : _OBSRender,
                                      this);
@@ -325,12 +315,10 @@ void AFQProjector::mousePressEvent(QMouseEvent *event)
 {
     AFQTDisplay::mousePressEvent(event);
 
-    
-    auto& textManager = AFLocaleTextManager::GetSingletonInstance();
-    
     if (event->button() == Qt::RightButton) {
-        AFQCustomMenu *projectorMenu = new AFQCustomMenu(QT_UTF8(textManager.Str("Fullscreen")), nullptr, true);
+        AFQCustomMenu *projectorMenu = new AFQCustomMenu(QTStr("Fullscreen"), nullptr, true);
 
+        // TODO: check
         AFQProjector::_AddProjectorMenuMonitors(
             projectorMenu, this, &AFQProjector::qslotOpenFullScreenProjector);
 
@@ -338,45 +326,44 @@ void AFQProjector::mousePressEvent(QMouseEvent *event)
         popup.addMenu(projectorMenu);
 
         if (GetMonitor() > -1) {
-            popup.addAction(QT_UTF8(textManager.Str("Windowed")), this,
+            popup.addAction(QTStr("Windowed"), this,
                             &AFQProjector::qslotOpenWindowedProjector);
 
         } else if (!this->isMaximized()) {
-            popup.addAction(QT_UTF8(textManager.Str("ResizeProjectorWindowToContent")),
+            popup.addAction(QTStr("ResizeProjectorWindowToContent"),
                             this, &AFQProjector::qslotResizeToContent);
         }
 
         QAction *alwaysOnTopButton = new QAction(
-            QT_UTF8(textManager.Str("Basic.MainMenu.View.AlwaysOnTop")), this);
+            QTStr("Basic.MainMenu.View.AlwaysOnTop"), this);
         alwaysOnTopButton->setCheckable(true);
-        alwaysOnTopButton->setChecked(isAlwaysOnTop);
+        alwaysOnTopButton->setChecked(m_isAlwaysOnTop);
 
         connect(alwaysOnTopButton, &QAction::toggled, this,
             &AFQProjector::qslotAlwaysOnTopToggled);
 
         popup.addAction(alwaysOnTopButton);
 
-        popup.addAction(QT_UTF8(textManager.Str("Close")), this,
+        popup.addAction(QTStr("Close"), this,
                         &AFQProjector::qslotEscapeTriggered);
         popup.exec(QCursor::pos());
     } else if (event->button() == Qt::LeftButton) {
         // Only MultiView projectors handle left click
-        if (this->type != ProjectorType::Multiview)
+        if (this->m_type != ProjectorType::Multiview)
             return;
 
         if (!mouseSwitching)
             return;
 
         QPoint pos = event->pos();
-        OBSSource src =
-            multiview->GetSourceByPosition(pos.x(), pos.y(), this);
+        OBSSource src = m_pMultiview->GetSourceByPosition(pos.x(), pos.y(), this);
         if (!src)
             return;
 
-        auto& sceneContext =  AFSceneContext::GetSingletonInstance();
-        OBSSource tmpCurrSceneSrc = AFSceneUtil::CnvtToOBSSource(sceneContext.GetCurrOBSScene());
+        OBSSource tmpCurrSceneSrc = AFSceneUtil::CnvtToOBSSource(SCENE_CONTEXT.GetCurrentScene());
         if (tmpCurrSceneSrc != src)
-            App()->GetMainView()->GetMainWindow()->SetCurrentScene(src, false);
+            DYNAMIC_COMPOSIT->SetCurrentScene(src, false);
+        //
     }
 }
 
@@ -391,37 +378,33 @@ void AFQProjector::mouseDoubleClickEvent(QMouseEvent *event)
         return;
 
     // Only MultiView projectors handle double click
-    if (this->type != ProjectorType::Multiview)
+    if (this->m_type != ProjectorType::Multiview)
         return;
 
-    AFStateAppContext* tmpStateApp = AFConfigManager::GetSingletonInstance().GetStates();
-    if (tmpStateApp->IsPreviewProgramMode() == false)
+    if (STATEAPP.IsPreviewProgramMode() == false)
         return;
 
     if (event->button() == Qt::LeftButton) {
         QPoint pos = event->pos();
         OBSSource src =
-            multiview->GetSourceByPosition(pos.x(), pos.y());
+            m_pMultiview->GetSourceByPosition(pos.x(), pos.y());
         if (!src)
             return;
-
-        // Tracsition, Scene Context
-//        if (main->GetProgramSource() != src)
-//            main->TransitionToScene(src);
-        //
     }
 }
 
 void AFQProjector::moveEvent(QMoveEvent *event)
 {
     AFQTDisplay::moveEvent(event);
-    multiview->SetDpi(devicePixelRatioF());
+    if(m_pMultiview)
+        m_pMultiview->SetDpi(devicePixelRatioF());
 }
 
 void AFQProjector::resizeEvent(QResizeEvent *event)
 {
     AFQTDisplay::resizeEvent(event);
-    multiview->SetDpi(devicePixelRatioF());
+    if (m_pMultiview)
+        m_pMultiview->SetDpi(devicePixelRatioF());
 }
 
 void AFQProjector::closeEvent(QCloseEvent *event)
@@ -433,17 +416,19 @@ void AFQProjector::closeEvent(QCloseEvent *event)
 void AFQProjector::showEvent(QShowEvent * event) {
     QWidget::showEvent(event);
 
-    isAlwaysOnTop =
-        config_get_bool(AFConfigManager::GetSingletonInstance().GetGlobal(),
-                        "BasicWindow", "ProjectorAlwaysOnTop");
-    emit qslotAlwaysOnTopToggled(isAlwaysOnTop);
+    m_isAlwaysOnTop = config_get_bool(USERCONFIG, "BasicWindow", "ProjectorAlwaysOnTop");
+    emit qslotAlwaysOnTopToggled(m_isAlwaysOnTop);
 
     // ConnectRenderCallback
-    bool isMultiview = type == ProjectorType::Multiview;
+    bool isMultiview = m_type == ProjectorType::Multiview;
     obs_display_add_draw_callback(GetDisplay(),
                                     isMultiview ? _OBSRenderMultiview :
                                     _OBSRender, this);
-    obs_display_set_background_color(GetDisplay(), 0x2D2724);
+
+    if (m_type == ProjectorType::Scene)
+        obs_display_set_background_color(GetDisplay(), 0x000000);
+    else
+        obs_display_set_background_color(GetDisplay(), 0x2D2724);
 }
 
 void AFQProjector::hideEvent(QHideEvent *event) {
@@ -456,20 +441,20 @@ void AFQProjector::_OBSRenderMultiview(void *data, uint32_t cx, uint32_t cy)
 {
     AFQProjector *window = (AFQProjector *)data;
 
-    if (updatingMultiview || !window->ready)
+    if (updatingMultiview || !window->m_ready)
         return;
 
-    if (window->multiview->GetDpi() != window->devicePixelRatioF())
-        window->multiview->SetDpi(window->devicePixelRatioF());
+    if (window->m_pMultiview->GetDpi() != window->devicePixelRatioF())
+        window->m_pMultiview->SetDpi(window->devicePixelRatioF());
     
-    window->multiview->Render(cx, cy);
+    window->m_pMultiview->Render(cx, cy);
 }
 
 void AFQProjector::_OBSRender(void *data, uint32_t cx, uint32_t cy)
 {
     AFQProjector *window = reinterpret_cast<AFQProjector *>(data);
 
-    if (!window->ready)
+    if (!window->m_ready)
         return;
 
     OBSSource source = window->GetSource();
@@ -495,30 +480,25 @@ void AFQProjector::_OBSRender(void *data, uint32_t cx, uint32_t cy)
     newCX = int(scale * float(targetCX));
     newCY = int(scale * float(targetCY));
 
-    StartGraphicsViewRegion(x, y, newCX, newCY, 0.0f, float(targetCX), 0.0f,
-                            float(targetCY));
+    startRegion(x, y, newCX, newCY, 0.0f, float(targetCX), 0.0f, float(targetCY));
 
-    
-    AFStateAppContext* tmpStateApp = AFConfigManager::GetSingletonInstance().GetStates();
-    
-    if (window->type == ProjectorType::Preview &&
-        tmpStateApp->IsPreviewProgramMode())
+    if (window->m_type == ProjectorType::Preview &&
+        STATEAPP.IsPreviewProgramMode())
     {
-        auto& sceneContext =  AFSceneContext::GetSingletonInstance();
-        OBSSource tmpCurrSceneSrc = AFSceneUtil::CnvtToOBSSource(sceneContext.GetCurrOBSScene());
+        OBSSource tmpCurrSceneSrc = AFSceneUtil::CnvtToOBSSource(SCENE_CONTEXT.GetCurrentScene());
 
         if (source != tmpCurrSceneSrc) 
         {
             obs_source_dec_showing(source);
             obs_source_inc_showing(tmpCurrSceneSrc);
             source = tmpCurrSceneSrc;
-            window->weakSource = OBSGetWeakRef(source);
+            window->m_weakSource = OBSGetWeakRef(source);
         }
     } 
-    else if (window->type == ProjectorType::Preview &&
-             tmpStateApp->IsPreviewProgramMode() == false)
+    else if (window->m_type == ProjectorType::Preview &&
+             STATEAPP.IsPreviewProgramMode() == false)
     {
-        window->weakSource = nullptr;
+        window->m_weakSource = nullptr;
     }
 
     if (source)
@@ -526,7 +506,7 @@ void AFQProjector::_OBSRender(void *data, uint32_t cx, uint32_t cy)
     else
         obs_render_main_texture();
 
-    EndGraphicsViewRegion();
+    endRegion();
 }
 
 void AFQProjector::_OBSSourceDestroyed(void *data, calldata_t *)
@@ -537,58 +517,52 @@ void AFQProjector::_OBSSourceDestroyed(void *data, calldata_t *)
 
 void AFQProjector::_UpdateMultiview()
 {
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    config_t* tmpGlobalConfig = confManager.GetGlobal();
-    
-    bool drawLabel = config_get_bool(GetGlobalConfig(), "BasicWindow",
-        "MultiviewDrawNames");
+    bool drawLabel = config_get_bool(USERCONFIG, "BasicWindow", "MultiviewDrawNames");
+    mouseSwitching = config_get_bool(USERCONFIG, "BasicWindow", "MultiviewMouseSwitch");
 
-    mouseSwitching = config_get_bool(tmpGlobalConfig, "BasicWindow",
-                                     "MultiviewMouseSwitch");
+    //Double Click Transition Hide
+    transitionOnDoubleClick = false;
+    //config_get_bool(USERCONFIG, "BasicWindow", "TransitionOnDoubleClick");
+    //Double Click Transition Hide
 
-    transitionOnDoubleClick = config_get_bool(tmpGlobalConfig, "BasicWindow", 
-                                              "TransitionOnDoubleClick");
-
-    multiview->Update(drawLabel);
+    m_pMultiview->Update(drawLabel);
 }
 
 void AFQProjector::_UpdateProjectorTitle(QString name)
-{
-    auto& textManager = AFLocaleTextManager::GetSingletonInstance();
-    
+{ 
     bool window = (GetMonitor() == -1);
 
     QString title = nullptr;
-    switch (type) {
+    switch (m_type) {
     case ProjectorType::Scene:
         if (!window)
-            title = QT_UTF8(textManager.Str("SceneProjector")) + " - " + name;
+            title = QTStr("SceneProjector") + " - " + name;
         else
-            title = QT_UTF8(textManager.Str("SceneWindow")) + " - " + name;
+            title = QTStr("SceneWindow") + " - " + name;
         break;
     case ProjectorType::Source:
         if (!window)
-            title = QT_UTF8(textManager.Str("SourceProjector")) + " - " + name;
+            title = QTStr("SourceProjector") + " - " + name;
         else
-            title = QT_UTF8(textManager.Str("SourceWindow")) + " - " + name;
+            title = QTStr("SourceWindow") + " - " + name;
         break;
     case ProjectorType::Preview:
         if (!window)
-            title = QT_UTF8(textManager.Str("PreviewProjector"));
+            title = QTStr("PreviewProjector");
         else
-            title = QT_UTF8(textManager.Str("PreviewWindow"));
+            title = QTStr("PreviewWindow");
         break;
     case ProjectorType::StudioProgram:
         if (!window)
-            title = QT_UTF8(textManager.Str("StudioProgramProjector"));
+            title = QTStr("StudioProgramProjector");
         else
-            title = QT_UTF8(textManager.Str("StudioProgramWindow"));
+            title = QTStr("StudioProgramWindow");
         break;
     case ProjectorType::Multiview:
         if (!window)
-            title = QT_UTF8(textManager.Str("MultiviewProjector"));
+            title = QTStr("MultiviewProjector");
         else
-            title = QT_UTF8(textManager.Str("MultiviewWindowed"));
+            title = QTStr("MultiviewWindowed");
         break;
     default:
         title = name;
@@ -600,9 +574,10 @@ void AFQProjector::_UpdateProjectorTitle(QString name)
 
 void AFQProjector::_SetMonitor(int monitor)
 {
-    savedMonitor = monitor;
-    screen = QGuiApplication::screens()[monitor];
-    this->window()->setGeometry(screen->geometry());
+    m_savedMonitor = monitor;
+    m_pScreen = QGuiApplication::screens()[monitor];
+    this->window()->setGeometry(m_pScreen->geometry());
     showFullScreen();
+    emit qsignalFullScreenProjector();
     SetHideCursor();
 }

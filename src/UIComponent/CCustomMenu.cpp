@@ -22,7 +22,7 @@ AFQCustomMenu::~AFQCustomMenu()
 void AFQCustomMenu::qslotMoveMenu()
 {
     QTimer::singleShot(0, [this]() {
-        move(pos() + QPoint(9, 0));
+        move(pos() + QPoint(3, 0));
     });
 }
 
@@ -30,18 +30,12 @@ void AFQCustomMenu::show(QPoint pos)
 {
     move(pos);
     QWidget::show();
-    QWidget::setFocus();
 }
 
 void AFQCustomMenu::AddAction(QAction* action)
 {
     CustomActionWidget* customWidget = new CustomActionWidget(action, this);
     addAction(action);
-}
-
-void AFQCustomMenu::closeEvent(QCloseEvent* event)
-{
-    emit qsignalMenuClosed();
 }
 
 void AFQCustomMenu::_InitCustomMenu(bool isSubMenu)

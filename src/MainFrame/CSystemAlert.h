@@ -17,11 +17,16 @@ class AFQSystemAlert : public QWidget
 
 #pragma region class initializer, destructor
 public:
+
+    enum AlertIcon { Warning, Success };
+
+
     explicit AFQSystemAlert(QWidget* parent = nullptr,  
                             const QString& alertText = "",
                             const QString& channelID = "",
                             bool showInCorner = true,
-                            int mainFrameWidth = 0);
+                            int mainFrameWidth = 0, 
+                            AlertIcon icon = Warning);
     ~AFQSystemAlert();
 #pragma endregion class initializer, destructor
 
@@ -35,7 +40,9 @@ protected:
 #pragma region private member var
 private:
     Ui::AFQSystemAlert* ui;
-    QPointer<QTimer> m_qTimer;
+    QPointer<QTimer> m_timer;
+
+    int m_showInterval;
 #pragma endregion private member var
 };
 

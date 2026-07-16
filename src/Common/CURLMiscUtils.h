@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 #include <util/curl/curl-helper.h>
@@ -24,6 +24,10 @@ static bool CURLWriteDataOutStringBuffer(const char* reqUrl, std::string& outref
         curl_easy_setopt(objCUrl, CURLOPT_URL, reqUrl);
         curl_easy_setopt(objCUrl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(objCUrl, CURLOPT_WRITEDATA, &outrefReadBuffer);
+
+        curl_easy_setopt(objCUrl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(objCUrl, CURLOPT_SSL_VERIFYHOST, 0L);
+        
         resCUrl = curl_easy_perform(objCUrl);
         curl_easy_cleanup(objCUrl);
         

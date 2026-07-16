@@ -7,18 +7,17 @@
 
 #include "ui_basic-filters.h"
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 #include "UIComponent/CCustomMenu.h"
 
-class AFQPropertiesView;
+class OBSPropertiesView;
 
 namespace Ui {
 	class AFQBasicFilters;
 }
 
-class AFQBasicFilters : public AFQRoundedDialogBase
+class AFQBasicFilters : public AFTTopBaseDialog
 {
-#pragma region QT Field, CTOR/DTOR
 	Q_OBJECT
 
 public:
@@ -39,26 +38,26 @@ private slots:
 	void ResetFilters();
 	void RenameFiltersTitle(QString title);
 
-	void qSlotAddAsyncFilterClicked();
-	void qSlotRemoveAsyncFilterClicked();
-	void qSlotMoveUpAsyncFilterClicked();
-	void qSlotMoveDownAsyncFilterClicked();
-	void qSlotAsyncFiltersCurrentRowChanged(int row);
-	void qSlotAsyncFiltersGotFocus();
-	void qSlotAsyncFiltersCustomContextMenuRequested(const QPoint &pos);
+	void qslotAddAsyncFilterClicked();
+	void qslotRemoveAsyncFilterClicked();
+	void qslotMoveUpAsyncFilterClicked();
+	void qslotMoveDownAsyncFilterClicked();
+	void qslotAsyncFiltersCurrentRowChanged(int row);
+	void qslotAsyncFiltersGotFocus();
+	void qslotAsyncFiltersCustomContextMenuRequested(const QPoint &pos);
 
-	void qSlotAddEffectFilterClicked();
-	void qSlotRemoveEffectFilterClicked();
-	void qSlotMoveUpEffectFilterClicked();
-	void qSlotMoveDownEffectFilterClicked();
-	void qSlotEffectFiltersCurrentRowChanged(int row);
-	void qSlotEffectFiltersGotFocus();
-	void qSlotEffectFiltersCustomContextMenuRequested(const QPoint& pos);
+	void qslotAddEffectFilterClicked();
+	void qslotRemoveEffectFilterClicked();
+	void qslotMoveUpEffectFilterClicked();
+	void qslotMoveDownEffectFilterClicked();
+	void qslotEffectFiltersCurrentRowChanged(int row);
+	void qslotEffectFiltersGotFocus();
+	void qslotEffectFiltersCustomContextMenuRequested(const QPoint& pos);
 
-	void qSlotRenameFilterTriggered();
-	void qSlotRemoveFilterTriggered();
-	void qSlotMoveUpFilterTriggered();
-	void qSlotMoveDownFilterTriggered();
+	void qslotRenameFilterTriggered();
+	void qslotRemoveFilterTriggered();
+	void qslotMoveUpFilterTriggered();
+	void qslotMoveDownFilterTriggered();
 
 	void FiltersMoved(const QModelIndex& srcParent, int srcIdxStart,
 					  int srcIdxEnd, const QModelIndex& dstParent,
@@ -68,16 +67,12 @@ private slots:
 	void CopyFilter();
 	void PasteFilter();
 
-#pragma endregion QT Field CTOR/DTOR
-
-#pragma region protected func
 protected:
 	virtual void closeEvent(QCloseEvent* event) override;
+	virtual void showEvent(QShowEvent* event) override;
 
-#pragma endregion protected func
-
-#pragma region private func
-	void   SetSignalSlotUI();
+private:
+	void SetSignalSlotUI();
 
 	AFQCustomMenu* CreateAddFilterPopupMenu(bool async);
 
@@ -107,14 +102,11 @@ protected:
 	void FilterNameEdited(QWidget* editor, QListWidget* list);
 	void delete_filter(OBSSource filter);
 
-#pragma endregion private func
-
-#pragma region private member var
 private:
 	std::unique_ptr<Ui::AFQBasicFilters> ui;
 
 	OBSSource m_obsSource;
-	AFQPropertiesView* m_propsView = nullptr;
+	OBSPropertiesView* m_pPropsView = nullptr;
 
 	OBSSignal m_signalAdd;
 	OBSSignal m_signalRemove;
@@ -131,6 +123,4 @@ private:
 
 	bool m_editActive = false;
 	bool m_isAsync = false;
-
-#pragma endregion private member var
 };

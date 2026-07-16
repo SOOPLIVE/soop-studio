@@ -1,8 +1,10 @@
-<svg width="14" height="8" viewBox="0 0 14 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g id="Group 5934" opacity="0.8">
-<rect id="Rectangle 3550" x="4" y="0.900391" width="10" height="2" rx="1" fill="white"/>
-<rect id="Rectangle 3553" x="4" y="5.90039" width="10" height="2" rx="1" fill="white"/>
-<rect id="Rectangle 3552" y="0.900391" width="2" height="2" rx="1" fill="white"/>
-<rect id="Rectangle 3554" y="5.90039" width="2" height="2" rx="1" fill="white"/>
+<svg width="15" height="10" viewBox="0 0 15 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group 5934">
+<rect id="Rectangle 3550" x="4.5" width="10" height="2" rx="1" fill="#D3D4D5"/>
+<rect id="Rectangle 3553" x="4.5" y="4" width="10" height="2" rx="1" fill="#D3D4D5"/>
+<rect id="Rectangle 3555" x="4.5" y="8" width="10" height="2" rx="1" fill="#D3D4D5"/>
+<rect id="Rectangle 3552" x="0.5" width="2" height="2" rx="1" fill="#D3D4D5"/>
+<rect id="Rectangle 3554" x="0.5" y="4" width="2" height="2" rx="1" fill="#D3D4D5"/>
+<rect id="Rectangle 3556" x="0.5" y="8" width="2" height="2" rx="1" fill="#D3D4D5"/>
 </g>
 </svg>

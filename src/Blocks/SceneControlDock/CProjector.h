@@ -31,6 +31,8 @@ public:
     ~AFQProjector();
 #pragma endregion class initializer, destructor
 
+public slots:
+
 private slots:
     void                        qslotEscapeTriggered();
     void                        qslotOpenFullScreenProjector();
@@ -38,26 +40,28 @@ private slots:
     void                        qslotOpenWindowedProjector();
     void                        qslotAlwaysOnTopToggled(bool alwaysOnTop);
     void                        qslotScreenRemoved(QScreen *screen_);
+
+signals:
+    void                        qsignalFullScreenProjector();
+    void                        qsignalWindowProjector();
+
 #pragma endregion QT Field
 
 #pragma region public func
 public:
-    OBSSource                   GetSource() { return OBSGetStrongRef(weakSource); };
-    ProjectorType               GetProjectorType() { return type; };
-    int                         GetMonitor() { return savedMonitor; };
+    OBSSource                   GetSource() { return OBSGetStrongRef(m_weakSource); };
+    ProjectorType               GetProjectorType() { return m_type; };
+    int                         GetMonitor() { return m_savedMonitor; };
     
     static void                 UpdateMultiviewProjectors();
     void                        RenameProjector(QString oldName, QString newName);
     void                        SetHideCursor();
 
-    bool                        IsAlwaysOnTop() const { return isAlwaysOnTop; };
-    bool                        IsAlwaysOnTopOverridden() const { return isAlwaysOnTopOverridden; };
+    bool                        IsAlwaysOnTop() const { return m_isAlwaysOnTop; };
+    bool                        IsAlwaysOnTopOverridden() const { return m_isAlwaysOnTopOverridden; };
     void                        SetIsAlwaysOnTop(bool isAlwaysOnTop, bool isOverridden);
     
-    
-    void                        RenderModeOnlySources();
-    void                        RenderModeDefault();
-    
+        
     void                        DisconnectRenderCallback();
 #pragma endregion public func
 
@@ -91,19 +95,19 @@ private:
 
 #pragma region private var
 private:
-    OBSWeakSourceAutoRelease    weakSource;
-    OBSSignal                   destroyedSignal;
+    OBSWeakSourceAutoRelease    m_weakSource;
+    OBSSignal                   m_destroyedSignal;
     
-    bool                        isAlwaysOnTop;
-    bool                        isAlwaysOnTopOverridden = false;
-    int                         savedMonitor = -1;
-    ProjectorType               type = ProjectorType::Source;
+    bool                        m_isAlwaysOnTop;
+    bool                        m_isAlwaysOnTopOverridden = false;
+    int                         m_savedMonitor = -1;
+    ProjectorType               m_type = ProjectorType::Source;
 
-    AFMultiview*                multiview = nullptr;
+    AFMultiview*                m_pMultiview = nullptr;
 
-    bool                        ready = false;
+    bool                        m_ready = false;
     
-    QRect                       prevGeometry;
-    QScreen*                    screen = nullptr;
+    QRect                       m_prevGeometry;
+    QScreen*                    m_pScreen = nullptr;
 #pragma endregion private var
 };

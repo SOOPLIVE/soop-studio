@@ -3,13 +3,14 @@
 
 #include <QPushButton>
 
-#include "qt-wrapper.h"
+#include "qt-wrappers.hpp"
+#include "Application/CApplication.h"
 
 #include "CoreModel/Locale/CLocaleTextManager.h"
 #include "CoreModel/Scene/CSceneContext.h"
 
-#include "Application/CApplication.h"
 #include "MainFrame/CMainFrame.h"
+#include "MainFrame/SceneSource/CMainSceneSource.h"
 
 
 static bool find_sel(obs_scene_t*, obs_sceneitem_t* item, void* param)
@@ -65,52 +66,41 @@ static int AlignToList(uint32_t align)
 }
 
 AFQBasicTransform::AFQBasicTransform(OBSSceneItem item, QWidget* parent) :
-	AFQRoundedDialogBase(parent, Qt::WindowFlags(), false),
+	AFTTopBaseDialog(parent, Qt::WindowFlags()),
 	ui(new Ui::AFQBasicTransform)
 {
 	setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
 	ui->setupUi(this);
-
+    
+#ifdef __APPLE__
+    ui->titleWidget->hide();
+#endif
+    
+	setModal(false);
 	QPushButton* resetButton = ui->buttonBox->button(QDialogButtonBox::Reset);
 	ChangeStyleSheet(resetButton, STYLESHEET_RESET_BUTTON);
 
-	HookWidget(ui->positionX, DSCROLL_CHANGED,
-				&AFQBasicTransform::OnControlChanged);
-	HookWidget(ui->positionY, DSCROLL_CHANGED,
-				&AFQBasicTransform::OnControlChanged);
-	HookWidget(ui->rotation, DSCROLL_CHANGED,
-				&AFQBasicTransform::OnControlChanged);
-	HookWidget(ui->sizeX, DSCROLL_CHANGED,
-				&AFQBasicTransform::OnControlChanged);
-	HookWidget(ui->sizeY, DSCROLL_CHANGED,
-				&AFQBasicTransform::OnControlChanged);
-	HookWidget(ui->align, COMBO_CHANGED,
-				&AFQBasicTransform::OnControlChanged);
-	HookWidget(ui->boundsType, COMBO_CHANGED,
-				&AFQBasicTransform::OnBoundsType);
-	HookWidget(ui->boundsAlign, COMBO_CHANGED,
-				&AFQBasicTransform::OnControlChanged);
-	HookWidget(ui->boundsWidth, DSCROLL_CHANGED,
-				&AFQBasicTransform::OnControlChanged);
-	HookWidget(ui->boundsHeight, DSCROLL_CHANGED,
-				&AFQBasicTransform::OnControlChanged);
-	HookWidget(ui->cropLeft, ISCROLL_CHANGED,
-				&AFQBasicTransform::OnCropChanged);
-	HookWidget(ui->cropRight, ISCROLL_CHANGED,
-				&AFQBasicTransform::OnCropChanged);
-	HookWidget(ui->cropTop, ISCROLL_CHANGED,
-				&AFQBasicTransform::OnCropChanged);
-	HookWidget(ui->cropBottom, ISCROLL_CHANGED,
-				&AFQBasicTransform::OnCropChanged);
+	HookWidget(ui->positionX, DSCROLL_CHANGED, &AFQBasicTransform::OnControlChanged);
+	HookWidget(ui->positionY, DSCROLL_CHANGED, &AFQBasicTransform::OnControlChanged);
+	HookWidget(ui->rotation, DSCROLL_CHANGED, &AFQBasicTransform::OnControlChanged);
+	HookWidget(ui->sizeX, DSCROLL_CHANGED, &AFQBasicTransform::OnControlChanged);
+	HookWidget(ui->sizeY, DSCROLL_CHANGED, &AFQBasicTransform::OnControlChanged);
+	HookWidget(ui->align, COMBO_CHANGED, &AFQBasicTransform::OnControlChanged);
+	HookWidget(ui->boundsType, COMBO_CHANGED, &AFQBasicTransform::OnBoundsType);
+	HookWidget(ui->boundsAlign, COMBO_CHANGED, &AFQBasicTransform::OnControlChanged);
+	HookWidget(ui->boundsWidth, DSCROLL_CHANGED, &AFQBasicTransform::OnControlChanged);
+	HookWidget(ui->boundsHeight, DSCROLL_CHANGED, &AFQBasicTransform::OnControlChanged);
+	HookWidget(ui->cropLeft, ISCROLL_CHANGED, &AFQBasicTransform::OnCropChanged);
+	HookWidget(ui->cropRight, ISCROLL_CHANGED, &AFQBasicTransform::OnCropChanged);
+	HookWidget(ui->cropTop, ISCROLL_CHANGED, &AFQBasicTransform::OnCropChanged);
+	HookWidget(ui->cropBottom, ISCROLL_CHANGED, &AFQBasicTransform::OnCropChanged);
 
-	connect(ui->closeButton, &QPushButton::clicked,
-			this, &AFQBasicTransform::qslotCloseButtonClicked);
+	connect(ui->closeButton, &QPushButton::clicked, this, &AFQBasicTransform::qslotCloseButtonClicked);
 
-	AFMainFrame* main = App()->GetMainView();
 	connect(ui->buttonBox->button(QDialogButtonBox::Reset),
-			&QPushButton::clicked, main,
-			&AFMainFrame::qSlotActionResetTransform);
+			&QPushButton::clicked, MAIN_SCENESOURCE,
+			&CMainSceneSource::qslotActionResetTransform);
 
 	installEventFilter(CreateShortcutFilter());
 
@@ -121,32 +111,30 @@ AFQBasicTransform::AFQBasicTransform(OBSSceneItem item, QWidget* parent) :
 	std::string name = obs_source_get_name(obs_sceneitem_get_source(item));
 	setWindowTitle(QTStr("Basic.TransformWindow.Title").arg(name.c_str()));
 
-	OBSDataAutoRelease wrapper = obs_scene_save_transform_states(AFSourceUtil::GetCurrentScene(), false);
-	undo_data = std::string(obs_data_get_json(wrapper));
+	OBSDataAutoRelease wrapper = obs_scene_save_transform_states(SCENE_CONTEXT.GetCurrentScene(), false);
+	m_undoData = std::string(obs_data_get_json(wrapper));
 
 	m_signalChannelChanged.Connect(obs_get_signal_handler(), "channel_change", AFChannelChanged, this);
     
-	this->SetHeightFixed(true);
+	SetHeightResizeEnabled(false);
 }
 
 AFQBasicTransform::~AFQBasicTransform()
 {
-	OBSDataAutoRelease wrapper = obs_scene_save_transform_states(AFSourceUtil::GetCurrentScene(), false);
+	OBSDataAutoRelease wrapper = obs_scene_save_transform_states(SCENE_CONTEXT.GetCurrentScene(), false);
 
 	auto undo_redo = [](const std::string& data) {
 		OBSDataAutoRelease dat = obs_data_create_from_json(data.c_str());
 		OBSSourceAutoRelease source = obs_get_source_by_uuid(obs_data_get_string(dat, "scene_uuid"));
-		AFMainFrame* main = App()->GetMainView();
-		main->GetMainWindow()->SetCurrentScene(source.Get(), true);
+		DYNAMIC_COMPOSIT->SetCurrentScene(source.Get(), true);
 		obs_scene_load_transform_states(data.c_str());
 	};
 
 	std::string redo_data(obs_data_get_json(wrapper));
-	if (undo_data.compare(redo_data) != 0)
+	if (m_undoData.compare(redo_data) != 0)
 	{
-		AFMainFrame* main = App()->GetMainView();
-		main->m_undo_s.AddAction(QTStr("Undo.Transform").arg(obs_source_get_name(AFSourceUtil::GetCurrentSource())),
-								 undo_redo, undo_redo, undo_data, redo_data);
+		UNDO_STACK.AddAction(QTStr("Undo.Transform").arg(obs_source_get_name(SCENE_CONTEXT.GetCurrentSceneSource())),
+							 undo_redo, undo_redo, m_undoData, redo_data);
 	}
 }
 
@@ -280,8 +268,6 @@ void AFQBasicTransform::AFSceneItemSelect(void* param, calldata_t* data)
 
 void AFQBasicTransform::AFSceneItemDeselect(void* param, calldata_t* data)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	AFQBasicTransform* window =
 		reinterpret_cast<AFQBasicTransform*>(param);
 	obs_scene_t* scene = (obs_scene_t*)calldata_ptr(data, "scene");
@@ -289,15 +275,13 @@ void AFQBasicTransform::AFSceneItemDeselect(void* param, calldata_t* data)
 
 	if (item == window->m_sceneItem) {
 		window->setWindowTitle(
-			locale.Str("Basic.TransformWindow.NoSelectedSource"));
+			Str("Basic.TransformWindow.NoSelectedSource"));
 		window->SetItem(FindASelectedItem(scene));
 	}
 }
 
 void AFQBasicTransform::RefreshControls()
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	if (!m_sceneItem)
 		return;
 
@@ -339,7 +323,7 @@ void AFQBasicTransform::RefreshControls()
 	m_ignoreItemChange = false;
 
 	std::string name = obs_source_get_name(source);
-	QString title = QString(locale.Str("Basic.TransformWindow.Title"));
+	QString title = QString(Str("Basic.TransformWindow.Title"));
 	title = title.arg(name.c_str());
 
 	ui->labelTitle->setText(title);
@@ -360,6 +344,15 @@ void AFQBasicTransform::SetItemQt(OBSSceneItem newItem)
 void AFQBasicTransform::qslotCloseButtonClicked()
 {
 	close();
+}
+
+void AFQBasicTransform::showEvent(QShowEvent* event)
+{
+	QRect midRect = MAIN_BLOCKMANAGER->GetMidGeometry(this->size());
+	QRect adjustRect;
+	MAIN_BLOCKMANAGER->AdjustPositionOutSideFullScreen(midRect, adjustRect);
+
+	move(adjustRect.x(), adjustRect.y());
 }
 
 void AFQBasicTransform::SetScene(OBSScene scene)

@@ -49,10 +49,6 @@
        <property name="text">
         <string/>
        </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_play.svg</normaloff>:/image/resource/SourceContext/bt_play.svg</iconset>
-       </property>
        <property name="iconSize">
         <size>
          <width>40</width>
@@ -77,10 +73,6 @@
        </property>
        <property name="text">
         <string/>
-       </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_pause.svg</normaloff>:/image/resource/SourceContext/bt_pause.svg</iconset>
        </property>
        <property name="iconSize">
         <size>
@@ -107,10 +99,6 @@
        <property name="text">
         <string/>
        </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_restart.svg</normaloff>:/image/resource/SourceContext/bt_restart.svg</iconset>
-       </property>
        <property name="iconSize">
         <size>
          <width>40</width>
@@ -135,10 +123,6 @@
        </property>
        <property name="text">
         <string/>
-       </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_prev.svg</normaloff>:/image/resource/SourceContext/bt_prev.svg</iconset>
        </property>
        <property name="iconSize">
         <size>
@@ -165,10 +149,6 @@
        <property name="text">
         <string/>
        </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_stop.svg</normaloff>:/image/resource/SourceContext/bt_stop.svg</iconset>
-       </property>
        <property name="iconSize">
         <size>
          <width>40</width>
@@ -193,10 +173,6 @@
        </property>
        <property name="text">
         <string/>
-       </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_next.svg</normaloff>:/image/resource/SourceContext/bt_next.svg</iconset>
        </property>
        <property name="iconSize">
         <size>

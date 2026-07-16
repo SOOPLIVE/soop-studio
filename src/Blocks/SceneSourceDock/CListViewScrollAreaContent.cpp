@@ -6,6 +6,8 @@
 #include <QDropEvent>
 #include <QScrollBar>
 
+#include "qt-wrappers.hpp"
+
 #include "CSceneSourceDockWidget.h"
 #include "CListViewScrollArea.h"
 
@@ -20,9 +22,9 @@ AFQListScrollAreaContent::AFQListScrollAreaContent(QWidget* parent) :
 
 	setContentsMargins(0, 0, 0, 0);
 
-	m_timerScroll = new QTimer(this);
-	m_timerScroll->setInterval(40);
-	connect(m_timerScroll, &QTimer::timeout,
+	m_pTimerScroll = new QTimer(this);
+	m_pTimerScroll->setInterval(40);
+	connect(m_pTimerScroll, &QTimer::timeout,
 			this, &AFQListScrollAreaContent::qSlotUpdateScrollTimer);
 }
 
@@ -33,14 +35,14 @@ AFQListScrollAreaContent::~AFQListScrollAreaContent()
 
 void AFQListScrollAreaContent::qSlotUpdateScrollTimer()
 {
-	if (!m_scrollArea)
+	if (!m_pScrollArea)
 		return;
 
-	int value = m_scrollArea->verticalScrollBar()->value();
+	int value = m_pScrollArea->verticalScrollBar()->value();
 
-	m_scrollArea->verticalScrollBar()->setValue(value + m_adjustScrollPosY);
+	m_pScrollArea->verticalScrollBar()->setValue(value + m_adjustScrollPosY);
 
-	AFQListViewScrollArea* listScrollArea = qobject_cast<AFQListViewScrollArea*>(m_scrollArea);
+	AFQListViewScrollArea* listScrollArea = qobject_cast<AFQListViewScrollArea*>(m_pScrollArea);
 	listScrollArea->ShowScrollBar();
 }
 
@@ -104,16 +106,16 @@ void AFQListScrollAreaContent::dragMoveEvent(QDragMoveEvent* event)
 			int height = visibleRegion().boundingRect().height();
 			if (yPos < AF_SCENE_LIST_DRAG_MARGIN) {
 				m_adjustScrollPosY = -(height /10);
-				m_timerScroll->start();
+				m_pTimerScroll->start();
 			}
 			else if(yPos > height - AF_SCENE_LIST_DRAG_MARGIN){
 				m_adjustScrollPosY = (height /10);
-				m_timerScroll->start();
+				m_pTimerScroll->start();
 			}
 			else {
 				m_adjustScrollPosY = 0;
-				if(m_timerScroll->isActive())
-					m_timerScroll->stop();
+				if(m_pTimerScroll->isActive())
+					m_pTimerScroll->stop();
 			}
 
 			this->update();
@@ -145,8 +147,8 @@ void AFQListScrollAreaContent::dropEvent(QDropEvent* event)
 			int destIndex = _GetSceneIndex(pos.y());
 			emit qsignalSwapItem(startItemIndex, destIndex);
 
-			if (m_timerScroll->isActive())
-				m_timerScroll->stop();
+			if (m_pTimerScroll->isActive())
+				m_pTimerScroll->stop();
 
 			this->update();
 		}
@@ -162,8 +164,8 @@ void AFQListScrollAreaContent::dragLeaveEvent(QDragLeaveEvent* event)
 {
 	m_isDrag = false;
 	
-	if (m_timerScroll->isActive())
-		m_timerScroll->stop();
+	if (m_pTimerScroll->isActive())
+		m_pTimerScroll->stop();
 
 	this->update();
 
@@ -182,7 +184,7 @@ void AFQListScrollAreaContent::SetTotalSceneCount(int count)
 
 void AFQListScrollAreaContent::SetScrollAreaPtr(QScrollArea* scrollArea)
 {
-	m_scrollArea = scrollArea;
+	m_pScrollArea = scrollArea;
 }
 
 int AFQListScrollAreaContent::_GetSceneIndex(int posY)
@@ -222,12 +224,12 @@ void AFQListScrollAreaContent::_SetIndicatorLine(int indicatorY)
 int	AFQListScrollAreaContent::_FindIndicatorPosition(DragDirection direction, int itemIndex)
 {
 	const int spacing = 4;
-	const int totalItemHeight = spacing + AF_SCENE_ITEM_HEIGHT;
+	const int totalItemHeight = AF_SCENE_ITEM_HEIGHT + spacing;
 
 	if (DragDirection::Bottom == direction)
-		return itemIndex * totalItemHeight + AF_SCENE_ITEM_HEIGHT + spacing;
+		return itemIndex * totalItemHeight + AF_SCENE_ITEM_HEIGHT + 1;
 	else if (DragDirection::Top == direction)
-		return itemIndex * totalItemHeight + spacing/2;
+		return itemIndex * totalItemHeight;
 	else
 		return -10;
 }

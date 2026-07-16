@@ -34,7 +34,7 @@ public:
 
 #pragma region private member var
 private:
-	bool						m_bDestroying = false;
+	bool						m_destroying = false;
 	OBSDisplay					m_obsDisplay;
 
 

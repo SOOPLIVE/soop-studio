@@ -7,9 +7,7 @@
 
 #include "obs.hpp"
 
-#include "CoreModel/Scene/CScene.h"
-
-#include "Blocks/CBaseDockWidget.h"
+#include "CoreModel/Scene/CSceneContext.h"
 
 #include "CSceneListItem.h"
 
@@ -17,63 +15,75 @@ class AFQSceneListItem;
 
 namespace Ui
 {
-class AFSceneSourceDockWidget;
+class AFSceneSourceWidget;
 }
 
-class AFSceneSourceDockWidget final : public AFQBaseDockWidget
+class AFSceneSourceWidget final : public QWidget
 {
 #pragma region QT Field
 	Q_OBJECT
 signals:
-	void qSignalAddScene();
-	void qSignalAddSource();
-	void qSignalSceneDoubleClickedTriggered();
+	void qsignalAddScene();
+	void qsignalAddSource();
+	void qsignalSceneDoubleClickedTriggered();
 
 public slots:
 
-	void qSlotAddSourceTrigger();
-	void qSlotRemoveSourceTrigger();
-	void qSlotMoveUpSourceTrigger();
-	void qSlotMoveDownSourceTrigger();
-	void qSlotMoveToTopSourceTrigger();
-	void qSlotMoveToBottomSourceTrigger();
-	void qSlotShowPropsTrigger();
+	void qslotAddSourceTrigger();
+	void qslotRemoveSourceTrigger();
+	void qslotMoveUpSourceTrigger();
+	void qslotMoveDownSourceTrigger();
+	void qslotMoveToTopSourceTrigger();
+	void qslotMoveToBottomSourceTrigger();
+	void qslotShowPropsTrigger();
+	void qslotFitScreenSizeSourceTrigger();
+	void qslotRestoreSourceTrigger();
 
 private slots:
-	void qSlotClickedSceneItem();
-	void qSlotRenameSceneItem();
-	void qSlotDeleteSceneItem();
-	void qSlotHoverSceneItem(OBSScene scene);
-	void qSlotSwapItem(int from, int dest);
-	void qSlotCheckSourceClicked(bool clicked);
-	void qSlotAddSceneButtonClicked();
+	void qslotClickedSceneItem();
+	void qslotDoubleClickedSceneItem();
+	void qslotRenameSceneItem();
+	void qslotDeleteSceneItem();
+	void qslotHoverSceneItem(OBSScene scene);
+	void qslotSwapItem(int from, int dest);
+	void qslotAddSceneButtonClicked();
 
 	void AddSceneItem(OBSSceneItem item);
 	void ReorderSources(OBSScene scene);
 	void RefreshSources(OBSScene scene);
+
+protected:
+	virtual void resizeEvent(QResizeEvent* event) override;
 
 #pragma endregion QT Field
 
 
 #pragma region class initializer, destructor
 public:
-	explicit AFSceneSourceDockWidget(QWidget* parent = nullptr);
-	~AFSceneSourceDockWidget();
+	explicit AFSceneSourceWidget(QWidget* parent = nullptr);
+	~AFSceneSourceWidget();
 #pragma endregion class initializer, destructor
 
 
 #pragma region public func
 public:
 
+	QWidget* GetSceneListFrame();
+	QWidget* GetSourceListView();
+
 	void AddScene(OBSSource scene);
 	void RemoveScene(OBSSource scene);
 	void SetCurrentScene(OBSSource scene_source, bool force = false);
 	void RefreshSceneItem();
-	void RegisterShortCut(QAction* removeSourceAction);
 
 	OBSSceneItem		GetCurrentSceneItem(int idx = -1);
+	int					GetCurrentTopSelectedSceneItemIdx();
 
+	void SourceToolBarButtonSetEnable();
 
+#pragma region _SOOP_BREAKTIME
+	void SetBreaktime(bool enable, QString name);
+#pragma endregion
 
 #pragma endregion public func
 
@@ -94,11 +104,13 @@ private:
 
 #pragma region private member var
 private:
-    Ui::AFSceneSourceDockWidget* ui;
+    Ui::AFSceneSourceWidget* ui;
     
 	QPushButton* m_sceneAddButton = nullptr;
 
-	bool m_bIsScrollBar = false;
+	bool m_isScrollBar = false;
+
+	int m_dockWideMode = 0;
 
 #pragma endregion private member var
 };

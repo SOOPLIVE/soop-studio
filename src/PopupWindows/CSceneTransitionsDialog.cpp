@@ -1,16 +1,15 @@
 ﻿#include "CSceneTransitionsDialog.h"
 #include "ui_scene-transitions-dialog.h"
 
-#include "qt-wrapper.h"
-
 #include <string>
 
+#include "qt-wrappers.hpp"
+#include "Application/CApplication.h"
+
 #include "CoreModel/Source/CSource.h"
-#include "CoreModel/Scene/CScene.h"
 #include "CoreModel/Scene/CSceneContext.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
 
-#include "Application/CApplication.h"
 #include "MainFrame/CMainFrame.h"
 #include "MainFrame/DynamicCompose/CMainDynamicComposit.h"
 #include "UIComponent/CCustomMenu.h"
@@ -21,21 +20,26 @@
 AFQSceneTransitionsDialog::AFQSceneTransitionsDialog(QWidget* parent,
                                                      OBSSource curTransition,
                                                      int curDuration) :
-    AFQRoundedDialogBase((QDialog*)parent),
+    AFTTopBaseDialog((QDialog*)parent),
     ui(new Ui::AFQSceneTransitionsDialog)
 {
     ui->setupUi(this);
+    
+#ifdef __APPLE__
+    setWindowTitle(QTStr("Basic.SceneTransitions"));
+    ui->titleFrame->hide();
+#endif
 
     connect(ui->closeButton, &QPushButton::clicked, 
             this, &AFQSceneTransitionsDialog::qslotCloseButtonClicked);
 
-    connect(ui->buttonBox->button(QDialogButtonBox::Close),
-            &QPushButton::clicked, this, 
-            &AFQSceneTransitionsDialog::qslotCloseButtonClicked);
+    //connect(ui->buttonBox->button(QDialogButtonBox::Close),
+    //        &QPushButton::clicked, this, 
+    //        &AFQSceneTransitionsDialog::qslotCloseButtonClicked);
 
-    connect(ui->buttonBox->button(QDialogButtonBox::Ok),
-        &QPushButton::clicked, this,
-        &AFQSceneTransitionsDialog::qslotOkButtonClicked);
+    //connect(ui->buttonBox->button(QDialogButtonBox::Ok),
+    //    &QPushButton::clicked, this,
+    //    &AFQSceneTransitionsDialog::qslotOkButtonClicked);
 
     _SetCurTransitionUI(curTransition, curDuration);
 
@@ -72,8 +76,6 @@ void AFQSceneTransitionsDialog::qslotAddTransition()
 
 void AFQSceneTransitionsDialog::qslotRemoveTransition()
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
     int index = ui->comboTransitions->currentIndex();
     const OBSSource tr = ui->comboTransitions->itemData(index).value<OBSSource>();
 
@@ -86,7 +88,7 @@ void AFQSceneTransitionsDialog::qslotRemoveTransition()
 
     ui->comboTransitions->removeItem(idx);
 
-    std::vector<OBSSource>& transitions = sceneContext.GetRefTransitions();
+    std::vector<OBSSource>& transitions = SCENE_CONTEXT.GetRefTransitions();
     std::vector<OBSSource>::iterator iter = transitions.begin();
     for (; iter != transitions.end(); ++iter) {
         if ((*iter) == tr) {
@@ -95,15 +97,12 @@ void AFQSceneTransitionsDialog::qslotRemoveTransition()
         }
     }
 
-    //if (api)
-    //    api->on_event(OBS_FRONTEND_EVENT_TRANSITION_LIST_CHANGED);
+    //MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_TRANSITION_LIST_CHANGED);
 
 }
 
 void AFQSceneTransitionsDialog::qslotChangeTransition(int)
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-  
     const OBSSource transition = ui->comboTransitions->currentData().value<OBSSource>();
 
     if (m_prevTransition == transition)
@@ -119,8 +118,16 @@ void AFQSceneTransitionsDialog::qslotChangeTransition(int)
 
     m_prevTransition = transition;
 
-    //if (api)
-    //    api->on_event(OBS_FRONTEND_EVENT_TRANSITION_CHANGED);
+    //MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_TRANSITION_CHANGED);
+
+    SCENE_CONTEXT.SetTransition(transition);
+    SCENE_CONTEXT.SetCurTransition(transition);
+}
+
+void AFQSceneTransitionsDialog::qslotChangeDuration(int)
+{
+    const int duration = ui->spinDuration->value();
+    SCENE_CONTEXT.SetCurDuration(duration);
 }
 
 void AFQSceneTransitionsDialog::qslotMenuDotTransition()
@@ -137,18 +144,16 @@ void AFQSceneTransitionsDialog::qslotMenuDotTransition()
 
 }
 
-void AFQSceneTransitionsDialog::qslotOkButtonClicked()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    int index = ui->comboTransitions->currentIndex();
-    const OBSSource transition = ui->comboTransitions->itemData(index).value<OBSSource>();
-    const int duration = ui->spinDuration->value();
-
-    AFSceneUtil::SetTransition(transition);
-    sceneContext.SetCurTransition(transition);
-    sceneContext.SetCurDuration(duration);
-}
+//void AFQSceneTransitionsDialog::qslotOkButtonClicked()
+//{
+//    int index = ui->comboTransitions->currentIndex();
+//    const OBSSource transition = ui->comboTransitions->itemData(index).value<OBSSource>();
+//    const int duration = ui->spinDuration->value();
+//
+//    SetTransition(transition);
+//    SCENE_CONTEXT.SetCurTransition(transition);
+//    SCENE_CONTEXT.SetCurDuration(duration);
+//}
 
 void AFQSceneTransitionsDialog::qslotCloseButtonClicked()
 {
@@ -176,18 +181,41 @@ void AFQSceneTransitionsDialog::CreatePropertiesWindow(obs_source_t* source)
     if (!obs_source_configurable(source))
         return;
 
-    App()->GetMainView()->CreatePropertiesPopup(source);
+    MAINFRAME->CreateSourceProperties(source);
+}
+
+void AFQSceneTransitionsDialog::SetWidgetsEnabled(bool enable)
+{
+    const OBSSource transition = ui->comboTransitions->currentData().value<OBSSource>();
+    bool configurable = obs_source_configurable(transition);
+
+    ui->comboTransitions->setEnabled(enable);
+    //ui->spinDuration->setEnabled(enable);
+    ui->addButton->setEnabled(enable);
+    
+    if (configurable) 
+    {
+        ui->removeButton->setEnabled(enable);
+        ui->dotButton->setEnabled(enable);
+    }
+}
+
+void AFQSceneTransitionsDialog::showEvent(QShowEvent* event)
+{
+    QRect midRect = MAIN_BLOCKMANAGER->GetMidGeometry(this->size());
+    QRect adjustRect;
+    MAIN_BLOCKMANAGER->AdjustPositionOutSideFullScreen(midRect, adjustRect);
+
+    move(adjustRect.x(), adjustRect.y());
 }
 
 void AFQSceneTransitionsDialog::_SetCurTransitionUI(OBSSource curTransition, int curDuration)
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
     const char* curTransitionName = obs_source_get_name(curTransition);
 
     ui->spinDuration->setValue(curDuration);
 
-    std::vector<OBSSource> transitions = sceneContext.GetTransitions();
+    std::vector<OBSSource> transitions = SCENE_CONTEXT.GetTransitions();
     for (OBSSource& tr : transitions) {
         const char* name = "";
         if (!tr)
@@ -213,6 +241,9 @@ void AFQSceneTransitionsDialog::_SetCurTransitionUI(OBSSource curTransition, int
     connect(ui->comboTransitions, &QComboBox::currentIndexChanged,
             this, &AFQSceneTransitionsDialog::qslotChangeTransition);
 
+    connect(ui->spinDuration, &QSpinBox::valueChanged,
+            this, &AFQSceneTransitionsDialog::qslotChangeDuration);
+    
     // set ui
     int idx = ui->comboTransitions->findData(QVariant::fromValue<OBSSource>(curTransition));
     if (idx != -1) {
@@ -233,22 +264,19 @@ void AFQSceneTransitionsDialog::_SetCurTransitionUI(OBSSource curTransition, int
 
 void AFQSceneTransitionsDialog::_AddTransition(const char* id)
 {
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
     std::string name;
     QString placeHolderText = QT_UTF8(obs_source_get_display_name(id));
     QString format = placeHolderText + " (%1)";
     obs_source_t* source = nullptr;
     int i = 1;
 
-    while ((sceneContext.FindTransition(QT_TO_UTF8(placeHolderText)))) {
+    while ((SCENE_CONTEXT.FindTransition(QT_TO_UTF8(placeHolderText)))) {
         placeHolderText = format.arg(++i);
     }
 
     bool accepted = AFQNameDialog::AskForName(this,
-                                              locale.Str("TransitionNameDlg.Title"),
-                                              locale.Str("TransitionNameDlg.Text"),
+                                              Str("TransitionNameDlg.Title"),
+                                              Str("TransitionNameDlg.Text"),
                                               name, placeHolderText);
 
     if (accepted) {
@@ -258,7 +286,7 @@ void AFQSceneTransitionsDialog::_AddTransition(const char* id)
             _AddTransition(id);
             return;
         }
-        source = sceneContext.FindTransition(name.c_str());
+        source = SCENE_CONTEXT.FindTransition(name.c_str());
         if (source) {
             AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
                             QT_UTF8(""), Str("NameExists.Text"));
@@ -267,18 +295,16 @@ void AFQSceneTransitionsDialog::_AddTransition(const char* id)
         }
 
         source = obs_source_create_private(id, name.c_str(), NULL);
-        sceneContext.InitTransition(source);
+        SCENE_CONTEXT.InitTransition(source);
         ui->comboTransitions->addItem(QT_UTF8(name.c_str()),
                                       QVariant::fromValue(OBSSource(source)));
         ui->comboTransitions->setCurrentIndex(ui->comboTransitions->count() - 1);
         CreatePropertiesWindow(source);
         obs_source_release(source);
 
-        //if (api)
-        //    api->on_event(
-        //        OBS_FRONTEND_EVENT_TRANSITION_LIST_CHANGED);
+        //MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_TRANSITION_LIST_CHANGED);
 
-        sceneContext.AddTransition(source);
+        SCENE_CONTEXT.AddTransition(source);
     }
 }
 
@@ -302,8 +328,7 @@ void AFQSceneTransitionsDialog::_RenameTransition(OBSSource transition)
         return;
     }
 
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    source = sceneContext.FindTransition(name.c_str());
+    source = SCENE_CONTEXT.FindTransition(name.c_str());
     if (source) {
         AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
                         QT_UTF8(""), Str("NameExists.Text"));

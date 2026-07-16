@@ -3,7 +3,7 @@
 #include <QDialog>
 
 #include "obs.hpp"
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 static bool is_network_media_source(obs_source_t* source, const char* id)
 {
@@ -20,7 +20,7 @@ namespace Ui {
 	class AFQSourceControlDialog;
 }
 
-class AFQSourceControlDialog : public AFQRoundedDialogBase {
+class AFQSourceControlDialog : public AFTTopBaseDialog {
 	Q_OBJECT
 
 public:

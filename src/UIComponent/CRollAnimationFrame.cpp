@@ -18,27 +18,27 @@ void AFQRollAnimationFrame::AddFrame(QString platformName, QString iconPath)
 	AFQLoginToggleFrame* newFrame = new AFQLoginToggleFrame(this);
 	newFrame->LoginToggleFrameInit(platformName, iconPath);
 
-	switch (m_FramesList.count())
+	switch (m_framesList.count())
 	{
 	case 0:
-		newFrame->setGeometry(m_FrontRect);
-		m_iFrontFrameCount = 0;
+		newFrame->setGeometry(m_frontRect);
+		m_frontFrameCount = 0;
 		break;
 	case 1:
 		newFrame->VisibleToggleButton(false);
-		newFrame->setGeometry(m_BottomRect);
+		newFrame->setGeometry(m_bottomRect);
 		break;
 	default:
 		newFrame->VisibleToggleButton(false);
-		newFrame->setGeometry(m_TopRect);
+		newFrame->setGeometry(m_topRect);
 	}
-	m_FramesList.append(newFrame);
-	m_FramesList[m_iFrontFrameCount]->raise();
+	m_framesList.append(newFrame);
+	m_framesList[m_frontFrameCount]->raise();
 }
 
 void AFQRollAnimationFrame::wheelEvent(QWheelEvent* e)
 {
-	if (m_FramesList.count() > 1)
+	if (m_framesList.count() > 1)
 	{
 		if (e->angleDelta().y() > 0) // up Wheel
 		{
@@ -53,88 +53,88 @@ void AFQRollAnimationFrame::wheelEvent(QWheelEvent* e)
 
 void AFQRollAnimationFrame::_RollAnimationWheelUp()
 {
-	if (m_bAnimatingLock)
+	if (m_animatingLock)
 		return;
 
-	m_bAnimatingLock = true;
+	m_animatingLock = true;
 
-	QPropertyAnimation* backAnimation = new QPropertyAnimation(m_FramesList[m_iFrontFrameCount], "geometry", this);
+	QPropertyAnimation* backAnimation = new QPropertyAnimation(m_framesList[m_frontFrameCount], "geometry", this);
 	backAnimation->setDuration(100);
-	backAnimation->setStartValue(m_FrontRect);
-	backAnimation->setEndValue(m_TopRect);
+	backAnimation->setStartValue(m_frontRect);
+	backAnimation->setEndValue(m_topRect);
 
-	AFQLoginToggleFrame* hidetoggleFrame = reinterpret_cast<AFQLoginToggleFrame*>(m_FramesList[m_iFrontFrameCount]);
+	AFQLoginToggleFrame* hidetoggleFrame = reinterpret_cast<AFQLoginToggleFrame*>(m_framesList[m_frontFrameCount]);
 	hidetoggleFrame->VisibleToggleButton(false);
 
-	int bottomFrameIndex = (m_iFrontFrameCount + 1 == m_FramesList.count()) ? 0 : m_iFrontFrameCount + 1;
-	QPropertyAnimation* frontAnimation = new QPropertyAnimation(m_FramesList[bottomFrameIndex], "geometry", this);
+	int bottomFrameIndex = (m_frontFrameCount + 1 == m_framesList.count()) ? 0 : m_frontFrameCount + 1;
+	QPropertyAnimation* frontAnimation = new QPropertyAnimation(m_framesList[bottomFrameIndex], "geometry", this);
 	frontAnimation->setDuration(100);
-	frontAnimation->setStartValue(m_BottomRect);
-	frontAnimation->setEndValue(m_FrontRect);
+	frontAnimation->setStartValue(m_bottomRect);
+	frontAnimation->setEndValue(m_frontRect);
 	connect(frontAnimation, &QPropertyAnimation::finished, [=] {
-		m_bAnimatingLock = false;
+		m_animatingLock = false;
 		});
 
-	AFQLoginToggleFrame* showtoggleFrame = reinterpret_cast<AFQLoginToggleFrame*>(m_FramesList[bottomFrameIndex]);
+	AFQLoginToggleFrame* showtoggleFrame = reinterpret_cast<AFQLoginToggleFrame*>(m_framesList[bottomFrameIndex]);
 	showtoggleFrame->VisibleToggleButton(true);
 	showtoggleFrame->raise();
 
-	int adjustFrameIndex = (m_iFrontFrameCount - 1 < 0) ? m_FramesList.count() - 1 : m_iFrontFrameCount - 1;
+	int adjustFrameIndex = (m_frontFrameCount - 1 < 0) ? m_framesList.count() - 1 : m_frontFrameCount - 1;
 
-	if (m_FramesList.count() > 3)
+	if (m_framesList.count() > 3)
 	{
-		m_FramesList[adjustFrameIndex]->hide();
-		adjustFrameIndex = (m_iFrontFrameCount - 2 < 0) ? m_FramesList.count() + (m_iFrontFrameCount - 2) : m_iFrontFrameCount - 2;
-		m_FramesList[adjustFrameIndex]->show();
+		m_framesList[adjustFrameIndex]->hide();
+		adjustFrameIndex = (m_frontFrameCount - 2 < 0) ? m_framesList.count() + (m_frontFrameCount - 2) : m_frontFrameCount - 2;
+		m_framesList[adjustFrameIndex]->show();
 	}
 
-	m_FramesList[adjustFrameIndex]->setGeometry(m_BottomRect);
+	m_framesList[adjustFrameIndex]->setGeometry(m_bottomRect);
 
 	backAnimation->start();
 	frontAnimation->start();
 
-	m_iFrontFrameCount = bottomFrameIndex;
+	m_frontFrameCount = bottomFrameIndex;
 }
 
 void AFQRollAnimationFrame::_RollAnimationWheelDown()
 {
-	if (m_bAnimatingLock)
+	if (m_animatingLock)
 		return;
 
-	m_bAnimatingLock = true;
+	m_animatingLock = true;
 
-	QPropertyAnimation* backAnimation = new QPropertyAnimation(m_FramesList[m_iFrontFrameCount], "geometry", this);
+	QPropertyAnimation* backAnimation = new QPropertyAnimation(m_framesList[m_frontFrameCount], "geometry", this);
 	backAnimation->setDuration(100);
-	backAnimation->setStartValue(m_FrontRect);
-	backAnimation->setEndValue(m_BottomRect);
-	AFQLoginToggleFrame* hidetoggleFrame = reinterpret_cast<AFQLoginToggleFrame*>(m_FramesList[m_iFrontFrameCount]);
+	backAnimation->setStartValue(m_frontRect);
+	backAnimation->setEndValue(m_bottomRect);
+	AFQLoginToggleFrame* hidetoggleFrame = reinterpret_cast<AFQLoginToggleFrame*>(m_framesList[m_frontFrameCount]);
 	hidetoggleFrame->VisibleToggleButton(false);
 
-	int topFrameIndex = (m_iFrontFrameCount - 1 < 0) ? m_FramesList.count() - 1 : m_iFrontFrameCount - 1;
-	QPropertyAnimation* frontAnimation = new QPropertyAnimation(m_FramesList[topFrameIndex], "geometry", this);
+	int topFrameIndex = (m_frontFrameCount - 1 < 0) ? m_framesList.count() - 1 : m_frontFrameCount - 1;
+	QPropertyAnimation* frontAnimation = new QPropertyAnimation(m_framesList[topFrameIndex], "geometry", this);
 	frontAnimation->setDuration(100);
-	frontAnimation->setStartValue(m_TopRect);
-	frontAnimation->setEndValue(m_FrontRect);
+	frontAnimation->setStartValue(m_topRect);
+	frontAnimation->setEndValue(m_frontRect);
 	connect(frontAnimation, &QPropertyAnimation::finished, [=] {
-		m_bAnimatingLock = false;
+		m_animatingLock = false;
 		});
 
-	AFQLoginToggleFrame* showtoggleFrame = reinterpret_cast<AFQLoginToggleFrame*>(m_FramesList[topFrameIndex]);
+	AFQLoginToggleFrame* showtoggleFrame = reinterpret_cast<AFQLoginToggleFrame*>(m_framesList[topFrameIndex]);
 	showtoggleFrame->VisibleToggleButton(true);
 	showtoggleFrame->raise();
 
-	int adjustFrameIndex = (m_iFrontFrameCount + 1 == m_FramesList.count()) ? 0 : m_iFrontFrameCount + 1;
-	if (m_FramesList.count() > 3)
+	int adjustFrameIndex = (m_frontFrameCount + 1 == m_framesList.count()) ? 0 : m_frontFrameCount + 1;
+	if (m_framesList.count() > 3)
 	{
-		m_FramesList[adjustFrameIndex]->hide();
-		adjustFrameIndex = (m_iFrontFrameCount + 2 > m_FramesList.count() - 1) ? (m_iFrontFrameCount + 2) - (m_FramesList.count()) : m_iFrontFrameCount + 2;
-		m_FramesList[adjustFrameIndex]->show();
+		m_framesList[adjustFrameIndex]->hide();
+		adjustFrameIndex = (m_frontFrameCount + 2 > m_framesList.count() - 1) ? (m_frontFrameCount + 2) - (m_framesList.count()) : m_frontFrameCount + 2;
+		m_framesList[adjustFrameIndex]->show();
 	}
-	m_FramesList[adjustFrameIndex]->setGeometry(m_TopRect);
+	m_framesList[adjustFrameIndex]->setGeometry(m_topRect);
 
 	backAnimation->start();
 	frontAnimation->start();
 
-	m_iFrontFrameCount = topFrameIndex;
+	m_frontFrameCount = topFrameIndex;
 }
 

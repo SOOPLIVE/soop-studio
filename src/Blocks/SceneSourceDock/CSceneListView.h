@@ -13,7 +13,7 @@ class AFQSceneListItem;
 
 class AFQSceneListView : public QFrame
 {
-	Q_OBJECT;
+	Q_OBJECT
 
 #pragma region class initializer, destructor
 public:
@@ -28,17 +28,16 @@ signals:
 	void qsignalSwapItem(int from, int dest);
 
 private slots:
-	void _qSlotDuplicateSelectedScene();
-	void _qSlotRenameScene();
-	void _qSlotRemoveScene();
-	void _qSlotCopyFilters();
-	void _qSlotPasteFilters();
-	void _qSlotScreenshotScene();
-	void _qSlotMoveSceneUp();
-	void _qSlotMoveSceneDown();
-	void _qSlotMoveSceneToTop();
-	void _qSlotMoveSceneToBottom();
-	void _qSlotShowSceneFilters();
+	void _qslotDuplicateSelectedScene();
+	void _qslotRegisterFavoriteScene();
+	void _qslotCopyFilters();
+	void _qslotPasteFilters();
+	void _qslotScreenshotScene();
+	void _qslotMoveSceneUp();
+	void _qslotMoveSceneDown();
+	void _qslotMoveSceneToTop();
+	void _qslotMoveSceneToBottom();
+	void _qslotShowSceneFilters();
 
 #pragma region private member func
 private:

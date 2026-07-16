@@ -52,16 +52,10 @@ public:
 private:
     QString m_srcId;
 
-    QPointer<QLabel> m_pIconLabel  = nullptr;
-    QPointer<AFQElidedSlideLabel> m_pTextLabel = nullptr;
+    QPointer<QLabel> m_iconLabel  = nullptr;
+    QPointer<AFQElidedSlideLabel> m_textLabel = nullptr;
 
-    QString m_strText;
-
-    QString m_strIconPath;
-    QString m_strIconHoverPath;
-    QString m_strGuidePath;
-
-    bool m_bHover = false;
+    bool m_hover = false;
 
 #pragma endregion private member var
 

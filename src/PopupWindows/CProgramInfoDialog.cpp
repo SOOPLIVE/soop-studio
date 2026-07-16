@@ -2,17 +2,25 @@
 
 #include "ui_program-info-dialog.h"
 
-#include "qt-wrapper.h"
 #include "platform/platform.hpp"
+
+#include "MainFrame/CMainFrame.h"
 
 #include <QFile>
 
 AFQProgramInfoDialog::AFQProgramInfoDialog(QWidget* parent) :
-	AFQRoundedDialogBase(parent),
+	AFTTopBaseDialog(parent),
 	ui(new Ui::AFQProgramInfoDialog)
 {
 	ui->setupUi(this);
 
+#ifdef __APPLE__
+    setWindowTitle(QTStr("ProgramInfo"));
+    setWindowFlags(Qt::Window|Qt::WindowCloseButtonHint|Qt::CustomizeWindowHint);
+    ui->titleFrame->hide();
+    
+#endif
+    
     QString styleSheet = R"(
 
     QScrollBar:vertical {
@@ -51,31 +59,42 @@ AFQProgramInfoDialog::AFQProgramInfoDialog(QWidget* parent) :
         background: none;
     })";
 
-	ui->textBrowser->setStyleSheet(styleSheet);
-
-	ui->textBrowser_2->setStyleSheet(styleSheet);
-
 	std::string path;
 	if (GetDataFilePath("license/privacy-policy.html", path)) {
 		QString filePath = QString::fromStdString(path);
-		QString text= _ReadHtmlFile(filePath);
+		QString text = _ReadHtmlFile(filePath);
+		ui->textBrowser->setOpenExternalLinks(true);
 		ui->textBrowser->setHtml(text);
 	}
 
-	if (GetDataFilePath("license/program-terms-conditions.html", path)) {
+	QString programTermsPath;
+	programTermsPath = "license/program-terms-conditions_kor.html";
+
+	if (GetDataFilePath(programTermsPath.toStdString().c_str(), path)) {
 		QString filePath = QString::fromStdString(path);
 		QString text = _ReadHtmlFile(filePath);
 		ui->textBrowser_2->setHtml(text);
 	}
 
-	ui->button_PrivacyPolicy->setChecked(true);
-	ui->button_TermsConditions->setChecked(false);
+	if (GetDataFilePath("license/lisence.html", path)) {
+		QString filePath = QString::fromStdString(path);
+		QString text = _ReadHtmlFile(filePath);
+		ui->textBrowser_3->setHtml(text);
+	}
 
-	connect(ui->button_PrivacyPolicy, &QPushButton::clicked,
+	ui->pushButton_PrivacyPolicy->hide();
+	ui->pushButton_TermsConditions->setChecked(true);
+	ui->stackedWidget->setCurrentIndex(1);
+	ui->pushButton_OpenSourceLicense->setChecked(false);
+
+	connect(ui->pushButton_PrivacyPolicy, &QPushButton::clicked,
 		this, &AFQProgramInfoDialog::qslotShowPrivacyPolicy);
 
-	connect(ui->button_TermsConditions, &QPushButton::clicked,
+	connect(ui->pushButton_TermsConditions, &QPushButton::clicked,
 		this, &AFQProgramInfoDialog::qslotShowTermsConditions);
+
+	connect(ui->pushButton_OpenSourceLicense, &QPushButton::clicked,
+		this, &AFQProgramInfoDialog::qslotShowOpenSourceLisenceInfo);
 
 	connect(ui->closeButton, &QPushButton::clicked,
 		this, &AFQProgramInfoDialog::close);
@@ -89,16 +108,26 @@ AFQProgramInfoDialog::~AFQProgramInfoDialog()
 
 void AFQProgramInfoDialog::qslotShowPrivacyPolicy()
 {
-	ui->button_PrivacyPolicy->setChecked(true);
-	ui->button_TermsConditions->setChecked(false);
+	ui->pushButton_PrivacyPolicy->setChecked(true);
+	ui->pushButton_TermsConditions->setChecked(false);
+	ui->pushButton_OpenSourceLicense->setChecked(false);
 	ui->stackedWidget->setCurrentIndex(0);
 }
 
 void AFQProgramInfoDialog::qslotShowTermsConditions()
 {
-	ui->button_PrivacyPolicy->setChecked(false);
-	ui->button_TermsConditions->setChecked(true);
+	ui->pushButton_PrivacyPolicy->setChecked(false);
+	ui->pushButton_TermsConditions->setChecked(true);
+	ui->pushButton_OpenSourceLicense->setChecked(false);
 	ui->stackedWidget->setCurrentIndex(1);
+}
+
+void AFQProgramInfoDialog::qslotShowOpenSourceLisenceInfo()
+{
+	ui->pushButton_PrivacyPolicy->setChecked(false);
+	ui->pushButton_TermsConditions->setChecked(false);
+	ui->pushButton_OpenSourceLicense->setChecked(true);
+	ui->stackedWidget->setCurrentIndex(2);
 }
 
 QString AFQProgramInfoDialog::_ReadHtmlFile(const QString& filePath)

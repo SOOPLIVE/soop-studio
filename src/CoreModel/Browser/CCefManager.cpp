@@ -1,38 +1,42 @@
-#include "CCefManager.h"
+﻿#include "CCefManager.h"
 
 #include <random>
 
 #include <QDir>
+#include <QRegularExpression>
 
-#include "qt-wrapper.h"
+#include "qt-wrappers.hpp"
 
+#include "Common/StudioDefine.h"
+#include "Common/StringMiscUtils.h"
 
-#include "CoreModel/Config/CConfigManager.h"
+#include "Application/CApplication.h"
+
+#include "CoreModel/Auth/CAuthManager.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
 
+#include "MainFrame/CMainFrame.h"
 
-void AFCefManager::InitContext()
-{
-    m_pCef = obs_browser_init_panel();
-    m_cef_js_avail = m_pCef && obs_browser_qcef_version() >= 3;
-}
 
-void AFCefManager::FinContext()
+AFCefManager::AFCefManager()
+    :m_pCef(obs_browser_init_panel()),
+    m_cef_js_avail(m_pCef&& obs_browser_qcef_version() >= 3)
+{}
+AFCefManager::~AFCefManager()
 {
     DestroyPanelCookieManager();
-    delete m_pCef;
-    m_pCef = nullptr;
+    if(m_pCef) {
+        delete m_pCef;
+        m_pCef = nullptr;
+    }
 }
 
 void AFCefManager::CheckExistingCookieId()
 {
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    
-    if (config_has_user_value(confManager.GetBasic(), "Panels", "CookieId"))
+    if (config_has_user_value(ACTIVECONFIG, "Panels", "CookieId"))
         return;
 
-    config_set_string(confManager.GetBasic(), "Panels", "CookieId",
-                      _GenId().c_str());
+    config_set_string(ACTIVECONFIG, "Panels", "CookieId", GenId().c_str());
 }
 
 void AFCefManager::InitPanelCookieManager()
@@ -44,18 +48,87 @@ void AFCefManager::InitPanelCookieManager()
 
     CheckExistingCookieId();
 
-
-    
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    
-    const char* cookie_id =
-        config_get_string(confManager.GetBasic(), "Panels", "CookieId");
+    const char* cookie_id = config_get_string(ACTIVECONFIG, "Panels", "CookieId");
 
     std::string sub_path;
     sub_path += "ANENTAStudio_profile_cookies/";
     sub_path += cookie_id;
 
-    m_pPanelCookies = m_pCef->create_cookie_manager(sub_path);
+    std::string dst_path = "";
+
+    BPtr<char> src_path_full = m_pCef->get_cookie_path(sub_path);
+    BPtr<char> dst_path_full = m_pCef->get_cookie_path(dst_path);
+
+    QDir srcDir(QString::fromUtf8(src_path_full.Get()));
+    QDir dstDir(QString::fromUtf8(dst_path_full.Get()));
+
+    if (srcDir.exists())
+    {
+        if (!dstDir.exists())
+            dstDir.mkdir(".");
+
+        QStringList files = srcDir.entryList(QDir::Files);
+        for (const QString& file : files)
+        {
+            QString src = QString(src_path_full) + QDir::separator() + file;
+            QString dst = QString(dst_path_full) + QDir::separator() + file;
+            QFile::copy(src, dst);
+        }
+
+        // copy leveldb
+        std::string sub_localstorage_path;
+        sub_localstorage_path += "ANENTAStudio_profile_cookies/";
+        sub_localstorage_path += cookie_id;
+        sub_localstorage_path += "/Local Storage/leveldb/";
+
+        std::string dst_localstorage_path = "/Local Storage/leveldb";
+
+        BPtr<char> src_localstorage_path_full = m_pCef->get_cookie_path(sub_localstorage_path);
+        BPtr<char> dst_localstorage_path_full = m_pCef->get_cookie_path(dst_localstorage_path);
+
+        QString srcLevelDB = QString::fromUtf8(src_localstorage_path_full.Get());
+        QString dstLevelDB = QString::fromUtf8(dst_localstorage_path_full.Get());
+        QDir srcLevelDBDir(srcLevelDB);
+        if (srcLevelDBDir.exists()) {
+            QDir dstLevelDBDir(dstLevelDB);
+            if (!dstLevelDBDir.exists())
+                dstLevelDBDir.mkpath(".");
+
+            QStringList levelDBfiles = srcLevelDBDir.entryList(QDir::Files);
+            for (const QString& file : levelDBfiles)
+            {
+                QString src = srcLevelDB + QDir::separator() + file;
+                QString dst = dstLevelDB + QDir::separator() + file;
+
+                if (QFile::exists(dst)) {
+                    QFile::remove(dst);
+                }
+
+                QFile::copy(src, dst);
+            }
+        }
+        srcDir.removeRecursively();
+    }
+
+    std::string root_path;
+    root_path += "ANENTAStudio_profile_cookies";
+    BPtr<char> root_path_full = m_pCef->get_cookie_path(root_path);
+
+    QDir rootDir(root_path_full.Get());
+    if (rootDir.exists())
+        rootDir.removeRecursively();
+
+    m_pPanelCookies = m_pCef->create_cookie_manager(dst_path);
+
+    AFChannelData* data = nullptr;
+    if (AUTH_CONTEXT.GetChannelData(PLATFORM_SOOP, data))
+    {
+        if (data)
+        {
+            std::string strCookie = data->pAuthData->cookie;
+            SetSoopCookie(strCookie);
+        }
+    }
 }
 
 void AFCefManager::DestroyPanelCookieManager()
@@ -79,17 +152,13 @@ void AFCefManager::DuplicateCurrentCookieProfile(ConfigFile &config)
     if (!m_pCef)
         return;
 
-    
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-
-    std::string cookie_id =
-        config_get_string(confManager.GetBasic(), "Panels", "CookieId");
+    std::string cookie_id = config_get_string(ACTIVECONFIG, "Panels", "CookieId");
 
     std::string src_path;
     src_path += "ANENTAStudio_profile_cookies/";
     src_path += cookie_id;
 
-    std::string new_id = _GenId();
+    std::string new_id = GenId();
 
     std::string dst_path;
     dst_path += "ANENTAStudio_profile_cookies/";
@@ -117,41 +186,48 @@ void AFCefManager::DuplicateCurrentCookieProfile(ConfigFile &config)
         }
     }
 
-    config_set_string(config, "Panels", "CookieId",
-                      cookie_id.c_str());
-    config_set_string(confManager.GetBasic(), "Panels", "CookieId",
-                      new_id.c_str());
+    config_set_string(config, "Panels", "CookieId", cookie_id.c_str());
+    config_set_string(ACTIVECONFIG, "Panels", "CookieId", new_id.c_str());
 }
 
 void AFCefManager::InitBrowserPanelSafeBlock()
 {
     if (!m_pCef)
         return;
+
     if (m_pCef->init_browser())
     {
         InitPanelCookieManager();
         return;
     }
 
-    
-    auto& localeText = AFLocaleTextManager::GetSingletonInstance();
-    
     ExecThreadedWithoutBlocking([this] { m_pCef->wait_for_browser_init(); },
-                                QT_UTF8(localeText.Str("BrowserPanelInit.Title")),
-                                QT_UTF8(localeText.Str("BrowserPanelInit.Text")));
+                                QTStr("BrowserPanelInit.Title"),
+                                QTStr("BrowserPanelInit.Text"));
     InitPanelCookieManager();
 }
-
-std::string AFCefManager::_GenId()
+//
+QCefWidget* AFCefManager::createWidget(QWidget* parent, const std::string& url, QCefCookieManager* cookie_manager, const std::string& headers, bool dummy)
 {
-    std::random_device rd;
-    std::mt19937_64 e2(rd());
-    std::uniform_int_distribution<uint64_t> dist(0, 0xFFFFFFFFFFFFFFFF);
+    if(!m_pCef)
+        return nullptr;
 
-    uint64_t id = dist(e2);
-
-    char id_str[20];
-    snprintf(id_str, sizeof(id_str), "%16llX", (unsigned long long)id);
-    return std::string(id_str);
+    return m_pCef->create_widget(parent, url, cookie_manager, headers, dummy);
 }
 
+void AFCefManager::SetSoopCookie(std::string cookie)
+{
+    if (!m_pCef)
+        return;
+
+    if (!m_pPanelCookies)
+        return;
+
+    QString trimmedCookie = cookie.c_str();
+    trimmedCookie.remove(QRegularExpression("\\s"));
+    std::string cookie_ = trimmedCookie.toStdString();
+
+	m_pPanelCookies->SetCookies(SOOPLIVE_SET_KR_URL, cookie_);
+
+    MAINFRAME->OnSoopEvent(SOOP_FRONTEND_SET_CEF_COOKIES, (void*)cookie_.c_str());
+}

@@ -4,40 +4,36 @@
 #include <cmath>
 #include <string>
 
+#include "Application/CApplication.h"
 
 #include "CMouseStaterPreview.h"
 #include "CModelPreview.h"
 #include "UIComponent/CBasicPreview.h"
 
-
-#define SPACER_LABEL_MARGIN 6.0f
-
-
 #include "Common/MathMiscUtils.h"
 #include "CoreModel/Graphics/CGraphicsContext.h"
-#include "CoreModel/Scene/CScene.h"
 #include "CoreModel/Scene/CSceneContext.h"
 #include "CoreModel/Source/CSource.h"
 
-
 #include "platform/platform.hpp"
 
+#define SPACER_LABEL_MARGIN 6.0f
 
-AFDrawLinePreview::~AFDrawLinePreview()
+CDrawLinePreview::~CDrawLinePreview()
 {
 	obs_enter_graphics();
 
-	if (m_texOverflow)
-		gs_texture_destroy(m_texOverflow);
-	if (m_vbRectFill)
-		gs_vertexbuffer_destroy(m_vbRectFill);
-    if (m_vbCircleFill)
-        gs_vertexbuffer_destroy(m_vbCircleFill);
+	if (overflow)
+		gs_texture_destroy(overflow);
+	if (rectFill)
+		gs_vertexbuffer_destroy(rectFill);
+    if (circleFill)
+        gs_vertexbuffer_destroy(circleFill);
 
 	obs_leave_graphics();
 }
 
-void AFDrawLinePreview::DrawRectOBSGFX(float thickness, vec2 scale)
+void CDrawLinePreview::DrawRect(float thickness, vec2 scale)
 {
 	gs_render_start(true);
 
@@ -62,7 +58,7 @@ void AFDrawLinePreview::DrawRectOBSGFX(float thickness, vec2 scale)
 	gs_vertexbuffer_destroy(rect);
 }
 
-void AFDrawLinePreview::DrawLineOBSGFX(float x1, float y1, float x2, float y2,
+void CDrawLinePreview::DrawLine(float x1, float y1, float x2, float y2,
 											float thickness, vec2 scale)
 {
 	float ySide = (y1 == y2) ? (y1 < 0.5f ? 1.0f : -1.0f) : 0.0f;
@@ -85,7 +81,7 @@ void AFDrawLinePreview::DrawLineOBSGFX(float x1, float y1, float x2, float y2,
 	gs_vertexbuffer_destroy(line);
 }
 
-void AFDrawLinePreview::DrawSquareAtPosOBSGFX(float x, float y, float pixelRatio)
+void CDrawLinePreview::DrawSquareAtPosOBSGFX(float x, float y, float pixelRatio)
 {
 	struct vec3 pos;
 	vec3_set(&pos, x, y, 0.0f);
@@ -107,46 +103,31 @@ void AFDrawLinePreview::DrawSquareAtPosOBSGFX(float x, float y, float pixelRatio
 	gs_matrix_pop();
 }
 
-void AFDrawLinePreview::SetUnsafeAccessContext(AFGraphicsContext* pGraphicsContext, 
-											   AFSceneContext* pSceneContext)
+void CDrawLinePreview::DrawOverflow()
 {
-	if (m_pInitedContextGraphics == nullptr)
-		m_pInitedContextGraphics = pGraphicsContext;
-
-	if (m_pInitedContextScene == nullptr)
-		m_pInitedContextScene = pSceneContext;
-}
-
-void AFDrawLinePreview::DrawOverflow()
-{
-	if (m_bOverflowHidden)
+	if (overflowHidden)
 		return;
 
     GS_DEBUG_MARKER_BEGIN(GS_DEBUG_COLOR_DEFAULT, "DrawOverflow");
     
-	if (!m_texOverflow)
+	if (!overflow)
     {
         std::string absPath;
         GetDataFilePath("assets/preview/overflow.png", absPath);
         
-		m_texOverflow = gs_texture_create_from_file(absPath.data());
+		overflow = gs_texture_create_from_file(absPath.data());
 	}
 
-	OBSScene scene = nullptr;
-	
-	if (m_pInitedContextScene != nullptr)
-		scene = m_pInitedContextScene->GetCurrOBSScene();
-
+	OBSScene scene = nullptr;	
+	scene = SCENE_CONTEXT.GetCurrentScene();
 	if (scene)
 	{
 		float previewScale = 1.0f;
-
-		if (m_pInitedContextGraphics != nullptr)
-			previewScale = m_pInitedContextGraphics->GetMainPreviewScale();
+		previewScale = GRAPHIC_CONTEXT.GetMainPreviewScale();
 
 		gs_matrix_push();
 		gs_matrix_scale3f(previewScale, previewScale, 1.0f);
-		obs_scene_enum_items(scene, _DrawSelectedOverflow, this);
+		obs_scene_enum_items(scene, DrawSelectedOverflow, this);
 		gs_matrix_pop();
 	}
 
@@ -155,10 +136,10 @@ void AFDrawLinePreview::DrawOverflow()
     GS_DEBUG_MARKER_END();
 }
 
-void AFDrawLinePreview::DrawSceneEditing(const vec2& startPos, const vec2& mousePos, 
+void CDrawLinePreview::DrawSceneEditing(const vec2& startPos, const vec2& mousePos, 
                                          bool selectionBox, float dpiValue/* = 1.f*/)
 {
-    m_fDpiValueLastDraw = dpiValue;
+    dpiValueLastDraw = dpiValue;
     
     GS_DEBUG_MARKER_BEGIN(GS_DEBUG_COLOR_DEFAULT, "DrawSceneEditing");
     
@@ -168,28 +149,23 @@ void AFDrawLinePreview::DrawSceneEditing(const vec2& startPos, const vec2& mouse
 	gs_technique_begin(tech);
 	gs_technique_begin_pass(tech, 0);
 
-	float previewScale = 1.0f;
-	
-	if (m_pInitedContextGraphics != nullptr)
-		previewScale = m_pInitedContextGraphics->GetMainPreviewScale();
+	float previewScale = 1.0f;	
+	previewScale = GRAPHIC_CONTEXT.GetMainPreviewScale();
 
 
 	OBSScene scene = nullptr;
-
-	if (m_pInitedContextScene != nullptr)
-		scene = m_pInitedContextScene->GetCurrOBSScene();
-
+	scene = SCENE_CONTEXT.GetCurrentScene();
 	if (scene)
 	{
 		gs_matrix_push();
 		gs_matrix_scale3f(previewScale, previewScale, 1.0f);
-		obs_scene_enum_items(scene, _DrawSelectedItem, this);
+		obs_scene_enum_items(scene, DrawSelectedItem, this);
 		gs_matrix_pop();
 	}
 
 	if (selectionBox)
 	{
-		if (!m_vbRectFill)
+		if (!rectFill)
 		{
 			gs_render_start(true);
 
@@ -198,13 +174,13 @@ void AFDrawLinePreview::DrawSceneEditing(const vec2& startPos, const vec2& mouse
 			gs_vertex2f(0.0f, 1.0f);
 			gs_vertex2f(1.0f, 1.0f);
 
-			m_vbRectFill = gs_render_save();
+			rectFill = gs_render_save();
 		}
 
-		_DrawSelectionBox(startPos.x * previewScale,
+		DrawSelectionBox(startPos.x * previewScale,
 						  startPos.y * previewScale,
 						  mousePos.x * previewScale,
-						  mousePos.y * previewScale, m_vbRectFill, dpiValue);
+						  mousePos.y * previewScale, rectFill, dpiValue);
 	}
 
 	gs_load_vertexbuffer(nullptr);
@@ -215,23 +191,17 @@ void AFDrawLinePreview::DrawSceneEditing(const vec2& startPos, const vec2& mouse
     GS_DEBUG_MARKER_END();
 }
 
-void AFDrawLinePreview::DrawSpacingHelpers(float dpiValue/* = 1.f*/)
+void CDrawLinePreview::DrawSpacingHelpers(float dpiValue/* = 1.f*/)
 {
-    m_fDpiValueLastDraw = dpiValue;
+    dpiValueLastDraw = dpiValue;
     
-	if (m_pInitedContextGraphics == nullptr)
-		return;
-
-
 	vec2 s;
 	SceneFindBoxData data(s, s);
 
 	OBSScene scene = nullptr;
+	scene = SCENE_CONTEXT.GetCurrentScene();
 
-	if (m_pInitedContextScene != nullptr)
-		scene = m_pInitedContextScene->GetCurrOBSScene();
-
-	obs_scene_enum_items(scene, AFModelPreview::FindSelected, &data);
+	obs_scene_enum_items(scene, CModelPreview::FindSelected, &data);
 
 	if (data.sceneItems.size() != 1)
 		return;
@@ -240,16 +210,16 @@ void AFDrawLinePreview::DrawSpacingHelpers(float dpiValue/* = 1.f*/)
 	if (!item)
 		return;
 
-	//if (obs_sceneitem_locked(item))
-	//	return;
+	if (obs_sceneitem_locked(item))
+		return;
 
-	vec2 itemSize = AFModelPreview::GetItemSize(item);
+	vec2 itemSize = CModelPreview::GetItemSize(item);
 	if (itemSize.x == 0.0f || itemSize.y == 0.0f)
 		return;
 
-	//obs_sceneitem_t* parentGroup = obs_sceneitem_get_group(scene, item);
-	//if (parentGroup && obs_sceneitem_locked(parentGroup))
-	//	return;
+	obs_sceneitem_t* parentGroup = obs_sceneitem_get_group(scene, item);
+	if (parentGroup && obs_sceneitem_locked(parentGroup))
+		return;
 
 	matrix4 boxTransform;
 	obs_sceneitem_get_box_transform(item, &boxTransform);
@@ -355,8 +325,8 @@ void AFDrawLinePreview::DrawSpacingHelpers(float dpiValue/* = 1.f*/)
 	// Init viewport
 	vec3 viewport;
 	vec3_set(&viewport, 
-			 m_pInitedContextGraphics->GetMainPreviewCX(),
-			 m_pInitedContextGraphics->GetMainPreviewCY(),
+			 GRAPHIC_CONTEXT.GetMainPreviewCX(),
+			 GRAPHIC_CONTEXT.GetMainPreviewCY(),
 			 1.0f);
 
 	vec3_div(&left, &left, &viewport);
@@ -364,8 +334,7 @@ void AFDrawLinePreview::DrawSpacingHelpers(float dpiValue/* = 1.f*/)
 	vec3_div(&top, &top, &viewport);
 	vec3_div(&bottom, &bottom, &viewport);
 
-
-	float previewScale = m_pInitedContextGraphics->GetMainPreviewScale();
+	float previewScale = GRAPHIC_CONTEXT.GetMainPreviewScale();
 
 	vec3_mulf(&left, &left, previewScale);
 	vec3_mulf(&right, &right, previewScale);
@@ -376,7 +345,7 @@ void AFDrawLinePreview::DrawSpacingHelpers(float dpiValue/* = 1.f*/)
 	vec3 start, end;
 
 	float pixelRatio = dpiValue;
-	    
+
 	LabelSourceData initLabel = LabelSourceData(16);
 	initLabel.labelRatioSize =  pixelRatio;
 	initLabel.labelOutline = true;
@@ -385,43 +354,43 @@ void AFDrawLinePreview::DrawSpacingHelpers(float dpiValue/* = 1.f*/)
 #endif
 
 	for (int i = 0; i < 4; i++)
-		if (!m_obsSpacerLabel[i])
-			m_obsSpacerLabel[i] = AFSourceUtil::CreateLabelSource(initLabel);
+		if (!spacerLabel[i])
+			spacerLabel[i] = AFSourceUtil::CreateLabelSource(initLabel);
 	
 
 	vec3_set(&start, top.x, 0.0f, 1.0f);
 	vec3_set(&end, top.x, top.y, 1.0f);
-	_RenderSpacingHelper(0, start, end, viewport, pixelRatio);
+	RenderSpacingHelper(0, start, end, viewport, pixelRatio);
 
 	vec3_set(&start, bottom.x, 1.0f - bottom.y, 1.0f);
 	vec3_set(&end, bottom.x, 1.0f, 1.0f);
-	_RenderSpacingHelper(1, start, end, viewport, pixelRatio);
+	RenderSpacingHelper(1, start, end, viewport, pixelRatio);
 
 	vec3_set(&start, 0.0f, left.y, 1.0f);
 	vec3_set(&end, left.x, left.y, 1.0f);
-	_RenderSpacingHelper(2, start, end, viewport, pixelRatio);
+	RenderSpacingHelper(2, start, end, viewport, pixelRatio);
 
 	vec3_set(&start, 1.0f - right.x, right.y, 1.0f);
 	vec3_set(&end, 1.0f, right.y, 1.0f);
-	_RenderSpacingHelper(3, start, end, viewport, pixelRatio);
+	RenderSpacingHelper(3, start, end, viewport, pixelRatio);
 }
 
-void AFDrawLinePreview::SetSelectColor(QColor color)
+void CDrawLinePreview::SetSelectColor(QColor color)
 {
-	m_selColor = color;
+	selColor = color;
 }
 
-void AFDrawLinePreview::SetCropColor(QColor color)
+void CDrawLinePreview::SetCropColor(QColor color)
 {
-	m_cropColor = color;
+	cropColor = color;
 }
 
-void AFDrawLinePreview::SetHoverColor(QColor color)
+void CDrawLinePreview::SetHoverColor(QColor color)
 {
-	m_hoverColor = color;
+	hoverColor = color;
 }
 
-bool AFDrawLinePreview::_DrawSelectedOverflow(obs_scene_t* scene, obs_sceneitem_t* item, void* param)
+bool CDrawLinePreview::DrawSelectedOverflow(obs_scene_t* scene, obs_sceneitem_t* item, void* param)
 {
 	if (obs_sceneitem_locked(item))
 		return true;
@@ -429,9 +398,9 @@ bool AFDrawLinePreview::_DrawSelectedOverflow(obs_scene_t* scene, obs_sceneitem_
 	if (!AFSceneUtil::SceneItemHasVideo(item))
 		return true;
 
-	AFDrawLinePreview* caller = reinterpret_cast<AFDrawLinePreview*>(param);
+	CDrawLinePreview* caller = reinterpret_cast<CDrawLinePreview*>(param);
 
-	AFBasicPreview* prev = reinterpret_cast<AFBasicPreview*>(param);
+	CBasicPreview* prev = reinterpret_cast<CBasicPreview*>(param);
 
 	if (!caller->GetOverflowSelectionHidden() && !obs_sceneitem_visible(item))
 		return true;
@@ -442,7 +411,7 @@ bool AFDrawLinePreview::_DrawSelectedOverflow(obs_scene_t* scene, obs_sceneitem_
 
 		gs_matrix_push();
 		gs_matrix_mul(&mat);
-		obs_sceneitem_group_enum_items(item, _DrawSelectedOverflow,
+		obs_sceneitem_group_enum_items(item, DrawSelectedOverflow,
 			param);
 		gs_matrix_pop();
 	}
@@ -483,7 +452,7 @@ bool AFDrawLinePreview::_DrawSelectedOverflow(obs_scene_t* scene, obs_sceneitem_
 	vec2_set(&s, boxTransform.x.x / 96, boxTransform.y.y / 96);
 
 	gs_effect_set_vec2(scale, &s);
-	gs_effect_set_texture(image, caller->m_texOverflow);
+	gs_effect_set_texture(image, caller->overflow);
 
 	gs_matrix_push();
 	gs_matrix_mul(&boxTransform);
@@ -492,7 +461,7 @@ bool AFDrawLinePreview::_DrawSelectedOverflow(obs_scene_t* scene, obs_sceneitem_
 	obs_sceneitem_get_crop(item, &crop);
 
 	while (gs_effect_loop(solid, "Draw")) {
-		gs_draw_sprite(caller->m_texOverflow, 0, 1, 1);
+		gs_draw_sprite(caller->overflow, 0, 1, 1);
 	}
 
 	gs_matrix_pop();
@@ -616,7 +585,7 @@ static void DrawRotationHandle(gs_vertbuffer_t *circle, float rot,
 }
 //
 
-bool AFDrawLinePreview::_DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* item, void* param)
+bool CDrawLinePreview::DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* item, void* param)
 {
 	if (obs_sceneitem_locked(item))
 		return true;
@@ -624,7 +593,7 @@ bool AFDrawLinePreview::_DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* i
 	if (!AFSceneUtil::SceneItemHasVideo(item))
 		return true;
 
-    AFDrawLinePreview* caller = reinterpret_cast<AFDrawLinePreview*>(param);
+    CDrawLinePreview* caller = reinterpret_cast<CDrawLinePreview*>(param);
 
 	if (obs_sceneitem_is_group(item)) {
 		matrix4 mat;
@@ -632,20 +601,20 @@ bool AFDrawLinePreview::_DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* i
 		obs_sceneitem_get_draw_transform(item, &mat);
 		obs_sceneitem_get_info(item, &groupInfo);
 
-		caller->m_fGroupRot = groupInfo.rot;
+		caller->groupRot = groupInfo.rot;
 
 		gs_matrix_push();
 		gs_matrix_mul(&mat);
-		obs_sceneitem_group_enum_items(item, _DrawSelectedItem, caller);
+		obs_sceneitem_group_enum_items(item, DrawSelectedItem, caller);
 		gs_matrix_pop();
 
-		caller->m_fGroupRot = 0.0f;
+		caller->groupRot = 0.0f;
 	}
 
-	float pixelRatio = caller->m_fDpiValueLastDraw;
+	float pixelRatio = caller->dpiValueLastDraw;
     
 
-    bool hovered = caller->m_pPreviewModel->CheckNowHovered(item);
+    bool hovered = caller->previewModel->CheckNowHovered(item);
 	bool selected = obs_sceneitem_selected(item);
 
 	if (!selected && !hovered)
@@ -663,9 +632,10 @@ bool AFDrawLinePreview::_DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* i
                     {{{1.f, 1.f, 0.f}}},
     };
 
-	QColor selColor = caller->m_selColor;
-    QColor cropColor = caller->m_cropColor;
-    QColor hoverColor = caller->m_hoverColor;
+    // RGB HardCode
+	QColor selColor = caller->selColor;
+    QColor cropColor = caller->cropColor;
+    QColor hoverColor = caller->hoverColor;
     
 	vec4 vecSelColor;
 	vec4_set(&vecSelColor, selColor.redF(), selColor.greenF(), selColor.blueF(), 1.0f);
@@ -683,10 +653,16 @@ bool AFDrawLinePreview::_DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* i
             vec3_transform(&pos, &pos, &invBoxTransform);
             return close_float(pos.x, b.x, DEF_TOL_EPSILON) && close_float(pos.y, b.y, DEF_TOL_EPSILON);
         });
+	
+	// draw empty dot
+	vec2 box_scale;
+	obs_sceneitem_get_box_scale(item, &box_scale);
+	if (0 == box_scale.x && 0 == box_scale.y)
+		visible = true;
 
     if (!visible)
         return true;
-    
+
     GS_DEBUG_MARKER_BEGIN(GS_DEBUG_COLOR_DEFAULT, "_DrawSelectedItem");
     
     matrix4 curTransform;
@@ -712,6 +688,7 @@ bool AFDrawLinePreview::_DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* i
 	gs_effect_set_vec4(colParam, &vecSelColor);
 
 	if (info.bounds_type == OBS_BOUNDS_NONE && AFSceneUtil::IsCropEnabled(&crop)) {
+
 		#define DRAW_SIDE(side, x1, y1, x2, y2)                                 \
 			if (hovered && !selected) {                                         \
                 gs_effect_set_vec4(colParam, &vecHoverColor);                   \
@@ -737,33 +714,35 @@ bool AFDrawLinePreview::_DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* i
 	else {
 		if (!selected) {
             gs_effect_set_vec4(colParam, &vecHoverColor);
-            AFDrawLinePreview::DrawRectOBSGFX(4.0f * 1 / 2, boxScale);
+            CDrawLinePreview::DrawRect(4.0f * 1 / 2, boxScale);
 		}
 		else {
-			AFDrawLinePreview::DrawRectOBSGFX(4.0f * 1 / 2, boxScale);
+			CDrawLinePreview::DrawRect(4.0f * 1 / 2, boxScale);
 		}
 	}
     //
 
 
 
-	if (caller->m_pInitedContextGraphics != nullptr)
-		gs_load_vertexbuffer(caller->m_pInitedContextGraphics->GetBoxVB());
-
+	gs_load_vertexbuffer(GRAPHIC_CONTEXT.GetBoxVB());
     gs_effect_set_vec4(colParam, &vecSelColor);
     
-	if (selected)
+	obs_source_t* source = obs_sceneitem_get_source(item);
+	const char* id = obs_source_get_id(source);
+	bool isPainterSource = (0 == strcmp("painter_source", id));
+
+	if (selected && !isPainterSource)
     {
-		AFDrawLinePreview::DrawSquareAtPosOBSGFX(0.0f, 0.0f, pixelRatio);
-		AFDrawLinePreview::DrawSquareAtPosOBSGFX(0.0f, 1.0f, pixelRatio);
-		AFDrawLinePreview::DrawSquareAtPosOBSGFX(1.0f, 0.0f, pixelRatio);
-		AFDrawLinePreview::DrawSquareAtPosOBSGFX(1.0f, 1.0f, pixelRatio);
-		AFDrawLinePreview::DrawSquareAtPosOBSGFX(0.5f, 0.0f, pixelRatio);
-		AFDrawLinePreview::DrawSquareAtPosOBSGFX(0.0f, 0.5f, pixelRatio);
-		AFDrawLinePreview::DrawSquareAtPosOBSGFX(0.5f, 1.0f, pixelRatio);
-		AFDrawLinePreview::DrawSquareAtPosOBSGFX(1.0f, 0.5f, pixelRatio);
+		CDrawLinePreview::DrawSquareAtPosOBSGFX(0.0f, 0.0f, pixelRatio);
+		CDrawLinePreview::DrawSquareAtPosOBSGFX(0.0f, 1.0f, pixelRatio);
+		CDrawLinePreview::DrawSquareAtPosOBSGFX(1.0f, 0.0f, pixelRatio);
+		CDrawLinePreview::DrawSquareAtPosOBSGFX(1.0f, 1.0f, pixelRatio);
+		CDrawLinePreview::DrawSquareAtPosOBSGFX(0.5f, 0.0f, pixelRatio);
+		CDrawLinePreview::DrawSquareAtPosOBSGFX(0.0f, 0.5f, pixelRatio);
+		CDrawLinePreview::DrawSquareAtPosOBSGFX(0.5f, 1.0f, pixelRatio);
+		CDrawLinePreview::DrawSquareAtPosOBSGFX(1.0f, 0.5f, pixelRatio);
         
-        if (!caller->m_vbCircleFill)
+        if (!caller->circleFill)
         {
             gs_render_start(true);
 
@@ -778,15 +757,16 @@ bool AFDrawLinePreview::_DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* i
                 gs_vertex2f(0.5f, 1.0f);
             }
 
-            caller->m_vbCircleFill = gs_render_save();
+            caller->circleFill = gs_render_save();
         }
         
-        bool invert = info.scale.y < 0.0f &&
-                        info.bounds_type == OBS_BOUNDS_NONE;
-        DrawRotationHandle(caller->m_vbCircleFill, info.rot /*+ prev->groupRot*/,
-                           pixelRatio, invert);
-       
-        //
+		if (!SCENE_CONTEXT.IsMustInSizePreview(source))
+		{
+			bool invert = info.scale.y < 0.0f &&
+						  info.bounds_type == OBS_BOUNDS_NONE;
+			DrawRotationHandle(caller->circleFill, info.rot /*+ prev->groupRot*/,
+							   pixelRatio, invert);
+		}
 	}
 
 	gs_matrix_pop();
@@ -796,7 +776,7 @@ bool AFDrawLinePreview::_DrawSelectedItem(obs_scene_t* scene, obs_sceneitem_t* i
 	return true;
 }
 
-void AFDrawLinePreview::_DrawLabel(OBSSource source, vec3& pos, vec3& viewport)
+void CDrawLinePreview::DrawLabel(OBSSource source, vec3& pos, vec3& viewport)
 {
 	if (!source)
 		return;
@@ -810,7 +790,7 @@ void AFDrawLinePreview::_DrawLabel(OBSSource source, vec3& pos, vec3& viewport)
 	gs_matrix_pop();
 }
 
-void AFDrawLinePreview::_DrawSpacingLine(vec3& start, vec3& end, vec3& viewport, float pixelRatio)
+void CDrawLinePreview::DrawSpacingLine(vec3& start, vec3& end, vec3& viewport, float pixelRatio)
 {
 	matrix4 transform;
 	matrix4_identity(&transform);
@@ -820,7 +800,6 @@ void AFDrawLinePreview::_DrawSpacingLine(vec3& start, vec3& end, vec3& viewport,
 	gs_effect_t* solid = obs_get_base_effect(OBS_EFFECT_SOLID);
 	gs_technique_t* tech = gs_effect_get_technique(solid, "Solid");
     
-	QColor selColor = m_selColor;
 	vec4 color;
 	vec4_set(&color, selColor.redF(), selColor.greenF(), selColor.blueF(), 1.0f);
 
@@ -835,7 +814,7 @@ void AFDrawLinePreview::_DrawSpacingLine(vec3& start, vec3& end, vec3& viewport,
 	vec2 scale;
 	vec2_set(&scale, viewport.x, viewport.y);
 
-	DrawLineOBSGFX(start.x, start.y, end.x, end.y,
+	DrawLine(start.x, start.y, end.x, end.y,
 				   pixelRatio * (HANDLE_RADIUS / 2), scale);
 
 	gs_matrix_pop();
@@ -846,24 +825,23 @@ void AFDrawLinePreview::_DrawSpacingLine(vec3& start, vec3& end, vec3& viewport,
 	gs_technique_end(tech);
 }
 
-void AFDrawLinePreview::_SetLabelText(int sourceIndex, int px)
+void CDrawLinePreview::SetLabelText(int sourceIndex, int px)
 {
-    
-	if (px == m_iarrSpacerPx[sourceIndex])
+	if (px == spacerPx[sourceIndex])
 		return;
 
 	std::string text = std::to_string(px) + " px";
 
-	obs_source_t* source = m_obsSpacerLabel[sourceIndex];
+	obs_source_t* source = spacerLabel[sourceIndex];
 
 	OBSDataAutoRelease settings = obs_source_get_settings(source);
 	obs_data_set_string(settings, "text", text.c_str());
 	obs_source_update(source, settings);
 
-	m_iarrSpacerPx[sourceIndex] = px;
+	spacerPx[sourceIndex] = px;
 }
 
-bool AFDrawLinePreview::_DrawSelectionBox(float x1, float y1, float x2, float y2,
+bool CDrawLinePreview::DrawSelectionBox(float x1, float y1, float x2, float y2,
                                           gs_vertbuffer_t* rectFill, float dpiValue/* = 1.f*/)
 {
 	float pixelRatio = dpiValue;
@@ -896,7 +874,7 @@ bool AFDrawLinePreview::_DrawSelectionBox(float x1, float y1, float x2, float y2
 	gs_draw(GS_TRISTRIP, 0, 0);
 
 	gs_effect_set_vec4(colParam, &borderColor);
-	DrawRectOBSGFX(HANDLE_RADIUS * pixelRatio / 2, scale);
+	DrawRect(HANDLE_RADIUS * pixelRatio / 2, scale);
 
 	gs_matrix_pop();
 
@@ -904,7 +882,7 @@ bool AFDrawLinePreview::_DrawSelectionBox(float x1, float y1, float x2, float y2
 	return true;
 }
 
-void AFDrawLinePreview::_RenderSpacingHelper(int sourceIndex, vec3& start, vec3& end,
+void CDrawLinePreview::RenderSpacingHelper(int sourceIndex, vec3& start, vec3& end,
 	vec3& viewport, float pixelRatio)
 {
 	bool horizontal = (sourceIndex == 2 || sourceIndex == 3);
@@ -931,7 +909,7 @@ void AFDrawLinePreview::_RenderSpacingHelper(int sourceIndex, vec3& start, vec3&
 	if (px <= 0.0f)
 		return;
 
-	obs_source_t* source = m_obsSpacerLabel[sourceIndex];
+	obs_source_t* source = spacerLabel[sourceIndex];
 	vec3 labelSize, labelPos;
 	vec3_set(&labelSize, obs_source_get_width(source),
 		obs_source_get_height(source), 1.0f);
@@ -956,7 +934,7 @@ void AFDrawLinePreview::_RenderSpacingHelper(int sourceIndex, vec3& start, vec3&
 		labelPos.x += labelMargin.x;
 	}
 
-	_DrawSpacingLine(start, end, viewport, pixelRatio);
-	_SetLabelText(sourceIndex, (int)px);
-	_DrawLabel(source, labelPos, viewport);
+	DrawSpacingLine(start, end, viewport, pixelRatio);
+	SetLabelText(sourceIndex, (int)px);
+	DrawLabel(source, labelPos, viewport);
 }

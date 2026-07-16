@@ -1,7 +1,5 @@
 ﻿#include "CQtDisplay.h"
 
-
-#include "include/qt-wrapper.h" 
 #include "Common/ColorMiscUtils.h"
 
 #include <QWindow>
@@ -14,9 +12,18 @@
 #endif
 
 
+#include "display-helpers.hpp"
 #include "ViewModel/Display/CExpressOBSDisplay.h"
 
 
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+#include <obs-nix-platform.h>
+#endif
+
+#ifdef ENABLE_WAYLAND
+#include <qpa/qplatformnativeinterface.h>
+#endif
 
 class SurfaceEventFilter : public QObject {
     AFExpressOBSDisplay* display;
@@ -33,8 +40,7 @@ protected:
 
 		switch (event->type()) {
 		case QEvent::PlatformSurface:
-			surfaceEvent =
-				static_cast<QPlatformSurfaceEvent*>(event);
+			surfaceEvent = static_cast<QPlatformSurfaceEvent*>(event);
 
 			switch (surfaceEvent->surfaceEventType()) {
 			case QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed:
@@ -60,12 +66,14 @@ AFQTDisplay::AFQTDisplay(QWidget* parent, Qt::WindowFlags flags)
 #ifdef __APPLE__
 	setAttribute(Qt::WA_PaintOnScreen);
 	setAttribute(Qt::WA_OpaquePaintEvent);
+
+	//Need check Dock Left Right Docking Move Issue
+	setAttribute(Qt::WA_DontCreateNativeAncestors);
 #endif
 	//setAttribute(Qt::WA_StaticContents);
 	//setAttribute(Qt::WA_NoSystemBackground);
-	//setAttribute(Qt::WA_DontCreateNativeAncestors);
+	
 	setAttribute(Qt::WA_NativeWindow);
-
 
 	if (m_pViewModel == nullptr)
 		m_pViewModel = new AFExpressOBSDisplay(this);

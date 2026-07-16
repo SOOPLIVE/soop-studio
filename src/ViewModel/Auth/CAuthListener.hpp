@@ -6,8 +6,8 @@
 class AFAuthListener : public QObject {
 	Q_OBJECT
 
-	QTcpServer *server;
-	QString state;
+	QTcpServer* m_pServer;
+	QString m_state;
 
 signals:
 	void ok(const QString &code);

@@ -7,9 +7,9 @@
 #include <graphics/vec2.h>
 #include <graphics/matrix4.h>
 
-
 #include "CMouseStaterPreview.h"
 
+class AFGraphicsContext;
 
 struct SceneFindData
 {
@@ -49,120 +49,107 @@ struct SceneFindBoxData
 	}
 };
 
+struct PendingBrowserSizeUpdate {
+	obs_source_t* source;
+	int width;
+	int height;
+};
 
-class AFGraphicsContext;
-class AFSceneContext;
-
-
-class AFModelPreview final
+class CModelPreview final
 {
-#pragma region QT Field, CTOR/DTOR
 public:
-	AFModelPreview() = default;
-	~AFModelPreview() = default;
-#pragma endregion QT Field, CTOR/DTOR
+	CModelPreview();// = default;
+	~CModelPreview();// = default;
 
-#pragma region public func
 public:
 	// callback for libobs
-	static bool		FindSelected(obs_scene_t* scene, obs_sceneitem_t* item, void* param);
-    static bool     FindItemsInBox(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
-    static bool     NudgeCallBack(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
+	static bool FindSelected(obs_scene_t* scene, obs_sceneitem_t* item, void* param);
+    static bool FindItemsInBox(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
+    static bool NudgeCallBack(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
 	//
 
+	static vec2 GetItemSize(obs_sceneitem_t* item);
 
-	static vec2		GetItemSize(obs_sceneitem_t* item);
-
-
-	void			SetUnsafeAccessContext(AFGraphicsContext* pGraphicsContext,
-										   AFSceneContext* pSceneContext);
-
-    void            ClearSelectedItems();
-    void            SetSelectedItems();
-    void            ClearHoveredItems(bool selectionBox);
-    void            EnumSelecedHoveredItems(const bool altDown,
+    void ClearSelectedItems();
+    void SetSelectedItems();
+    void ClearHoveredItems(bool selectionBox);
+    void EnumSelecedHoveredItems(const bool altDown,
                                             const bool shiftDown,
                                             const bool ctrlDown);
-    uint32_t        MakeHoveredItem(const vec2& pos);
-    void            MakeLastHoveredItem(const vec2& pos);
+    uint32_t MakeHoveredItem(const vec2& pos);
+    void MakeLastHoveredItem(const vec2& pos);
 
-    void			Reset();
-	bool			IsLocked();
-	void			GetStretchHandleData(const vec2& pos, bool ignoreGroup,
-                                         AFMouseStaterPreview& mouseState, float dpiValue = 1.f);
+    void Reset();
+	bool IsLocked();
+	void GetStretchHandleData(const vec2& pos, bool ignoreGroup,
+                                         CMouseStatePreview& mouseState, float dpiValue = 1.f);
 
-	OBSSceneItem	GetItemAtPos(const vec2& pos, bool selectBelow);
-	bool			SelectedAtPos(const vec2& pos);
-    void            DoSelect(const vec2& pos);
-	void			DoCtrlSelect(const vec2& pos);
+	OBSSceneItem GetItemAtPos(const vec2& pos, bool selectBelow);
+	bool SelectedAtPos(const vec2& pos);
+    void DoSelect(const vec2& pos);
+	void DoCtrlSelect(const vec2& pos);
 
-    void            CropItem(const vec2& pos, AFMouseStaterPreview& mouseState);
-	void			StretchItem(const vec2& pos, AFMouseStaterPreview& mouseState,
+    void CropItem(const vec2& pos, CMouseStatePreview& mouseState);
+	void StretchItem(const vec2& pos, CMouseStatePreview& mouseState,
                                 bool shiftDown, bool controlDown);
-    void            RotateItem(const vec2& pos, bool shiftDown, bool controlDown);
-	void			MoveItems(const vec2& pos, vec2& lastMoveOffset, vec2& startPos, bool controlDown);
-    void            BoxItems(OBSScene scene, const vec2 &startPos, const vec2 &pos);
-    
-    
-    bool            CheckNowHovered(obs_sceneitem_t* item);
-#pragma endregion public func
+    void RotateItem(const vec2& pos, bool shiftDown, bool controlDown);
+	void MoveItems(const vec2& pos, vec2& lastMoveOffset, vec2& startPos, bool controlDown);
+    void BoxItems(OBSScene scene, const vec2 &startPos, const vec2 &pos);
+     
+    bool CheckNowHovered(obs_sceneitem_t* item);
 
-#pragma region private func
 private:
 	// callback for libobs
-	static bool		_FindItemAtPos(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
-	static bool		_FindHandleAtPos(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
+	static bool FindItemAtPos(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
+	static bool FindHandleAtPos(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
 
-	static bool		_SelectOne(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
-	static bool		_CheckItemSelected(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
-	static bool		_MoveItems(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
-    static bool     _AddItemBounds(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
-    static bool     _GetSourceSnapOffset(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
+	static bool SelectOne(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
+	static bool CheckItemSelected(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
+	static bool MoveItems(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
+    static bool AddItemBounds(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
+    static bool GetSourceSnapOffset(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param);
 	//
+  
+    static bool IntersectBox(matrix4 transform, 
+                                float x1, float x2,
+                                float y1, float y2);
+    
+	static vec2 AdjustScreenInItems(obs_sceneitem_t* item, vec2 pos);
 
-    
-    static bool     _IntersectBox(matrix4 transform, 
-                                  float x1, float x2,
-                                  float y1, float y2);
-    
-    void            _SnapItemMovement(vec2 &offset);
-    vec3            _GetSnapOffset(const vec3& tl, const vec3& br);
-    void            _SnapStretchingToScreen(vec3& tl, vec3& br, uint32_t stretchFlags);
-	void			_ClampAspect(vec3& tl, vec3& br, vec2& size, const vec2& baseSize,
-								 AFMouseStaterPreview& mouseState);
-	vec3			_CalculateStretchPos(const vec3& tl, const vec3& br);
-#pragma endregion private func
+    void SnapItemMovement(vec2 &offset);
+    vec3 GetSnapOffset(const vec3& tl, const vec3& br);
+    void SnapStretchingToScreen(vec3& tl, vec3& br, uint32_t stretchFlags);
+	void ClampAspect(vec3& tl, vec3& br, vec2& size, const vec2& baseSize,
+							CMouseStatePreview& mouseState);
+	vec3 CalculateStretchPos(const vec3& tl, const vec3& br);
 
-#pragma region public member var
-#pragma endregion public member var
+	void StartBrowserResizeThread();
+	void ProcessPendingBrowserSize();
 
-#pragma region private member var
-private:
-	// Fast Access Context
-	AFGraphicsContext*		            m_pInitedContextGraphics = nullptr;
-	AFSceneContext*			            m_pInitedContextScene = nullptr;
-	//
+private:       
+    obs_sceneitem_crop startCrop;
+    vec2 startItemPos;
+    vec2 cropSize;
             
-                
-    obs_sceneitem_crop                  m_obsStartCrop;
-    vec2                                m_vec2StartItemPos;
-    vec2                                m_vec2CropSize;
+	OBSSceneItem stretchItem;
+    OBSSceneItem stretchGroup;
             
-	OBSSceneItem			            m_obsStretchItem;   // Current Stretch Item
-    OBSSceneItem                        m_obsStretchGroup;
-            
-    float                               m_fRotateAngle;
-    vec2                                m_vec2RotatePoint;
-    vec2                                m_vec2OffsetPoint;
-	vec2					            m_vec2StretchSize;
-            
-	matrix4					            m_matScreenToItem;
-	matrix4					            m_matItemToScreen;
-    matrix4                             m_matInvGroupTransform;
+    float rotateAngle;
+    vec2 rotatePoint;
+    vec2 offsetPoint;
+	vec2 stretchItemSize;
+	matrix4 screenToItem;
+	matrix4 itemToScreen;
+    matrix4 invGroupTransform;
     
-    
-    std::vector<obs_sceneitem_t *>      m_vecHoveredPreviewItems;
-    std::vector<obs_sceneitem_t *>      m_vecSelectedItems;
-    std::mutex                          m_SelectMutex;
-#pragma endregion private member var
+    std::vector<obs_sceneitem_t *> hoveredPreviewItems;
+    std::vector<obs_sceneitem_t *> selectedItems;
+    std::mutex selectMutex;
+
+	// Update Browser Source Size
+	std::mutex queueBrowserSizeMutex;
+	std::shared_ptr<PendingBrowserSizeUpdate> pendingBrowserSizeUpdate;
+	std::thread browserUpdateThread;
+	std::atomic<bool> workBrowserThread = false;
+
 };

@@ -28,11 +28,11 @@ signals:
 
 #pragma region public func
 public:
-    void SetCheckable(bool checkable) { m_bCheckable = checkable; };
-    bool GetCheckable(){ return m_bCheckable; };
+    void SetCheckable(bool checkable) { m_checkable = checkable; };
+    bool GetCheckable(){ return m_checkable; };
 
-    void SetChecked(bool checked) { m_bChecked = checked; }
-    bool GetChecked() { return m_bChecked; }
+    void SetChecked(bool checked) { m_checked = checked; }
+    bool GetChecked() { return m_checked; }
 
 #pragma endregion public func
 
@@ -46,8 +46,8 @@ protected:
 
 #pragma region private member var
 private:
-    bool                m_bChecked = false;
-    bool                m_bCheckable = false;
+    bool                m_checked = false;
+    bool                m_checkable = false;
 #pragma endregion private member var
 
 };

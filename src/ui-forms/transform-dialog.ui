@@ -39,7 +39,7 @@
     <number>15</number>
    </property>
    <item>
-    <widget class="QFrame" name="titleFrame">
+    <widget class="AFTransparentMouseEvents" name="titleWidget" native="true">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -170,7 +170,7 @@
          <string>Basic.TransformWindow.Position</string>
         </property>
         <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
         </property>
        </widget>
       </item>
@@ -1063,6 +1063,12 @@
    <class>AFQCustomDoubleSpinbox</class>
    <extends>QDoubleSpinBox</extends>
    <header>UIComponent/CCustomDoubleSpinbox.h</header>
+  </customwidget>
+  <customwidget>
+   <class>AFTransparentMouseEvents</class>
+   <extends>QWidget</extends>
+   <header>MainFrame/CTransparentMouseEvents.h</header>
+   <container>1</container>
   </customwidget>
  </customwidgets>
  <resources>

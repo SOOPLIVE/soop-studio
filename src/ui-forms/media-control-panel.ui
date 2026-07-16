@@ -36,7 +36,7 @@
    <item>
     <layout class="QHBoxLayout" name="sliderLayout">
      <item>
-      <widget class="AFQMediaSlider" name="mediaSlider">
+      <widget class="AbsoluteSlider" name="mediaSlider">
        <property name="maximum">
         <number>1024</number>
        </property>
@@ -113,10 +113,6 @@
        <property name="text">
         <string/>
        </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_play.svg</normaloff>:/image/resource/SourceContext/bt_play.svg</iconset>
-       </property>
        <property name="iconSize">
         <size>
          <width>40</width>
@@ -145,10 +141,6 @@
        <property name="text">
         <string/>
        </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_pause.svg</normaloff>:/image/resource/SourceContext/bt_pause.svg</iconset>
-       </property>
        <property name="iconSize">
         <size>
          <width>40</width>
@@ -174,10 +166,6 @@
        <property name="text">
         <string/>
        </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_restart.svg</normaloff>:/image/resource/SourceContext/bt_restart.svg</iconset>
-       </property>
        <property name="iconSize">
         <size>
          <width>40</width>
@@ -202,10 +190,6 @@
        </property>
        <property name="text">
         <string/>
-       </property>
-       <property name="icon">
-        <iconset resource="aneta-main-resource.qrc">
-         <normaloff>:/image/resource/SourceContext/bt_stop.svg</normaloff>:/image/resource/SourceContext/bt_stop.svg</iconset>
        </property>
        <property name="iconSize">
         <size>
@@ -247,9 +231,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>AFQMediaSlider</class>
+   <class>AbsoluteSlider</class>
    <extends>QSlider</extends>
-   <header>UIComponent/CMediaSlider.h</header>
+   <header>obs-studio-ui/absolute-slider.hpp</header>
   </customwidget>
  </customwidgets>
  <resources>

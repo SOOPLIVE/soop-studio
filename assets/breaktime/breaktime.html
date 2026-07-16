@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="descript" content="Freec Shot Update" />
+    <title>Freec Shot Update</title>
+    <link
+      rel="shortcut icon"
+      type="image/x-icon"
+      href="https://res.sooplive.com/favicon.ico"
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://res.sooplive.com/css/freecshot/freecshot_screen.css"
+    />
+
+    <script>
+      function changeMessage(message) {
+        document.getElementById("message").innerHTML = message;
+      }
+
+      function changeRestTime(time) {
+        document.getElementById("rest_time").innerHTML = time;
+      }
+    </script>
+  </head>
+  <body style="background: transparent">
+    <script>
+      var koreanObject = {
+        notice_msg: "지금은 스트리머가 잠시 쉬어가는 시간 입니다.",
+        add_msg: "방송은 곧 다시 시작됩니다. 조금만 기다려주세요.",
+      };
+
+      var japaneseObject = {
+        notice_msg: "現在、Streamerがしばらく休憩する時間です。",
+        add_msg:
+          "Streamerが戻ると放送再開します。 <br> 今しばらくお待ち下さい。",
+      };
+    </script>
+
+    <!-- URL 파라미터 처리 -->
+    <script>
+      function getUrlParameter(name) {
+        name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+        var regex = new RegExp("[\\?&]" + name + "=([^&#]*)");
+        var results = regex.exec(location.search);
+        return results === null
+          ? ""
+          : decodeURIComponent(results[1].replace(/\+/g, " "));
+      }
+    </script>
+
+    <!-- 다국어 처리 -->
+    <script>
+      function initializeTranslations() {
+        var translations = koreanObject; // jsonData[language];
+
+        var elements = document.querySelectorAll("[data-i18n]");
+        elements.forEach(function (element) {
+          var translatinKey = element.getAttribute("data-i18n");
+          element.innerHTML = translations[translatinKey];
+        });
+      }
+
+      function initializeCustomMessage() {
+        var noticeMsg = getUrlParameter("notice_msg");
+        if (noticeMsg) {
+          changeMessage(noticeMsg);
+        }
+
+        var addMsg = getUrlParameter("add_msg");
+        if (addMsg) {
+          var addMsgElement = document.querySelector("[data-i18n='add_msg']");
+          if (addMsgElement) {
+            addMsgElement.innerHTML = addMsg;
+          }
+        }
+      }
+
+      function initializeTimerTexts() {
+        var timerLabel = getUrlParameter("timer_label") || "남은 쉬는 시간";
+        var minText = getUrlParameter("min_text") || "분";
+        var secText = getUrlParameter("sec_text") || "초";
+
+        // 타이머 라벨 업데이트
+        var remainingElement = document.querySelector(".remaining p");
+        if (remainingElement) {
+          remainingElement.innerHTML =
+            timerLabel + ' : <span id="rest_time"></span>';
+        }
+
+        // 전역 변수로 저장하여 updateTimer에서 사용
+        window.timerMinText = minText;
+        window.timerSecText = secText;
+      }
+    </script>
+
+    <!-- 비디오 설정 -->
+    <script>
+      function setupVideo() {
+        var theme = getUrlParameter("theme") || "light";
+        var videoElement = document.querySelector("video");
+
+        if (theme === "dark") {
+          document.documentElement.setAttribute("dark", "true");
+          videoElement.src =
+            "https://res.sooplive.com/images/freecshot/breaktime/bg_dark.mp4";
+          videoElement.poster =
+            "https://res.sooplive.com/images/freecshot/breaktime/bg_dark.png";
+        } else {
+          document.documentElement.setAttribute("dark", "");
+          videoElement.src =
+            "https://res.sooplive.com/images/freecshot/breaktime/bg_light.mp4";
+          videoElement.poster =
+            "https://res.sooplive.com/images/freecshot/breaktime/bg_light.png";
+        }
+      }
+    </script>
+
+    <!-- 타이머 -->
+    <script>
+      var totalSeconds = 0;
+
+      function updateTimer() {
+        if (totalSeconds <= 0) {
+          var minText = window.timerMinText || "분";
+          var secText = window.timerSecText || "초";
+          changeRestTime("00" + minText + " 00" + secText);
+          return;
+        }
+
+        var minutes = Math.floor(totalSeconds / 60);
+        var seconds = totalSeconds % 60;
+        var minText = window.timerMinText || "분";
+        var secText = window.timerSecText || "초";
+
+        var timeString =
+          (minutes < 10 ? "0" : "") +
+          minutes +
+          minText +
+          " " +
+          (seconds < 10 ? "0" : "") +
+          seconds +
+          secText;
+
+        changeRestTime(timeString);
+        totalSeconds--;
+      }
+
+      function initializeTimer() {
+        var seconds = parseInt(getUrlParameter("seconds")) || 0;
+        totalSeconds = seconds;
+
+        updateTimer();
+        setInterval(updateTimer, 1000);
+      }
+    </script>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        initializeTranslations();
+        initializeCustomMessage();
+        initializeTimerTexts();
+        setupVideo();
+        initializeTimer();
+      });
+    </script>
+    <div class="breaktime">
+      <div class="info_message">
+        <h1 id="message" data-i18n="notice_msg"></h1>
+        <p data-i18n="add_msg"></p>
+      </div>
+      <div class="remaining">
+        <p>남은 쉬는 시간 : <span id="rest_time"></span></p>
+      </div>
+      <video
+        class="horizontal_mp4"
+        src=""
+        poster=""
+        autoplay="autoplay"
+        muted="muted"
+        loop
+        style="background-color: #9adbe3"
+      />
+    </div>
+  </body>
+</html>

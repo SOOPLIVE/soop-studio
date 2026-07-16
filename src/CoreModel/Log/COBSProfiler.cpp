@@ -2,26 +2,29 @@
 
 #include <sstream>
 
+#include "Common/StudioDefine.h"
+
+#include "Application/CApplication.h"
 
 #include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Log/CLogManager.h"
 
 
-
 static const char* run_program_init = "run_program_init";
-
 
 AFOBSProfiler::~AFOBSProfiler()
 {
-	if (m_pMainScope != nullptr)
+	if(m_pMainScope != nullptr)
 		delete m_pMainScope;
+	m_pMainScope = nullptr;
 
 	_ProfilerFree(nullptr);
 
-	if (m_pNameStore != nullptr)
+	if(m_pNameStore != nullptr)
 		profiler_name_store_free(m_pNameStore);
+	m_pNameStore = nullptr;
 }
-
+//
 void AFOBSProfiler::StartProfiler()
 {
 	m_pNameStore = profiler_name_store_create();
@@ -59,8 +62,7 @@ void AFOBSProfiler::_ProfilerFree(void*)
 
 void AFOBSProfiler::_SaveProfilerData(const ProfilerSnapshot& snap)
 {
-	std::string& tmpCurrLogfile = AFLogManager::GetSingletonInstance().GetStrCurrentLogFile();
-
+	std::string& tmpCurrLogfile = LOGMANAGER.GetStrCurrentLogFile();
 	if (tmpCurrLogfile.empty())
 		return;
 
@@ -70,13 +72,12 @@ void AFOBSProfiler::_SaveProfilerData(const ProfilerSnapshot& snap)
 
 #define LITERAL_SIZE(x) x, (sizeof(x) - 1)
 	std::ostringstream dst;
-	dst.write(LITERAL_SIZE("ANENTAStudio/profiler_data/"));
+	dst.write(LITERAL_SIZE("SoopStudio/profiler_data/"));
 	dst.write(tmpCurrLogfile.c_str(), pos);
 	dst.write(LITERAL_SIZE(".csv.gz"));
 #undef LITERAL_SIZE
 
-	BPtr<char> path = AFConfigManager::GetSingletonInstance().
-					  GetConfigPathPtr(dst.str().c_str());
+	BPtr<char> path = GetAppConfigPathPtr(dst.str().c_str());
 	if (!profiler_snapshot_dump_csv_gz(snap.get(), path))
 		blog(LOG_WARNING, "Could not save profiler data to '%s'",
 			static_cast<const char*>(path));

@@ -2,6 +2,8 @@
 #include "ui_media-control-panel.h"
 #include <QToolTip>
 
+#include "absolute-slider.hpp"
+
 void AFQMediaControlPanel::OBSMediaStopped(void* data, calldata_t*)
 {
 	AFQMediaControlPanel* media = static_cast<AFQMediaControlPanel*>(data);
@@ -46,29 +48,18 @@ AFQMediaControlPanel::AFQMediaControlPanel(QWidget* parent, OBSSource source) :
 
 	setFocusPolicy(Qt::StrongFocus);
 
-	connect(&m_timerMedia, &QTimer::timeout, 
-			this, &AFQMediaControlPanel::SetSliderPosition);
-	
-	connect(&m_timerSeek, &QTimer::timeout,
-			this, &AFQMediaControlPanel::SeekTimerCallback);
+	connect(&m_timerMedia, &QTimer::timeout, this, &AFQMediaControlPanel::SetSliderPosition);	
+	connect(&m_timerSeek, &QTimer::timeout, this, &AFQMediaControlPanel::SeekTimerCallback);
 
-	connect(ui->mediaSlider, &AFQMediaSlider::mediaSliderPress,
-			this, &AFQMediaControlPanel::MediaSliderClicked);
-	connect(ui->mediaSlider, &AFQMediaSlider::mediaSliderHovered, 
-			this, &AFQMediaControlPanel::MediaSliderHovered);
-	connect(ui->mediaSlider, &AFQMediaSlider::mediaSliderRelease,
-			this, &AFQMediaControlPanel::MediaSliderReleased);
-	connect(ui->mediaSlider, &AFQMediaSlider::sliderMoved,
-			this, &AFQMediaControlPanel::MediaSliderMoved);
+	//connect(ui->mediaSlider, &AbsoluteSlider::mediaSliderPress, this, &AFQMediaControlPanel::MediaSliderClicked);
+	connect(ui->mediaSlider, &AbsoluteSlider::absoluteSliderHovered, this, &AFQMediaControlPanel::MediaSliderHovered);
+	//connect(ui->mediaSlider, &AbsoluteSlider::mediaSliderRelease, this, &AFQMediaControlPanel::MediaSliderReleased);
+	connect(ui->mediaSlider, &AbsoluteSlider::sliderMoved, this, &AFQMediaControlPanel::MediaSliderMoved);
 
-	connect(ui->playButton, &QPushButton::clicked,
-			this, &AFQMediaControlPanel::ControlButtonClicked);
-	connect(ui->pauseButton, &QPushButton::clicked,
-			this, &AFQMediaControlPanel::ControlButtonClicked);
-	connect(ui->restartButton, &QPushButton::clicked,
-			this, &AFQMediaControlPanel::ControlButtonClicked);
-	connect(ui->stopButton, &QPushButton::clicked,
-			this, &AFQMediaControlPanel::StopButtonClicked);
+	connect(ui->playButton, &QPushButton::clicked, this, &AFQMediaControlPanel::ControlButtonClicked);
+	connect(ui->pauseButton, &QPushButton::clicked, this, &AFQMediaControlPanel::ControlButtonClicked);
+	connect(ui->restartButton, &QPushButton::clicked, this, &AFQMediaControlPanel::ControlButtonClicked);
+	connect(ui->stopButton, &QPushButton::clicked, this, &AFQMediaControlPanel::StopButtonClicked);
 }
 
 AFQMediaControlPanel::~AFQMediaControlPanel()

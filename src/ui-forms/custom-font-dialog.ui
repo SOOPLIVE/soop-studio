@@ -45,7 +45,7 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QFrame" name="titleFrame">
+    <widget class="AFTransparentMouseEvents" name="titleFrame" native="true">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -57,12 +57,6 @@
        <width>16777215</width>
        <height>38</height>
       </size>
-     </property>
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Raised</enum>
      </property>
      <layout class="QHBoxLayout" name="titleLayout">
       <property name="spacing">
@@ -149,6 +143,14 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>AFTransparentMouseEvents</class>
+   <extends>QWidget</extends>
+   <header>MainFrame/CTransparentMouseEvents.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
  <resources>
   <include location="aneta-main-resource.qrc"/>
  </resources>

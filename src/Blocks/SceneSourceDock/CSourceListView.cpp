@@ -8,19 +8,25 @@
 #include <QPainter>
 #include <QPushButton>
 
+#include "qt-wrappers.hpp"
+
+#include "CoreModel/Auth/CAuthManager.h"
 #include "CoreModel/Scene/CSceneContext.h"
 #include "CoreModel/Icon/CIconContext.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
+#include "CoreModel/OBSOutput/COutput.h"
 
 #include "Application/CApplication.h"
+
 #include "MainFrame/CMainFrame.h"
+#include "MainFrame/SceneSource/CMainSceneSource.h"
 #include "MainFrame/DynamicCompose/CMainDynamicComposit.h"
 
-#define DESELECT_VISIBLE_ITEM_FONT_COLOR        QColor(255, 255, 255, 178)
-#define SELECT_VISIBLE_ITEM_FONT_COLOR          QColor(0, 224, 255, 255)
+#define DESELECT_VISIBLE_ITEM_FONT_COLOR        QColor(213, 215, 220, 255)
+#define SELECT_VISIBLE_ITEM_FONT_COLOR          QColor(0, 163, 255, 255)
 
-#define DESELECT_UNVISIBLE_ITEM_FONT_COLOR      QColor(56, 59, 63, 255)
-#define SELECT_UNVISIBLE_ITEM_FONT_COLOR        QColor(0, 108, 122, 255)
+#define DESELECT_UNVISIBLE_ITEM_FONT_COLOR      QColor(117, 123, 138, 255)
+#define SELECT_UNVISIBLE_ITEM_FONT_COLOR        QColor(13, 79, 143, 255)
 
 #define HOVERED_VISIBLE_ITEM_FONT_COLOR        QColor(255, 255, 255, 230)
 
@@ -59,7 +65,7 @@ inline QColor GetSourceListBackgroundColor(int preset)
 /////////////////SourceViewItem////////////////////
 AFQSourceViewItem::AFQSourceViewItem(AFQSourceListView* sourceListView, OBSSceneItem sceneItem) :
     QWidget(sourceListView),
-    m_sourceListView(sourceListView),
+    m_pSourceListView(sourceListView),
 	m_sceneItem(sceneItem)
 {
     // Set Widget Attribute
@@ -90,26 +96,29 @@ AFQSourceViewItem::AFQSourceViewItem(AFQSourceListView* sourceListView, OBSScene
     }
 
     // 
-    m_layoutBox = new QHBoxLayout(this);
-    m_layoutBox->setContentsMargins(0, 0, 5, 0);
-    m_layoutBox->setSpacing(0);
+    m_pLayoutBox = new QHBoxLayout(this);
+    m_pLayoutBox->setContentsMargins(0, 0, 5, 0);
+    m_pLayoutBox->setSpacing(0);
 
-    m_labelIcon = _CreateIconLabel(id);
-    m_labelName = _CreateNameLabel(name);
-    m_checkBoxVisible = _CreateVisibleCheckBox();
-    m_checkBoxLocked  = _CreateLockedCheckBox();
-
-    if (m_labelIcon) {
-        m_layoutBox->addWidget(m_labelIcon);
-        m_layoutBox->addSpacing(6);
+    m_pLabelIcon = _CreateIconLabel(id);
+    m_pLabelName = _CreateNameLabel(name);
+    if (!AFSourceUtil::IsSoopMediaSource(source)) {
+        m_visibleCheckBox = _CreateVisibleCheckBox();
     }
-    m_layoutBox->addWidget(m_labelName);
-    m_layoutBox->addWidget(m_checkBoxVisible);
-    m_layoutBox->addWidget(m_checkBoxLocked);
+    m_lockCheckBox  = _CreateLockedCheckBox();
+
+    if (m_pLabelIcon) {
+        m_pLayoutBox->addWidget(m_pLabelIcon);
+        m_pLayoutBox->addSpacing(6);
+    }
+    m_pLayoutBox->addWidget(m_pLabelName);
+    if(m_visibleCheckBox)
+        m_pLayoutBox->addWidget(m_visibleCheckBox);
+    m_pLayoutBox->addWidget(m_lockCheckBox);
 
     Update(false);
 
-    setLayout(m_layoutBox);
+    setLayout(m_pLayoutBox);
 
     auto setItemVisible = [this](bool val) {
         obs_scene_t* scene = obs_sceneitem_get_scene(m_sceneItem);
@@ -129,10 +138,9 @@ AFQSourceViewItem::AFQSourceViewItem(AFQSourceListView* sourceListView, OBSScene
 
         QString str = QTStr(val ? "Undo.ShowSceneItem" : "Undo.HideSceneItem");
 
-        AFMainFrame* main = App()->GetMainView();
-        main->m_undo_s.AddAction(str.arg(obs_source_get_name(source), name),
-                                 std::bind(undo_redo, std::placeholders::_1, id, !val),
-                                 std::bind(undo_redo, std::placeholders::_1, id, val), uuid, uuid);
+        UNDO_STACK.AddAction(str.arg(obs_source_get_name(source), name),
+                             std::bind(undo_redo, std::placeholders::_1, id, !val),
+                             std::bind(undo_redo, std::placeholders::_1, id, val), uuid, uuid);
 
         QSignalBlocker sourceSignalBlocker(this);
         obs_sceneitem_set_visible(m_sceneItem, val);
@@ -143,58 +151,64 @@ AFQSourceViewItem::AFQSourceViewItem(AFQSourceListView* sourceListView, OBSScene
         obs_sceneitem_set_locked(m_sceneItem, checked);
     };
 
-    connect(m_checkBoxVisible, &QAbstractButton::clicked, this, &AFQSourceViewItem::ClickedItemVisible);
-    connect(m_checkBoxLocked, &QAbstractButton::clicked, this, &AFQSourceViewItem::ClickedItemLocked);
+    connect(m_visibleCheckBox, &QAbstractButton::clicked, this, &AFQSourceViewItem::ClickedItemVisible);
+    connect(m_lockCheckBox, &QAbstractButton::clicked, this, &AFQSourceViewItem::ClickedItemLocked);
 }
 
 void AFQSourceViewItem::Clear()
 {
     DisconnectSignals();
-    m_sourceListView = nullptr;
+    m_pSourceListView = nullptr;
     m_sceneItem = nullptr;
 }
 
 void AFQSourceViewItem::EnterEditMode()
 {
     setFocusPolicy(Qt::StrongFocus);
-    int index = m_layoutBox->indexOf(m_labelName);
-    m_layoutBox->removeWidget(m_labelName);
-    m_editorName = new QLineEdit(m_labelName->text(),this);
-    m_editorName->setStyleSheet("background-color:#2F3238;   \
+    int index = m_pLayoutBox->indexOf(m_pLabelName);
+    m_pLayoutBox->removeWidget(m_pLabelName);
+    m_pEditorName = new QLineEdit(m_pLabelName->text(),this);
+    m_pEditorName->setStyleSheet("background-color:#2F3238;   \
                                  border:1px solid #AAA;      \
                                  color:rgba(255,255,255,90%);\
-                                 font-size:14px;             \
+                                 font-size:13px;             \
                                  font-style: normal;         \
                                  font-weight: 400;           \
                                  padding-left:2px; ");
-    m_editorName->selectAll();
-    m_editorName->installEventFilter(this);
-    m_layoutBox->insertWidget(index, m_editorName);
-    setFocusProxy(m_editorName);
+    m_pEditorName->selectAll();
+    m_pEditorName->installEventFilter(this);
+    m_pLayoutBox->insertWidget(index, m_pEditorName);
+    setFocusProxy(m_pEditorName);
 }
 
 void AFQSourceViewItem::ExitEditMode(bool save)
 {
     ExitEditModeInternal(save);
 
-    if (m_sourceListView->m_undoSceneData) {
-        AFMainFrame* main = App()->GetMainView();
-        main->m_undo_s.PopDisabled();
+    if (m_pSourceListView->m_undoSceneData) {
+        UNDO_STACK.PopDisabled();
 
-        OBSData redoSceneData = main->BackupScene(AFSceneContext::GetSingletonInstance().GetCurrOBSScene());
-        QString text = QTStr("Undo.GroupItems").arg(m_strNewName.c_str());
-        main->CreateSceneUndoRedoAction(text, m_sourceListView->m_undoSceneData, redoSceneData);
+        OBSData redoSceneData = MAINFRAME->BackupScene(SCENE_CONTEXT.GetCurrentScene());
+        QString text = QTStr("Undo.GroupItems").arg(m_newName.c_str());
+        MAINFRAME->CreateSceneUndoRedoAction(text, m_pSourceListView->m_undoSceneData, redoSceneData);
 
-        m_sourceListView->m_undoSceneData = nullptr;
+        m_pSourceListView->m_undoSceneData = nullptr;
     }
 }
 
 void AFQSourceViewItem::ClickedItemVisible(bool val)
 {
-    AFLocaleTextManager& localeManager = AFLocaleTextManager::GetSingletonInstance();
+    if (!m_sceneItem)
+        return;
 
     obs_scene_t* scene = obs_sceneitem_get_scene(m_sceneItem);
+    if (!scene)
+        return;
+
     obs_source_t* sceneSource = obs_scene_get_source(scene);
+    if (!sceneSource)
+        return;
+
     int64_t id = obs_sceneitem_get_id(m_sceneItem);
 
     const char* name = obs_source_get_name(sceneSource);
@@ -208,21 +222,52 @@ void AFQSourceViewItem::ClickedItemVisible(bool val)
                 obs_sceneitem_set_visible(si, val);
     };
 
-    QString str = localeManager.Str(val ? "Undo.ShowSceneItem" : "Undo.HideSceneItem");
+    QString str = Str(val ? "Undo.ShowSceneItem" : "Undo.HideSceneItem");
 
-    AFMainFrame* main = App()->GetMainView();
-    main->m_undo_s.AddAction(str.arg(obs_source_get_name(sceneSource), name),
-                             std::bind(undo_redo, std::placeholders::_1, id, !val),
-                             std::bind(undo_redo, std::placeholders::_1, id, val),
-                             uuid, uuid);
+    UNDO_STACK.AddAction(str.arg(obs_source_get_name(sceneSource), name),
+                         std::bind(undo_redo, std::placeholders::_1, id, !val),
+                         std::bind(undo_redo, std::placeholders::_1, id, val),
+                         uuid, uuid);
 
-    SignalBlocker sourcesSignalBlocker(this);
+    QSignalBlocker sourcesSignalBlocker(this);
     obs_sceneitem_set_visible(m_sceneItem, val);
+
+    // 
+    obs_source_t* src = obs_sceneitem_get_source(m_sceneItem);
+    QString src_name = QString("%1").arg(obs_source_get_id(src));
+
+    if (src_name == "soop_chat_source_mood_check") {
+        
+        auto broadInfo = AUTH_CONTEXT.GetSoopBroadInfo();
+        if (val) {
+            int nCnt = config_get_int(USERCONFIG, "SARSA", "UseMinsimCheckCnt");
+            config_set_int(USERCONFIG, "SARSA", "UseMinsimCheckCnt", ++nCnt);
+            if (nCnt == 1 && AFOutputUtil::IsStreamActive()) {
+                auto startTime = std::chrono::steady_clock::now();
+                AUTH_CONTEXT.SetMinsimCheckStartTime(startTime);
+            }
+        }
+        else {
+            int nCnt = config_get_int(USERCONFIG, "SARSA", "UseMinsimCheckCnt");
+            config_set_int(USERCONFIG, "SARSA", "UseMinsimCheckCnt", --nCnt < 0 ? 0 : nCnt);
+
+            if (nCnt <= 0 && AFOutputUtil::IsStreamActive()) {
+                auto endTime = std::chrono::steady_clock::now();
+                auto startTime = AUTH_CONTEXT.GetMinsimCheckStartTime();
+                if (startTime != std::chrono::steady_clock::time_point{}) {
+                    AUTH_CONTEXT.InitMinsimCheckStartTime();
+                }
+            }
+        }
+    }
 }
 
 void AFQSourceViewItem::ClickedItemLocked(bool val)
 {
-    SignalBlocker sourcesSignalBlocker(this);
+    if (!m_sceneItem)
+        return;
+
+    QSignalBlocker sourcesSignalBlocker(this);
     obs_sceneitem_set_locked(m_sceneItem, val);
 }
 
@@ -231,18 +276,18 @@ void AFQSourceViewItem::ExpandClicked(bool checked)
     OBSDataAutoRelease data = obs_sceneitem_get_private_settings(m_sceneItem);
 
     obs_data_set_bool(data, "collapsed", checked);
-
+    
     if (!checked)
-        m_sourceListView->GetStm()->ExpandGroup(m_sceneItem);
+        m_pSourceListView->GetStm()->ExpandGroup(m_sceneItem);
     else
-        m_sourceListView->GetStm()->CollapseGroup(m_sceneItem);
+        m_pSourceListView->GetStm()->CollapseGroup(m_sceneItem);
 }
 
 
 void AFQSourceViewItem::VisibilityChanged(bool visible)
 {
-    if(m_checkBoxVisible)
-        m_checkBoxVisible->setChecked(visible);
+    if(m_visibleCheckBox)
+        m_visibleCheckBox->setChecked(visible);
 
     m_isVisible = visible;
 
@@ -266,33 +311,39 @@ void AFQSourceViewItem::VisibilityChanged(bool visible)
 
 void AFQSourceViewItem::LockedChanged(bool locked)
 {
-    App()->GetMainView()->UpdateEditMenu();
+    MAIN_SCENESOURCE->UpdateEditMenu();
 
-    if (!m_checkBoxLocked)
+    if (!m_lockCheckBox)
         return;
 
     if (locked)
-        m_checkBoxLocked->show();
+        m_lockCheckBox->show();
     else {
         if(m_isHovered)
-            m_checkBoxLocked->show();
+            m_lockCheckBox->show();
         else
-            m_checkBoxLocked->hide();
+            m_lockCheckBox->hide();
     }
 }
 
 void AFQSourceViewItem::Select()
 {
-    m_sourceListView->SelectItem(m_sceneItem, true);
-    DYNAMIC_COMPOSIT->UpdateContextPopupDeferred();
-    App()->GetMainView()->UpdateEditMenu();
+    m_pSourceListView->SelectItem(m_sceneItem, true);
+    MAINFRAME->UpdateContextToolBarDeferred();
+    MAIN_SCENESOURCE->UpdateEditMenu();
 }
 
 void AFQSourceViewItem::DeSelect()
 {
-    m_sourceListView->SelectItem(m_sceneItem, false);
-    DYNAMIC_COMPOSIT->UpdateContextPopupDeferred();
-    App()->GetMainView()->UpdateEditMenu();
+    m_pSourceListView->SelectItem(m_sceneItem, false);
+    MAINFRAME->UpdateContextToolBarDeferred();
+    MAIN_SCENESOURCE->UpdateEditMenu();
+}
+
+void AFQSourceViewItem::Renamed(QString name)
+{
+    if (m_pLabelName)
+        m_pLabelName->setText(QT_UTF8(name.toStdString().c_str()));
 }
 
 void AFQSourceViewItem::DisconnectSignals()
@@ -338,8 +389,7 @@ void AFQSourceViewItem::ReconnectSignals()
 
 void AFQSourceViewItem::Update(bool force)
 {
-    AFSceneContext& contextScene = AFSceneContext::GetSingletonInstance();
-    OBSScene scene = contextScene.GetCurrOBSScene();
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
     obs_scene_t* itemScene = obs_sceneitem_get_scene(m_sceneItem);
 
     Type newType;
@@ -375,48 +425,46 @@ void AFQSourceViewItem::Update(bool force)
 
     ReconnectSignals();
 
-    if (groupSpacer) {
-        m_layoutBox->removeItem(groupSpacer);
-        delete groupSpacer;
-        groupSpacer = nullptr;
+    if (m_pGroupSpacer) {
+        m_pLayoutBox->removeItem(m_pGroupSpacer);
+        delete m_pGroupSpacer;
+        m_pGroupSpacer = nullptr;
     }
 
     if (m_type == Type::Group) {
-        m_layoutBox->removeWidget(groupExpand);
-        groupExpand->deleteLater();
-        groupExpand = nullptr;
+        m_pLayoutBox->removeWidget(m_groupExpend);
+        m_groupExpend->deleteLater();
+        m_groupExpend = nullptr;
     }
 
     m_type = newType;
 
     if (m_type == Type::SubItem) {
-        groupSpacer = new QSpacerItem(24, 1);
-        m_layoutBox->insertItem(0, groupSpacer);
+        m_pGroupSpacer = new QSpacerItem(24, 1);
+        m_pLayoutBox->insertItem(0, m_pGroupSpacer);
 
     }
     else if (m_type == Type::Group) {
-        groupExpand = new SourceTreeSubItemCheckBox();
-        groupExpand->setSizePolicy(QSizePolicy::Maximum,
-            QSizePolicy::Maximum);
-        groupExpand->setMaximumSize(24, 24);
-        groupExpand->setMinimumSize(24, 0);
+        m_groupExpend = new QCheckBox();
+        m_groupExpend->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
+        m_groupExpend->setObjectName("expandCheckBox");
+        m_groupExpend->setMaximumSize(24, 24);
+        m_groupExpend->setMinimumSize(24, 0);
 #ifdef __APPLE__
-        groupExpand->setAttribute(Qt::WA_LayoutUsesWidgetRect);
+        m_groupExpend->setAttribute(Qt::WA_LayoutUsesWidgetRect);
 #endif
-        m_layoutBox->insertWidget(0, groupExpand);
+        m_pLayoutBox->insertWidget(0, m_groupExpend);
 
-        OBSDataAutoRelease data =
-            obs_sceneitem_get_private_settings(m_sceneItem);
-        groupExpand->blockSignals(true);
-        groupExpand->setChecked(obs_data_get_bool(data, "collapsed"));
-        groupExpand->blockSignals(false);
+        OBSDataAutoRelease data = obs_sceneitem_get_private_settings(m_sceneItem);
+        m_groupExpend->blockSignals(true);
+        m_groupExpend->setChecked(obs_data_get_bool(data, "collapsed"));
+        m_groupExpend->blockSignals(false);
 
-        connect(groupExpand, &QPushButton::toggled, this,
-                &AFQSourceViewItem::ExpandClicked);
+        connect(m_groupExpend, &QPushButton::toggled, this, &AFQSourceViewItem::ExpandClicked);
     }
     else {
-        groupSpacer = new QSpacerItem(3, 1);
-        m_layoutBox->insertItem(0, groupSpacer);
+        m_pGroupSpacer = new QSpacerItem(3, 1);
+        m_pLayoutBox->insertItem(0, m_pGroupSpacer);
     }
 }
 
@@ -467,8 +515,8 @@ void AFQSourceViewItem::RefreshSourceListItemColor()
     painter.fillRect(pixmapIconSource.rect(), m_colorFont);
     painter.end();
 
-    if(m_labelIcon)
-        m_labelIcon->setPixmap(pixmapIconSource);
+    if(m_pLabelIcon)
+        m_pLabelIcon->setPixmap(pixmapIconSource);
 
     setStyleSheet(QString(SOURCEVIEW_ITEM_STYLE).arg(
                   m_colorBackground.name(QColor::HexArgb),
@@ -477,7 +525,7 @@ void AFQSourceViewItem::RefreshSourceListItemColor()
 
 bool AFQSourceViewItem::IsEditing()
 {
-    return m_editorName != nullptr;
+    return m_pEditorName != nullptr;
 }
 
 QColor AFQSourceViewItem::GetBackgroundColor()
@@ -487,19 +535,17 @@ QColor AFQSourceViewItem::GetBackgroundColor()
 
 QLabel* AFQSourceViewItem::_CreateIconLabel(const char* id)
 {
-    AFIconContext& iconContext = AFIconContext::GetSingletonInstance();
-
     QLabel* iconLabel = new QLabel(this);
     iconLabel->setFixedSize(24, 24);
     iconLabel->setObjectName("sourceIconLabel");
 
 
     if (strcmp(id, "scene") == 0)
-        m_iconSource = iconContext.GetSceneIcon();
+        m_iconSource = ICON_CONTEXT.GetSceneIcon();
     else if (strcmp(id, "group") == 0)
-        m_iconSource = iconContext.GetGroupIcon();
+        m_iconSource = ICON_CONTEXT.GetGroupIcon();
     else
-        m_iconSource = iconContext.GetSourceIcon(id);
+        m_iconSource = ICON_CONTEXT.GetSourceIcon(id);
 
     QPixmap pixmap = m_iconSource.pixmap(QSize(24, 24));
     iconLabel->setPixmap(pixmap);
@@ -512,7 +558,11 @@ QLabel* AFQSourceViewItem::_CreateIconLabel(const char* id)
 QLabel* AFQSourceViewItem::_CreateNameLabel(const char* name)
 {
     QLabel* nameLabel = new QLabel(this);
-    nameLabel->setText(name);
+
+    QString adjustName = name;
+    adjustName.replace("\n", " ");
+
+    nameLabel->setText(adjustName);
     nameLabel->setObjectName("sourceNameLabel"); 
     nameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     nameLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -523,14 +573,14 @@ QLabel* AFQSourceViewItem::_CreateNameLabel(const char* name)
 }
 
 
-AFQVisibleCheckBox* AFQSourceViewItem::_CreateVisibleCheckBox()
+QCheckBox* AFQSourceViewItem::_CreateVisibleCheckBox()
 {
     m_isVisible = obs_sceneitem_visible(m_sceneItem);
 
-    AFQVisibleCheckBox* vis = new AFQVisibleCheckBox();
+    QCheckBox* vis = new QCheckBox();
     vis->setFixedSize(QSize(24, 24));
     vis->setStyleSheet("background: none");
-    vis->setObjectName("checkBox_sourceViewCheckbox");
+    vis->setObjectName("visibleCheckBox");
     vis->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
     vis->setChecked(m_isVisible);
     vis->hide();
@@ -543,14 +593,14 @@ AFQVisibleCheckBox* AFQSourceViewItem::_CreateVisibleCheckBox()
     return vis;
 }
 
-AFQLockedCheckBox* AFQSourceViewItem::_CreateLockedCheckBox()
+QCheckBox* AFQSourceViewItem::_CreateLockedCheckBox()
 {
     bool locked = obs_sceneitem_locked(m_sceneItem);
 
-    AFQLockedCheckBox* lock = new AFQLockedCheckBox();
+    QCheckBox* lock = new QCheckBox();
     lock->setFixedSize(QSize(24, 24));
     lock->setStyleSheet("background: none");
-    lock->setObjectName("checkBox_sourceLockCheckbox");
+    lock->setObjectName("lockCheckBox");
     lock->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
     lock->setChecked(locked);
     if(!locked)
@@ -561,22 +611,21 @@ AFQLockedCheckBox* AFQSourceViewItem::_CreateLockedCheckBox()
 
 void AFQSourceViewItem::ExitEditModeInternal(bool save)
 {
-    if (!m_editorName) {
+    if (!m_pEditorName) {
         return;
     }
 
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    OBSScene scene = sceneContext.GetCurrOBSScene();
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
 
-    m_strNewName = QT_TO_UTF8(m_editorName->text());
+    m_newName = QT_TO_UTF8(m_pEditorName->text());
 
     setFocusProxy(nullptr);
-    int index = m_layoutBox->indexOf(m_editorName);
-    m_layoutBox->removeWidget(m_editorName);
-    delete m_editorName;
-    m_editorName = nullptr;
+    int index = m_pLayoutBox->indexOf(m_pEditorName);
+    m_pLayoutBox->removeWidget(m_pEditorName);
+    delete m_pEditorName;
+    m_pEditorName = nullptr;
     setFocusPolicy(Qt::NoFocus);
-    m_layoutBox->insertWidget(index, m_labelName);
+    m_pLayoutBox->insertWidget(index, m_pLabelName);
     setFocus();
 
     /* ----------------------------------------- */
@@ -585,7 +634,10 @@ void AFQSourceViewItem::ExitEditModeInternal(bool save)
     if (!save)
         return;
 
-    if (m_strNewName.empty()) {
+    if (m_newName.empty()) {
+        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, MAINFRAME,
+            QTStr("NoNameEntered.Title"),
+            QTStr("NoNameEntered.Text"));
         return;
     }
 
@@ -593,50 +645,53 @@ void AFQSourceViewItem::ExitEditModeInternal(bool save)
     /* Check for same name                       */
 
     obs_source_t* source = obs_sceneitem_get_source(m_sceneItem);
-    if (m_strNewName == obs_source_get_name(source))
+    if (m_newName == obs_source_get_name(source))
         return;
 
     /* ----------------------------------------- */
     /* check for existing source                 */
 
-    OBSSourceAutoRelease existingSource =
-        obs_get_source_by_name(m_strNewName.c_str());
+    OBSSourceAutoRelease existingSource = obs_get_source_by_name(m_newName.c_str());
     bool exists = !!existingSource;
 
     if (exists) {
+        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, MAINFRAME,
+            QTStr("NameExists.Title"),
+            QTStr("NameExists.Text"));
         return;
     }
 
     /* ----------------------------------------- */
     /* rename                                    */
 
-    AFMainFrame* main = App()->GetMainView();
-    SignalBlocker sourcesSignalBlocker(this);
+    QSignalBlocker sourcesSignalBlocker(this);
     std::string prevName(obs_source_get_name(source));
-    std::string scene_uuid = obs_source_get_uuid(AFSourceUtil::GetCurrentSource());
-    auto undo = [scene_uuid, prevName, main](const std::string& data) {
+    std::string scene_uuid = obs_source_get_uuid(SCENE_CONTEXT.GetCurrentSceneSource());
+    auto undo = [scene_uuid, prevName](const std::string& data) {
         OBSSourceAutoRelease source = obs_get_source_by_uuid(data.c_str());
         obs_source_set_name(source, prevName.c_str());
         OBSSourceAutoRelease scene_source = obs_get_source_by_uuid(scene_uuid.c_str());
-        main->GetMainWindow()->SetCurrentScene(scene_source.Get(), true);
+        DYNAMIC_COMPOSIT->SetCurrentScene(scene_source.Get(), true);
     };
 
-    std::string editedName = m_strNewName;
+    std::string editedName = m_newName;
 
-    auto redo = [scene_uuid, main, editedName](const std::string& data) {
+    auto redo = [scene_uuid, editedName](const std::string& data) {
         OBSSourceAutoRelease source = obs_get_source_by_uuid(data.c_str());
         obs_source_set_name(source, editedName.c_str());
 
         OBSSourceAutoRelease scene_source = obs_get_source_by_uuid(scene_uuid.c_str());
-        main->GetMainWindow()->SetCurrentScene(scene_source.Get(), true);
+        DYNAMIC_COMPOSIT->SetCurrentScene(scene_source.Get(), true);
     };
 
     const char* uuid = obs_source_get_uuid(source);
-    main->m_undo_s.AddAction(QTStr("Undo.Rename").arg(m_strNewName.c_str()),
-                             undo, redo, uuid, uuid);
+    UNDO_STACK.AddAction(QTStr("Undo.Rename").arg(m_newName.c_str()), undo, redo, uuid, uuid);
+    
+    obs_data_t* settings = obs_source_get_settings(source);
+    obs_data_set_bool(settings, "is_changed_name", true);
 
-    obs_source_set_name(source, m_strNewName.c_str());
-    m_labelName->setText(QT_UTF8(m_strNewName.c_str()));
+    obs_source_set_name(source, m_newName.c_str());
+    m_pLabelName->setText(QT_UTF8(m_newName.c_str()));
 }
 
 void AFQSourceViewItem::CallbackRemoveItem(void* data, calldata_t* cd)
@@ -646,7 +701,7 @@ void AFQSourceViewItem::CallbackRemoveItem(void* data, calldata_t* cd)
         (obs_sceneitem_t*)calldata_ptr(cd, "item");
 
     if (curItem == sourceItem->m_sceneItem) {
-        QMetaObject::invokeMethod(sourceItem->m_sourceListView, "Remove",
+        QMetaObject::invokeMethod(sourceItem->m_pSourceListView, "Remove",
             Q_ARG(OBSSceneItem, curItem));
         curItem = nullptr;
     }
@@ -666,13 +721,10 @@ void AFQSourceViewItem::CallbackItemVisible(void* data, calldata_t* cd)
             Q_ARG(bool, visible));
 }
 
-
 void AFQSourceViewItem::CallbackItemSelect(void* data, calldata_t* cd)
 {
-    AFQSourceViewItem* sourceItem =
-        reinterpret_cast<AFQSourceViewItem*>(data);
-    obs_sceneitem_t* curItem =
-        (obs_sceneitem_t*)calldata_ptr(cd, "item");
+    AFQSourceViewItem* sourceItem = reinterpret_cast<AFQSourceViewItem*>(data);
+    obs_sceneitem_t* curItem = (obs_sceneitem_t*)calldata_ptr(cd, "item");
 
     if (curItem == sourceItem->m_sceneItem)
         QMetaObject::invokeMethod(sourceItem, "Select");
@@ -708,7 +760,7 @@ void AFQSourceViewItem::CallbackItemReorderGroup(void* data, calldata_t* cd)
 {
     AFQSourceViewItem* sourceItem =
         reinterpret_cast<AFQSourceViewItem*>(data);
-    QMetaObject::invokeMethod(sourceItem->m_sourceListView, "ReorderItems");
+    QMetaObject::invokeMethod(sourceItem->m_pSourceListView, "ReorderItems");
 }
 
 void AFQSourceViewItem::CallbackRenamedSource(void* data, calldata_t* cd)
@@ -727,32 +779,32 @@ void AFQSourceViewItem::CallbackRemoveSource(void* data, calldata_t* cd)
         reinterpret_cast<AFQSourceViewItem*>(data);
     sourceItem->DisconnectSignals();
     sourceItem->m_sceneItem = nullptr;
-    QMetaObject::invokeMethod(sourceItem->m_sourceListView, "RefreshItems");
+    QMetaObject::invokeMethod(sourceItem->m_pSourceListView, "RefreshItems");
 }
 
 void AFQSourceViewItem::mouseDoubleClickEvent(QMouseEvent* event)
 {
     QWidget::mouseDoubleClickEvent(event);
 
-    if (groupExpand) {
-        groupExpand->setChecked(!groupExpand->isChecked());
+    if (m_groupExpend) {
+        m_groupExpend->setChecked(!m_groupExpend->isChecked());
     }
     else {
         obs_source_t* source = obs_sceneitem_get_source(m_sceneItem);
 
-        if (obs_source_configurable(source)) {
-            App()->GetMainView()->CreatePropertiesPopup(source);
+        if (AFSourceUtil::ShouldShowProperties(source)) {
+            MAINFRAME->CreateSourceProperties(source);
         }
     }
 }
 
 void AFQSourceViewItem::enterEvent(QEnterEvent* event)
 {
-    if(m_checkBoxVisible)
-        m_checkBoxVisible->show();
+    if(m_visibleCheckBox)
+        m_visibleCheckBox->show();
 
-    if(m_checkBoxLocked)
-        m_checkBoxLocked->show();
+    if(m_lockCheckBox)
+        m_lockCheckBox->show();
 
     if (!m_isSelected && m_isVisible) {
         SetFontColor(HOVERED_VISIBLE_ITEM_FONT_COLOR);
@@ -763,12 +815,12 @@ void AFQSourceViewItem::enterEvent(QEnterEvent* event)
 
 void AFQSourceViewItem::leaveEvent(QEvent* event)
 {
-    if (m_checkBoxVisible)
-        m_checkBoxVisible->hide();
+    if (m_visibleCheckBox)
+        m_visibleCheckBox->hide();
 
-    if (m_checkBoxLocked) {
+    if (m_lockCheckBox) {
         if(!obs_sceneitem_locked(m_sceneItem))
-            m_checkBoxLocked->hide();
+            m_lockCheckBox->hide();
     }
 
     QColor fontColor;
@@ -803,7 +855,7 @@ void AFQSourceViewItem::paintEvent(QPaintEvent *event)
 
 bool AFQSourceViewItem::eventFilter(QObject* object, QEvent* event)
 {
-    if (m_editorName != object)
+    if (m_pEditorName != object)
         return false;
 
     if (LineEditCanceled(event)) {
@@ -825,23 +877,22 @@ bool AFQSourceViewItem::eventFilter(QObject* object, QEvent* event)
 
 /////////////////SourceViewModel////////////////////
 
-
 AFQSourceViewModel::AFQSourceViewModel(AFQSourceListView* parent)
     : QAbstractListModel(parent)
-    , m_sourceListView(parent)
+    , m_pSourceListView(parent)
 {
 
 }
 
 int AFQSourceViewModel::rowCount(const QModelIndex& parent) const
 {
-    return parent.isValid() ? 0 : m_vSourceList.count();
+    return parent.isValid() ? 0 : m_sourceList.count();
 }
 
 QVariant AFQSourceViewModel::data(const QModelIndex& index, int role) const
 {
     //if (role == Qt::AccessibleTextRole) {
-    //    OBSSceneItem item = m_vSourceList[index.row()];
+    //    OBSSceneItem item = m_sourceList[index.row()];
     //    obs_source_t* source = obs_sceneitem_get_source(item);
     //    return QVariant(QT_UTF8(obs_source_get_name(source)));
     //}
@@ -861,7 +912,7 @@ Qt::ItemFlags AFQSourceViewModel::flags(const QModelIndex& index) const
     if (!index.isValid())
         return QAbstractListModel::flags(index) | Qt::ItemIsDropEnabled;
 
-    obs_sceneitem_t* item = m_vSourceList[index.row()];
+    obs_sceneitem_t* item = m_sourceList[index.row()];
     bool is_group = obs_sceneitem_is_group(item);
 
     return QAbstractListModel::flags(index) | Qt::ItemIsEditable |
@@ -877,7 +928,7 @@ Qt::DropActions AFQSourceViewModel::supportedDropAction() const
 void AFQSourceViewModel::Clear()
 {
     beginResetModel();
-    m_vSourceList.clear();
+    m_sourceList.clear();
     endResetModel();
 
     m_hasGroups = false;
@@ -912,45 +963,55 @@ static bool enumItem(obs_scene_t*, obs_sceneitem_t* item, void* ptr)
 
 void AFQSourceViewModel::SceneChanged()
 {
-    AFSceneContext& contextScene = AFSceneContext::GetSingletonInstance();
+    bool hadMediaSource = false;
+    for (int i = 0; i < m_sourceList.count(); i++) {
+        obs_source_t* source = obs_sceneitem_get_source(m_sourceList[i]);
+        if (AFSourceUtil::IsSoopMediaSource(source))
+        {
+            hadMediaSource = true;
+            break;
+        }
+    }
 
-    OBSScene scene = contextScene.GetCurrOBSScene();
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
 
     beginResetModel();
-    m_vSourceList.clear();
-    obs_scene_enum_items(scene, enumItem, &m_vSourceList);
+    m_sourceList.clear();
+    obs_scene_enum_items(scene, enumItem, &m_sourceList);
     endResetModel();
 
     UpdateGroupState(false);
-    m_sourceListView->ResetWidgets();
+    m_pSourceListView->ResetWidgets();
 
     bool findSelect = false;
-    for (int i = 0; i < m_vSourceList.count(); i++) {
-        bool select = obs_sceneitem_selected(m_vSourceList[i]);
+    for (int i = 0; i < m_sourceList.count(); i++) {
+        if (!hadMediaSource)
+        {
+            obs_source_t* source = obs_sceneitem_get_source(m_sourceList[i]);
+            if (AFSourceUtil::IsSoopMediaSource(source))
+            {
+            }
+        }
+
+        bool select = obs_sceneitem_selected(m_sourceList[i]);
         QModelIndex index = createIndex(i, 0);
 
-        m_sourceListView->selectionModel()->select(
+        m_pSourceListView->selectionModel()->select(
                 index, select ? QItemSelectionModel::Select
                               : QItemSelectionModel::Deselect);
-
-        if (select)
-            findSelect = true;
     }
-
-    emit m_sourceListView->qSignalCheckSourceClicked(findSelect);
 }
 
 
 void AFQSourceViewModel::ReorderItems()
 {
-    AFSceneContext& contextScene = AFSceneContext::GetSingletonInstance();
-    OBSScene scene = contextScene.GetCurrOBSScene();
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
 
     QVector<OBSSceneItem> newitems;
     obs_scene_enum_items(scene, enumItem, &newitems);
 
     /* if item list has changed size, do full reset */
-    if (newitems.count() != m_vSourceList.count()) {
+    if (newitems.count() != m_sourceList.count()) {
         SceneChanged();
         return;
     }
@@ -963,7 +1024,7 @@ void AFQSourceViewModel::ReorderItems()
 
         /* find first starting changed item index */
         for (i = 0; i < newitems.count(); i++) {
-            obs_sceneitem_t* oldItem = m_vSourceList[i];
+            obs_sceneitem_t* oldItem = m_sourceList[i];
             obs_sceneitem_t* newItem = newitems[i];
             if (oldItem != newItem) {
                 idx1Old = i;
@@ -978,7 +1039,7 @@ void AFQSourceViewModel::ReorderItems()
 
         /* find new starting index */
         for (i = idx1Old + 1; i < newitems.count(); i++) {
-            obs_sceneitem_t* oldItem = m_vSourceList[idx1Old];
+            obs_sceneitem_t* oldItem = m_sourceList[idx1Old];
             obs_sceneitem_t* newItem = newitems[i];
 
             if (oldItem == newItem) {
@@ -998,7 +1059,7 @@ void AFQSourceViewModel::ReorderItems()
             int oldIdx = idx1Old + count;
             int newIdx = idx1New + count;
 
-            obs_sceneitem_t* oldItem = m_vSourceList[oldIdx];
+            obs_sceneitem_t* oldItem = m_sourceList[oldIdx];
             obs_sceneitem_t* newItem = newitems[newIdx];
 
             if (oldItem != newItem) {
@@ -1013,7 +1074,7 @@ void AFQSourceViewModel::ReorderItems()
             int to = idx1New + count;
             if (to > idx1Old)
                 to--;
-            MoveData(m_vSourceList, idx1Old, to);
+            MoveData(m_sourceList, idx1Old, to);
         }
         endMoveRows();
     }
@@ -1022,7 +1083,7 @@ void AFQSourceViewModel::ReorderItems()
 
 //int AFQSourceViewModel::Count()
 //{
-//    return m_vSourceList.count();
+//    return m_sourceList.count();
 //}
 
 void AFQSourceViewModel::Add(obs_sceneitem_t* item)
@@ -1031,19 +1092,37 @@ void AFQSourceViewModel::Add(obs_sceneitem_t* item)
         SceneChanged();
     }
     else {
+        bool findTopFixedSource = false;
+        for (int i = 0; i < m_sourceList.count(); i++) {
+            obs_source_t* source = obs_sceneitem_get_source(m_sourceList[i]);
+            if (source) {
+                if (AFSourceUtil::IsMustTopSource(source)) {
+                    findTopFixedSource = true;
+                    break;
+                }
+            }
+        }
         beginInsertRows(QModelIndex(), 0, 0);
-        m_vSourceList.insert(0, item);
+        m_sourceList.insert(0, item);
         endInsertRows();
 
-        m_sourceListView->UpdateWidget(createIndex(0, 0, nullptr), item);
+        m_pSourceListView->UpdateWidget(createIndex(0, 0, nullptr), item);
+
+        if (findTopFixedSource) {
+            obs_source_t* source = obs_sceneitem_get_source(item);
+            if (!source)
+                return;
+
+            obs_sceneitem_set_order(item, OBS_ORDER_MOVE_DOWN);
+        }
     }
 }
 
 void AFQSourceViewModel::Remove(obs_sceneitem_t* item)
 {
     int idx = -1;
-    for (int i = 0; i < m_vSourceList.count(); i++) {
-        if (m_vSourceList[i] == item) {
+    for (int i = 0; i < m_sourceList.count(); i++) {
+        if (m_sourceList[i] == item) {
             idx = i;
             break;
         }
@@ -1059,8 +1138,8 @@ void AFQSourceViewModel::Remove(obs_sceneitem_t* item)
     if (is_group) {
         obs_scene_t* scene = obs_sceneitem_group_get_scene(item);
 
-        for (int i = endIdx + 1; i < m_vSourceList.count(); i++) {
-            obs_sceneitem_t* subitem = m_vSourceList[i];
+        for (int i = endIdx + 1; i < m_sourceList.count(); i++) {
+            obs_sceneitem_t* subitem = m_sourceList[i];
             obs_scene_t* subscene =
                 obs_sceneitem_get_scene(subitem);
 
@@ -1072,7 +1151,7 @@ void AFQSourceViewModel::Remove(obs_sceneitem_t* item)
     }
 
     beginRemoveRows(QModelIndex(), startIdx, endIdx);
-    m_vSourceList.remove(idx, endIdx - startIdx + 1);
+    m_sourceList.remove(idx, endIdx - startIdx + 1);
     endRemoveRows();
 
     if (is_group)
@@ -1081,17 +1160,15 @@ void AFQSourceViewModel::Remove(obs_sceneitem_t* item)
 
 OBSSceneItem AFQSourceViewModel::Get(int idx)
 {
-    if (idx == -1 || idx >= m_vSourceList.count())
+    if (idx == -1 || idx >= m_sourceList.count())
         return OBSSceneItem();
-    return m_vSourceList[idx];
+    return m_sourceList[idx];
 }
 
 
 QString AFQSourceViewModel::GetNewGroupName()
 {
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
-    QString name = locale.Str("Group");
+    QString name = Str("Group");
 
     int i = 2;
     for (;;) {
@@ -1100,7 +1177,7 @@ QString AFQSourceViewModel::GetNewGroupName()
         if (!group)
             break;
 
-        QString group_name = locale.Str("Basic.Main.Group");
+        QString group_name = Str("Basic.Main.Group");
         name = group_name.arg(QString::number(i++));
     }
     return name;
@@ -1108,34 +1185,30 @@ QString AFQSourceViewModel::GetNewGroupName()
 
 void AFQSourceViewModel::GroupSelectedItems(QModelIndexList& indices)
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
     if (indices.count() == 0)
         return;
 
-    AFMainFrame* main = App()->GetMainView();
-    OBSScene scene = sceneContext.GetCurrOBSScene();
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
     QString name = GetNewGroupName();
 
     QVector<obs_sceneitem_t*> item_order;
 
     for (int i = indices.count() - 1; i >= 0; i--) {
-        obs_sceneitem_t* item = m_vSourceList[indices[i].row()];
+        obs_sceneitem_t* item = m_sourceList[indices[i].row()];
         item_order << item;
     }
 
-    m_sourceListView->m_undoSceneData = main->BackupScene(scene);
-    obs_sceneitem_t* item = obs_scene_insert_group(scene, QT_TO_UTF8(name),
-                                                   item_order.data(), item_order.size());
+    m_pSourceListView->m_undoSceneData = MAINFRAME->BackupScene(scene);
+    obs_sceneitem_t* item = obs_scene_insert_group(scene, QT_TO_UTF8(name), item_order.data(), item_order.size());
     if (!item) {
-        m_sourceListView->m_undoSceneData = nullptr;
+        m_pSourceListView->m_undoSceneData = nullptr;
         return;
     }
 
-    main->m_undo_s.PushDisabled();
+    UNDO_STACK.PushDisabled();
 
     m_hasGroups = true;
-    m_sourceListView->UpdateWidgets(true);
+    m_pSourceListView->UpdateWidgets(true);
 
     obs_sceneitem_select(item, true);
 
@@ -1145,34 +1218,31 @@ void AFQSourceViewModel::GroupSelectedItems(QModelIndexList& indices)
     /* that's created automatically.                                     */
 
     int newIdx = indices[0].row();
-    QMetaObject::invokeMethod(m_sourceListView, "NewGroupEdit", Qt::QueuedConnection,
-        Q_ARG(int, newIdx));
+    QMetaObject::invokeMethod(m_pSourceListView, "NewGroupEdit",
+                              Qt::QueuedConnection, Q_ARG(int, newIdx));
 }
 
 void AFQSourceViewModel::UngroupSelectedGroups(QModelIndexList& indices)
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
     if (indices.count() == 0)
         return;
 
-    OBSScene scene = sceneContext.GetCurrOBSScene();
-    AFMainFrame* main = App()->GetMainView();
-    OBSData undoData = main->BackupScene(scene);
-
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
+    OBSData undoData = MAINFRAME->BackupScene(scene);
     for (int i = indices.count() - 1; i >= 0; i--) {
-        obs_sceneitem_t* item = m_vSourceList[indices[i].row()];
+        obs_sceneitem_t* item = m_sourceList[indices[i].row()];
         obs_sceneitem_group_ungroup(item);
     }
 
     SceneChanged();
 
-    OBSData redoData = main->BackupScene(scene);
-    main->CreateSceneUndoRedoAction(QTStr("Basic.Main.Ungroup"), undoData, redoData);
+    OBSData redoData = MAINFRAME->BackupScene(scene);
+    MAINFRAME->CreateSceneUndoRedoAction(QTStr("Basic.Main.Ungroup"), undoData, redoData);
 }
 
 void AFQSourceViewModel::ExpandGroup(obs_sceneitem_t* item)
 {
-    int itemIdx = m_vSourceList.indexOf(item);
+    int itemIdx = m_sourceList.indexOf(item);
     if (itemIdx == -1)
         return;
 
@@ -1188,10 +1258,10 @@ void AFQSourceViewModel::ExpandGroup(obs_sceneitem_t* item)
 
     beginInsertRows(QModelIndex(), itemIdx, itemIdx + subItems.size() - 1);
     for (int i = 0; i < subItems.size(); i++)
-        m_vSourceList.insert(i + itemIdx, subItems[i]);
+        m_sourceList.insert(i + itemIdx, subItems[i]);
     endInsertRows();
 
-    m_sourceListView->UpdateWidgets();
+    m_pSourceListView->UpdateWidgets();
 }
 
 void AFQSourceViewModel::CollapseGroup(obs_sceneitem_t* item)
@@ -1201,8 +1271,8 @@ void AFQSourceViewModel::CollapseGroup(obs_sceneitem_t* item)
 
     obs_scene_t* scene = obs_sceneitem_group_get_scene(item);
 
-    for (int i = 0; i < m_vSourceList.size(); i++) {
-        obs_scene_t* itemScene = obs_sceneitem_get_scene(m_vSourceList[i]);
+    for (int i = 0; i < m_sourceList.size(); i++) {
+        obs_scene_t* itemScene = obs_sceneitem_get_scene(m_sourceList[i]);
 
         if (itemScene == scene) {
             if (startIdx == -1)
@@ -1215,7 +1285,7 @@ void AFQSourceViewModel::CollapseGroup(obs_sceneitem_t* item)
         return;
 
     beginRemoveRows(QModelIndex(), startIdx, endIdx);
-    m_vSourceList.remove(startIdx, endIdx - startIdx + 1);
+    m_sourceList.remove(startIdx, endIdx - startIdx + 1);
     endRemoveRows();
 }
 
@@ -1223,7 +1293,7 @@ void AFQSourceViewModel::CollapseGroup(obs_sceneitem_t* item)
 void AFQSourceViewModel::UpdateGroupState(bool update)
 {
     bool nowHasGroups = false;
-    for (auto& item : m_vSourceList) {
+    for (auto& item : m_sourceList) {
         if (obs_sceneitem_is_group(item)) {
             nowHasGroups = true;
             break;
@@ -1233,7 +1303,7 @@ void AFQSourceViewModel::UpdateGroupState(bool update)
     if (nowHasGroups != m_hasGroups) {
         m_hasGroups = nowHasGroups;
         if (update) {
-            m_sourceListView->UpdateWidgets(true);
+            m_pSourceListView->UpdateWidgets(true);
         }
     }
 }
@@ -1241,7 +1311,7 @@ void AFQSourceViewModel::UpdateGroupState(bool update)
 bool AFQSourceListView::Edit(int row)
 {
     AFQSourceViewModel* stm = GetStm();
-    if (row < 0 || row >= stm->m_vSourceList.count())
+    if (row < 0 || row >= stm->m_sourceList.count())
         return false;
 
     QModelIndex index = stm->createIndex(row, 0);
@@ -1261,6 +1331,7 @@ bool AFQSourceListView::Edit(int row)
 
 void AFQSourceListView::Remove(OBSSceneItem item)
 {
+    //OBSBasic* main = reinterpret_cast<OBSBasic*>(App()->GetMainWindow());
     GetStm()->Remove(item);
 
     //main->SaveProject();
@@ -1276,18 +1347,15 @@ void AFQSourceListView::Remove(OBSSceneItem item)
     //}
 
     // Send Remove Source Info
-    AFMainFrame* mainFrame = App()->GetMainView();
-    if (!mainFrame)
-        return;
-
-    mainFrame->RecvRemovedSource(item);
+    if (MAINFRAME)
+        MAINFRAME->RecvRemovedSource(item);
 }
 
 
 void AFQSourceListView::ShowContextMenu(const QPoint& pos)
 {
     QModelIndex idx = indexAt(pos);
-    App()->GetMainView()->CreateSourcePopupMenu(idx.row());
+    MAIN_SCENESOURCE->CreateSourcePopupMenu(idx.row());
 }
 
 void AFQSourceListView::GroupSelectedItems()
@@ -1306,8 +1374,7 @@ void AFQSourceListView::UngroupSelectedGroups()
 void AFQSourceListView::NewGroupEdit(int idx)
 {
     if(!Edit(idx)) {
-        AFMainFrame* main = App()->GetMainView();
-        main->m_undo_s.PopDisabled();
+        UNDO_STACK.PopDisabled();
 
         blog(LOG_WARNING,
              "Uh, somehow the edit didn't process, this "
@@ -1328,9 +1395,9 @@ void AFQSourceListView::NewGroupEdit(int idx)
              "not be exactly. But again, yea. This "
              "really\nshould not be possible.");
 
-        OBSData redoSceneData = main->BackupScene(AFSceneContext::GetSingletonInstance().GetCurrOBSScene());
+        OBSData redoSceneData = MAINFRAME->BackupScene(SCENE_CONTEXT.GetCurrentScene());
         QString text = QTStr("Undo.GroupItems").arg("Unknown");
-        main->CreateSceneUndoRedoAction(text, m_undoSceneData, redoSceneData);
+        MAINFRAME->CreateSceneUndoRedoAction(text, m_undoSceneData, redoSceneData);
 
         m_undoSceneData = nullptr;
     }
@@ -1383,7 +1450,7 @@ AFQSourceListView::AFQSourceListView(QWidget* parent)
     UpdateNoSourcesMessage();
 
     //
-    setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    _HideVeritcalScrollBar();
 
     //m_timerScrollVisible = new QTimer(this);
     //m_timerScrollVisible->setInterval(200);
@@ -1394,7 +1461,6 @@ AFQSourceListView::AFQSourceListView(QWidget* parent)
 
 void AFQSourceListView::Clear()
 {
-    //m_vpreviouseSelectedSourceItems.clear();
     GetStm()->Clear();
 }
 
@@ -1409,9 +1475,9 @@ void AFQSourceListView::ResetWidgets()
 {
     AFQSourceViewModel* stm = GetStm();
 
-    for (int i = 0; i < stm->m_vSourceList.count(); i++) {
+    for (int i = 0; i < stm->m_sourceList.count(); i++) {
         QModelIndex index = stm->createIndex(i, 0, nullptr);
-        setIndexWidget(index, new AFQSourceViewItem(this, stm->m_vSourceList[i]));
+        setIndexWidget(index, new AFQSourceViewItem(this, stm->m_sourceList[i]));
     }
 }
 
@@ -1424,8 +1490,8 @@ void AFQSourceListView::UpdateWidgets(bool force)
 {
     AFQSourceViewModel* stm = GetStm();
 
-    for (int i = 0; i < stm->m_vSourceList.size(); i++) {
-        obs_sceneitem_t* item = stm->m_vSourceList[i];
+    for (int i = 0; i < stm->m_sourceList.size(); i++) {
+        obs_sceneitem_t* item = stm->m_sourceList[i];
         AFQSourceViewItem* widget = GetItemWidget(i);
 
         if (!widget) {
@@ -1451,17 +1517,22 @@ void AFQSourceListView::_ShowVerticalScrollBar()
         m_timerScrollVisible->start();
 }
 
+void AFQSourceListView::_HideVeritcalScrollBar()
+{
+    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+}
+
 void AFQSourceListView::SelectItem(obs_sceneitem_t* sceneitem, bool select)
 {
     AFQSourceViewModel* stm = GetStm();
     int i = 0;
 
-    for (; i < stm->m_vSourceList.count(); i++) {
-        if (stm->m_vSourceList[i] == sceneitem)
+    for (; i < stm->m_sourceList.count(); i++) {
+        if (stm->m_sourceList[i] == sceneitem)
             break;
     }
 
-    if (i == stm->m_vSourceList.count())
+    if (i == stm->m_sourceList.count())
         return;
 
     QModelIndex index = stm->createIndex(i, 0);
@@ -1476,15 +1547,14 @@ bool AFQSourceListView::MultipleBaseSelected() const
     AFQSourceViewModel* stm = GetStm();
     QModelIndexList selectedIndices = selectedIndexes();
 
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    OBSScene scene = sceneContext.GetCurrOBSScene();
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
 
     if (selectedIndices.size() < 1) {
         return false;
     }
 
     for (auto& idx : selectedIndices) {
-        obs_sceneitem_t* item = stm->m_vSourceList[idx.row()];
+        obs_sceneitem_t* item = stm->m_sourceList[idx.row()];
         if (obs_sceneitem_is_group(item)) {
             return false;
         }
@@ -1503,29 +1573,20 @@ bool AFQSourceListView::GroupsSelected() const
     AFQSourceViewModel* stm = GetStm();
     QModelIndexList selectedIndices = selectedIndexes();
 
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    OBSScene scene = sceneContext.GetCurrOBSScene();
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
 
     if (selectedIndices.size() < 1) {
         return false;
     }
 
     for (auto& idx : selectedIndices) {
-        obs_sceneitem_t* item = stm->m_vSourceList[idx.row()];
+        obs_sceneitem_t* item = stm->m_sourceList[idx.row()];
         if (!obs_sceneitem_is_group(item)) {
             return false;
         }
     }
 
     return true;
-}
-
-void AFQSourceListView::RegisterShortCut(QAction* removeSourceAction)
-{
-    if (!removeSourceAction)
-        return;
-
-    addAction(removeSourceAction);
 }
 
 void AFQSourceListView::mouseDoubleClickEvent(QMouseEvent* event)
@@ -1549,13 +1610,17 @@ void AFQSourceListView::dropEvent(QDropEvent *event)
         return;
     }
 
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    OBSScene scene = sceneContext.GetCurrOBSScene();
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
     obs_source_t* scenesource = obs_scene_get_source(scene);
     AFQSourceViewModel* stm = GetStm();
-    auto& items = stm->m_vSourceList;
+    auto& items = stm->m_sourceList;
     QModelIndexList indices = selectedIndexes();
+
+    obs_sceneitem_t* firstItem = items[indices[0].row()];
+    obs_source_t* fromSource = obs_sceneitem_get_source(firstItem);
+
+    if(AFSourceUtil::IsMustTopSource(fromSource))
+        return;
 
     DropIndicatorPosition indicator = dropIndicatorPosition();
     int row = indexAt(event->position().toPoint()).row();
@@ -1576,6 +1641,10 @@ void AFQSourceListView::dropEvent(QDropEvent *event)
     /* group                                   */
 
     obs_sceneitem_t* dropItem = items[row]; /* item being dropped on */
+
+    obs_source_t* dropSource = obs_sceneitem_get_source(dropItem);
+    const char* drop_source_id = obs_source_get_id(dropSource);
+
     bool itemIsGroup = obs_sceneitem_is_group(dropItem);
 
     obs_sceneitem_t* dropGroup =
@@ -1587,6 +1656,38 @@ void AFQSourceListView::dropEvent(QDropEvent *event)
         dropGroup = nullptr;
     if (emptyDrop)
         dropGroup = nullptr;
+
+    /* not allow group - painter_source, soop media source, ai manager source */
+    {
+        bool notAllowGroup = false;
+        const bool isGroupingDrop =
+            (dropGroup != nullptr) || (indicator == QAbstractItemView::OnItem);
+
+        if (isGroupingDrop) {
+            for (const QModelIndex& idx : indices) {
+                obs_sceneitem_t* it = items[idx.row()];
+                obs_source_t* src = obs_sceneitem_get_source(it);
+                if (!src) continue;
+
+                if (AFSourceUtil::IsSoopMediaSource(src)) {
+                    notAllowGroup = true;
+                    break;
+                }
+
+                const char* sourceId = obs_source_get_unversioned_id(src);
+                if (sourceId && (strcmp(sourceId, "painter_source") == 0 || strcmp(sourceId, "soop_aimanager_source") == 0)) {
+                    notAllowGroup = true;
+                    break;
+                }
+            }
+
+            if (notAllowGroup) {
+                event->ignore();
+                event->setDropAction(Qt::IgnoreAction);
+                return;
+            }
+        }
+    }
 
     /* --------------------------------------- */
     /* remember to remove list items if        */
@@ -1605,7 +1706,7 @@ void AFQSourceListView::dropEvent(QDropEvent *event)
         indicator == QAbstractItemView::OnViewport)
         row++;
 
-    if (row < 0 || row > stm->m_vSourceList.count()) {
+    if (row < 0 || row > stm->m_sourceList.count()) {
         QListView::dropEvent(event);
         return;
     }
@@ -1627,10 +1728,10 @@ void AFQSourceListView::dropEvent(QDropEvent *event)
     /* below another group                     */
 
     obs_sceneitem_t* itemBelow;
-    if (row == stm->m_vSourceList.count())
+    if (row == stm->m_sourceList.count())
         itemBelow = nullptr;
     else
-        itemBelow = stm->m_vSourceList[row];
+        itemBelow = stm->m_sourceList[row];
 
     if (hasGroups) {
         if (!itemBelow ||
@@ -1649,7 +1750,6 @@ void AFQSourceListView::dropEvent(QDropEvent *event)
         return;
     }
 
-    AFMainFrame* main = App()->GetMainView();
     /* --------------------------------------- */
     /* save undo data                          */
     std::vector<obs_source_t*> sources;
@@ -1661,7 +1761,7 @@ void AFQSourceListView::dropEvent(QDropEvent *event)
     }
     if (dropGroup)
         sources.push_back(obs_sceneitem_get_source(dropGroup));
-    OBSData undo_data = main->BackupScene(scene, &sources);
+    OBSData undo_data = MAINFRAME->BackupScene(scene, &sources);
 
     /* --------------------------------------- */
     /* if selection includes base group items, */
@@ -1713,6 +1813,11 @@ void AFQSourceListView::dropEvent(QDropEvent *event)
     /* move all items to destination index     */
 
     int r = row;
+    if (AFSourceUtil::IsMustTopSource(dropSource) &&
+        indicator == QAbstractItemView::AboveItem) {
+        r++;
+    }
+
     for (auto& persistentIdx : persistentIndices) {
         int from = persistentIdx.row();
         int to = r;
@@ -1828,14 +1933,14 @@ void AFQSourceListView::dropEvent(QDropEvent *event)
     /* --------------------------------------- */
     /* save redo data                          */
 
-    OBSData redo_data = main->BackupScene(scene, &sources);
+    OBSData redo_data = MAINFRAME->BackupScene(scene, &sources);
 
     /* --------------------------------------- */
     /* add undo/redo action                    */
 
     const char* scene_name = obs_source_get_name(scenesource);
     QString action_name = QTStr("Undo.ReorderSources").arg(scene_name);
-    main->CreateSceneUndoRedoAction(action_name, undo_data, redo_data);
+    MAINFRAME->CreateSceneUndoRedoAction(action_name, undo_data, redo_data);
 
     /* --------------------------------------- */
     /* remove items if dropped in to collapsed */
@@ -1861,7 +1966,7 @@ void AFQSourceListView::selectionChanged(const QItemSelection &selected, const Q
 {
     bool clicked = false;
     {
-        SignalBlocker sourcesSignalBlocker(this);
+        QSignalBlocker sourcesSignalBlocker(this);
         AFQSourceViewModel* stm = GetStm();
 
         QModelIndexList selectedIdxs = selected.indexes();
@@ -1869,7 +1974,7 @@ void AFQSourceListView::selectionChanged(const QItemSelection &selected, const Q
 
         for (int i = 0; i < selectedIdxs.count(); i++) {
             int idx = selectedIdxs[i].row();
-            obs_sceneitem_select(stm->m_vSourceList[idx], true);
+            obs_sceneitem_select(stm->m_sourceList[idx], true);
 
             AFQSourceViewItem* item = GetItemWidget(selectedIdxs[i].row());
             if (item)
@@ -1878,25 +1983,20 @@ void AFQSourceListView::selectionChanged(const QItemSelection &selected, const Q
 
         for (int i = 0; i < deselectedIdxs.count(); i++) {
             int idx = deselectedIdxs[i].row();
-            obs_sceneitem_select(stm->m_vSourceList[idx], false);
+            obs_sceneitem_select(stm->m_sourceList[idx], false);
 
             AFQSourceViewItem* item = GetItemWidget(deselectedIdxs[i].row());
             if(item)
                 item->SetSelected(false);
         }
-
-        clicked = (0 == selectedIdxs.count() ? false : true);
     }
-
-    emit qSignalCheckSourceClicked(clicked);
-
     QListView::selectionChanged(selected, deselected);
 }
 
 void AFQSourceListView::paintEvent(QPaintEvent* event)
 {
     AFQSourceViewModel* stm = GetStm();
-    if (stm && !stm->m_vSourceList.count()) {
+    if (stm && !stm->m_sourceList.count()) {
         QPainter p(viewport());
 
         QColor textColor(200, 200, 200); 
@@ -1938,3 +2038,15 @@ void AFQSourceListView::wheelEvent(QWheelEvent* event)
 
     QListView::wheelEvent(event);
 }
+
+void AFQSourceListView::enterEvent(QEnterEvent* event)
+{
+    _ShowVerticalScrollBar();
+}
+
+void AFQSourceListView::leaveEvent(QEvent* event)
+{
+    _HideVeritcalScrollBar();
+}
+
+

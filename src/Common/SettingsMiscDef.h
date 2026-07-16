@@ -7,12 +7,12 @@
 #define VOLUME_METER_DECAY_SLOW                  8.57
 
 
-#define DESKTOP_AUDIO_1 AFLocaleTextManager::GetSingletonInstance().Str("DesktopAudioDevice1")
-#define DESKTOP_AUDIO_2 AFLocaleTextManager::GetSingletonInstance().Str("DesktopAudioDevice2")
-#define AUX_AUDIO_1 AFLocaleTextManager::GetSingletonInstance().Str("AuxAudioDevice1")
-#define AUX_AUDIO_2 AFLocaleTextManager::GetSingletonInstance().Str("AuxAudioDevice2")
-#define AUX_AUDIO_3 AFLocaleTextManager::GetSingletonInstance().Str("AuxAudioDevice3")
-#define AUX_AUDIO_4 AFLocaleTextManager::GetSingletonInstance().Str("AuxAudioDevice4")
+#define DESKTOP_AUDIO_1 Str("DesktopAudioDevice1")
+#define DESKTOP_AUDIO_2 Str("DesktopAudioDevice2")
+#define AUX_AUDIO_1		Str("AuxAudioDevice1")
+#define AUX_AUDIO_2		Str("AuxAudioDevice2")
+#define AUX_AUDIO_3		Str("AuxAudioDevice3")
+#define AUX_AUDIO_4		Str("AuxAudioDevice4")
 
 #define SIMPLE_ENCODER_X264 "x264"
 #define SIMPLE_ENCODER_X264_LOWCPU "x264_lowcpu"
@@ -45,3 +45,5 @@
 #define REPLAY_BUFFER_STOP  "==== Replay Buffer Stop ============================================"
 #define STREAMING_START     "==== Streaming Start ==============================================="
 #define STREAMING_STOP      "==== Streaming Stop ================================================"
+#define VIRTUALCAM_START    "==== VirtualCam Start ==============================================="
+#define VIRTUALCAM_STOP     "==== VirtualCam Stop ================================================"

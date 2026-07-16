@@ -1,4 +1,5 @@
-﻿
+﻿#include "CAudioAdvControl.h"
+
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QLabel>
@@ -6,50 +7,50 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <cmath>
-#include "qt-wrapper.h"
+
 //#include "copy-obs-app.hpp"
 //#include "copy-window-basic-main.hpp"
-#include "CoreModel/Config/CConfigManager.h"
-#include "CoreModel/Locale/CLocaleTextManager.h"
-#include "CAudioAdvControl.h"
-#include <Application/CApplication.h>
+
+#include "Application/CApplication.h"
+
+#include "qt-wrappers.hpp"
 #include "platform/platform.hpp"
+
+#include "MainFrame/CMainFrame.h"
 
 #ifndef NSEC_PER_MSEC
 #define NSEC_PER_MSEC 1000000
 #endif
 
-//#define MIN_DB -96.0
-//#define MAX_DB 26.0
-#define MIN_DB 0.0
-#define MAX_DB 122.0
-#define TO_POSITIVENUM 96.0
+#define MIN_DB -96.0
+#define MAX_DB 26.0
 
-static inline void setMixer(obs_source_t *source, const int mixerIdx,
-			    const bool checked);
+static inline void setMixer(obs_source_t *source, const int mixerIdx, const bool checked);
 
 AFQAdvAudioCtrl::AFQAdvAudioCtrl(QGridLayout *, obs_source_t *source_)
 	: source(source_)
 {
-	QHBoxLayout* hlayout;
+	QHBoxLayout* hlayout = nullptr;
 	signal_handler_t* handler = obs_source_get_signal_handler(source);
 	QString sourceName = QT_UTF8(obs_source_get_name(source));
 	float vol = obs_source_get_volume(source);
 	uint32_t flags = obs_source_get_flags(source);
 	uint32_t mixers = obs_source_get_audio_mixers(source);
 
+	nameContainer = new QWidget();
 	mixerContainer = new QWidget();
 	balanceContainer = new QWidget();
 	labelL = new QLabel();
 	labelR = new QLabel();
+    iconLabel = new QLabel();
 	nameLabel = new QLabel();
 	active = new QLabel();
-	volumeStackWidget = new QStackedWidget();
+	stackedWidget = new QStackedWidget();
 	volume = new QDoubleSpinBox();
 	percent = new QSpinBox();
 	forceMono = new QCheckBox();
-	balance = new AFQBalanceSlider();
-	if (obs_audio_monitoring_available())
+	balance = new BalanceSlider();
+	if(obs_audio_monitoring_available())
 		monitoringType = new QComboBox();
 	syncOffset = new QSpinBox();
 	mixer1 = new QCheckBox();
@@ -58,25 +59,20 @@ AFQAdvAudioCtrl::AFQAdvAudioCtrl(QGridLayout *, obs_source_t *source_)
 	mixer4 = new QCheckBox();
 	mixer5 = new QCheckBox();
 	mixer6 = new QCheckBox();
+	lockIcon = new QCheckBox();
 
-	activateSignal.Connect(handler, "activate", OBSSourceActivated, this);
-	deactivateSignal.Connect(handler, "deactivate", OBSSourceDeactivated,
-		this);
-	volChangedSignal.Connect(handler, "volume", OBSSourceVolumeChanged,
-		this);
-	syncOffsetSignal.Connect(handler, "audio_sync", OBSSourceSyncChanged,
-		this);
-	flagsSignal.Connect(handler, "update_flags", OBSSourceFlagsChanged,
-		this);
+	sigs.emplace_back(handler, "activate", OBSSourceActivated, this);
+	sigs.emplace_back(handler, "deactivate", OBSSourceDeactivated, this);
+	sigs.emplace_back(handler, "audio_activate", OBSSourceActivated, this);
+	sigs.emplace_back(handler, "audio_deactivate", OBSSourceDeactivated, this);
+	sigs.emplace_back(handler, "volume", OBSSourceVolumeChanged, this);
+	sigs.emplace_back(handler, "audio_sync", OBSSourceSyncChanged, this);
+	sigs.emplace_back(handler, "update_flags", OBSSourceFlagsChanged, this);
 	if (obs_audio_monitoring_available())
-		monitoringTypeSignal.Connect(handler, "audio_monitoring",
-			OBSSourceMonitoringTypeChanged,
-			this);
-	mixersSignal.Connect(handler, "audio_mixers", OBSSourceMixersChanged,
-		this);
-	balChangedSignal.Connect(handler, "audio_balance",
-		OBSSourceBalanceChanged, this);
-	renameSignal.Connect(handler, "rename", OBSSourceRenamed, this);
+		sigs.emplace_back(handler, "audio_monitoring", OBSSourceMonitoringTypeChanged, this);
+	sigs.emplace_back(handler, "audio_mixers", OBSSourceMixersChanged, this);
+	sigs.emplace_back(handler, "audio_balance", OBSSourceBalanceChanged, this);
+	sigs.emplace_back(handler, "rename", OBSSourceRenamed, this);
 
 	hlayout = new QHBoxLayout();
 	hlayout->setContentsMargins(0, 0, 0, 0);
@@ -92,8 +88,6 @@ AFQAdvAudioCtrl::AFQAdvAudioCtrl(QGridLayout *, obs_source_t *source_)
 	OBSDataAutoRelease settings = obs_source_get_private_settings(source);
 	bool lock = obs_data_get_bool(settings, "volume_locked");
 	if (lock) {
-		nameContainer = new QWidget();
-		lockIcon = new QCheckBox();
 		lockIcon->setText("");
 		lockIcon->setFixedSize(QSize(12, 12));
 		lockIcon->setCheckable(false);
@@ -115,64 +109,53 @@ AFQAdvAudioCtrl::AFQAdvAudioCtrl(QGridLayout *, obs_source_t *source_)
 	SetSourceName(sourceName);
 	nameLabel->setAlignment(Qt::AlignVCenter);
 
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-
-	bool isActive = obs_source_active(source);
-	active->setText(isActive ? QTStr("Basic.Stats.Status.Active")
-		: QTStr("Basic.Stats.Status.Inactive"));
+	bool isActive = obs_source_active(source) && obs_source_audio_active(source);
+	active->setText(isActive ? QTStr("Basic.Stats.Status.Active") : QTStr("Basic.Stats.Status.Inactive"));
 	if (isActive)
 		setThemeID(active, "error");
 	active->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
 
-	volume->setMinimum(MIN_DB/* - 0.1 */);
-	volume->setMaximum(MAX_DB);
-	volume->setSingleStep(0.1);
-	volume->setDecimals(1);
-	volume->setSuffix(" dB");
-	volume->setValue(obs_mul_to_db(vol) + TO_POSITIVENUM);
-	volume->setAccessibleName(
-		QTStr("Basic.AdvAudio.VolumeSource").arg(sourceName));
-
+    volume->setMinimum(MIN_DB /*- 0.1*/);
+    volume->setMaximum(MAX_DB);
+    volume->setSingleStep(0.1);
+    volume->setDecimals(1);
+    volume->setSuffix(" dB");
+    volume->setValue(obs_mul_to_db(vol));
+    volume->setAccessibleName(QTStr("Basic.AdvAudio.VolumeSource").arg(sourceName));
 	if (volume->value() < MIN_DB) {
-		//volume->setSpecialValueText("-inf dB");
-		//volume->setAccessibleDescription("-inf dB");
-		volume->setSpecialValueText("0.0 dB");
-		volume->setAccessibleDescription("0.0 dB");
+		//m_volume->setSpecialValueText("-inf dB");
+		//m_volume->setAccessibleDescription("-inf dB");
+        volume->setSpecialValueText("-96.0 dB");
+        volume->setAccessibleDescription("-96.0 dB");
 	}
 
 	percent->setMinimum(0);
 	percent->setMaximum(2000);
 	percent->setSuffix("%");
 	percent->setValue((int)(obs_source_get_volume(source) * 100.0f));
-	percent->setAccessibleName(
-		QTStr("Basic.AdvAudio.VolumeSource").arg(sourceName));
+	percent->setAccessibleName(QTStr("Basic.AdvAudio.VolumeSource").arg(sourceName));
 
-	volumeStackWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-	volumeStackWidget->setFixedWidth(100);
-	volumeStackWidget->addWidget(volume);
-	volumeStackWidget->addWidget(percent);
+	stackedWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+	stackedWidget->setFixedWidth(100);
+	stackedWidget->addWidget(volume);
+	stackedWidget->addWidget(percent);
 
-	VolumeType volType = (VolumeType)config_get_int(
-		confManager.GetGlobal(), "BasicWindow", "AdvAudioVolumeType");
+	VolumeType volType = (VolumeType)config_get_int(USERCONFIG, "BasicWindow", "AdvAudioVolumeType");
 
 	SetVolumeWidget(volType);
 
 	forceMono->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
 	forceMono->setChecked((flags & OBS_SOURCE_FLAG_FORCE_MONO) != 0);
-	forceMono->setAccessibleName(
-		QTStr("Basic.AdvAudio.MonoSource").arg(sourceName));
+	forceMono->setAccessibleName(QTStr("Basic.AdvAudio.MonoSource").arg(sourceName));
 
 	balance->setOrientation(Qt::Horizontal);
 	balance->setMinimum(0);
 	balance->setMaximum(100);
 	balance->setTickPosition(QSlider::TicksAbove);
 	balance->setTickInterval(50);
-	balance->setAccessibleName(
-		QTStr("Basic.AdvAudio.BalanceSource").arg(sourceName));
+	balance->setAccessibleName(QTStr("Basic.AdvAudio.BalanceSource").arg(sourceName));
 
-	const char* speakers =
-		config_get_string(confManager.GetBasic(), "Audio", "ChannelSetup");
-
+	const char* speakers = config_get_string(ACTIVECONFIG, "Audio", "ChannelSetup");
 	if (strcmp(speakers, "Mono") == 0)
 		balance->setEnabled(false);
 	else
@@ -187,53 +170,47 @@ AFQAdvAudioCtrl::AFQAdvAudioCtrl(QGridLayout *, obs_source_t *source_)
 	syncOffset->setSuffix(" ms");
 	syncOffset->setValue(int(cur_sync / NSEC_PER_MSEC));
 	syncOffset->setFixedWidth(100);
-	syncOffset->setAccessibleName(
-		QTStr("Basic.AdvAudio.SyncOffsetSource").arg(sourceName));
+	syncOffset->setAccessibleName(QTStr("Basic.AdvAudio.SyncOffsetSource").arg(sourceName));
 
 	int idx;
 	if (obs_audio_monitoring_available()) {
-		monitoringType->addItem(QTStr("Basic.AdvAudio.Monitoring.None"),
-			(int)OBS_MONITORING_TYPE_NONE);
-		monitoringType->addItem(
-			QTStr("Basic.AdvAudio.Monitoring.MonitorOnly"),
-			(int)OBS_MONITORING_TYPE_MONITOR_ONLY);
-		monitoringType->addItem(
-			QTStr("Basic.AdvAudio.Monitoring.Both"),
-			(int)OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
+		monitoringType->addItem(QTStr("Basic.AdvAudio.Monitoring.None"), (int)OBS_MONITORING_TYPE_NONE);
+		monitoringType->addItem(QTStr("Basic.AdvAudio.Monitoring.MonitorOnly"), (int)OBS_MONITORING_TYPE_MONITOR_ONLY);
+		monitoringType->addItem(QTStr("Basic.AdvAudio.Monitoring.Both"), (int)OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
+
 		int mt = (int)obs_source_get_monitoring_type(source);
 		idx = monitoringType->findData(mt);
 		monitoringType->setCurrentIndex(idx);
-		monitoringType->setAccessibleName(
-			QTStr("Basic.AdvAudio.MonitoringSource")
-			.arg(sourceName));
-		monitoringType->setSizePolicy(QSizePolicy::Preferred,
-			QSizePolicy::Fixed);
+		monitoringType->setAccessibleName(QTStr("Basic.AdvAudio.MonitoringSource").arg(sourceName));
+		monitoringType->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+
+		monitoringType->setObjectName("monitoringTypeComboBox");
 	}
 
 	mixer1->setText("1");
 	mixer1->setChecked(mixers & (1 << 0));
-	mixer1->setAccessibleName(
-		QTStr("Basic.Settings.Output.Adv.Audio.Track1"));
+	mixer1->setAccessibleName(QTStr("Basic.Settings.Output.Adv.Audio.Track1"));
+	mixer1->setObjectName("mixer1Button");
 	mixer2->setText("2");
 	mixer2->setChecked(mixers & (1 << 1));
-	mixer2->setAccessibleName(
-		QTStr("Basic.Settings.Output.Adv.Audio.Track2"));
+	mixer2->setAccessibleName(QTStr("Basic.Settings.Output.Adv.Audio.Track2"));
+	mixer2->setObjectName("mixer2Button");
 	mixer3->setText("3");
 	mixer3->setChecked(mixers & (1 << 2));
-	mixer3->setAccessibleName(
-		QTStr("Basic.Settings.Output.Adv.Audio.Track3"));
+	mixer3->setAccessibleName(QTStr("Basic.Settings.Output.Adv.Audio.Track3"));
+	mixer3->setObjectName("mixer3Button");
 	mixer4->setText("4");
 	mixer4->setChecked(mixers & (1 << 3));
-	mixer4->setAccessibleName(
-		QTStr("Basic.Settings.Output.Adv.Audio.Track4"));
+	mixer4->setAccessibleName(QTStr("Basic.Settings.Output.Adv.Audio.Track4"));
+	mixer4->setObjectName("mixer4Button");
 	mixer5->setText("5");
 	mixer5->setChecked(mixers & (1 << 4));
-	mixer5->setAccessibleName(
-		QTStr("Basic.Settings.Output.Adv.Audio.Track5"));
+	mixer5->setAccessibleName(QTStr("Basic.Settings.Output.Adv.Audio.Track5"));
+	mixer5->setObjectName("mixer5Button");
 	mixer6->setText("6");
 	mixer6->setChecked(mixers & (1 << 5));
-	mixer6->setAccessibleName(
-		QTStr("Basic.Settings.Output.Adv.Audio.Track6"));
+	mixer6->setAccessibleName(QTStr("Basic.Settings.Output.Adv.Audio.Track6"));
+	mixer6->setObjectName("mixer6Button");
 
 	balanceContainer->layout()->addWidget(labelL);
 	balanceContainer->layout()->addWidget(balance);
@@ -252,27 +229,20 @@ AFQAdvAudioCtrl::AFQAdvAudioCtrl(QGridLayout *, obs_source_t *source_)
 	mixerContainer->layout()->addWidget(mixer6);
 	mixerContainer->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
 
-	connect(volume, &QDoubleSpinBox::valueChanged, this,
-		&AFQAdvAudioCtrl::volumeChanged);
-	connect(percent, &QSpinBox::valueChanged, this,
-		&AFQAdvAudioCtrl::percentChanged);
-	connect(forceMono, &QCheckBox::clicked, this,
-		&AFQAdvAudioCtrl::downmixMonoChanged);
-	connect(balance, &AFQBalanceSlider::valueChanged, this,
-		&AFQAdvAudioCtrl::balanceChanged);
-	connect(balance, &AFQBalanceSlider::doubleClicked, this,
-		&AFQAdvAudioCtrl::ResetBalance);
-	connect(syncOffset, &QSpinBox::valueChanged, this,
-		&AFQAdvAudioCtrl::syncOffsetChanged);
+	connect(volume, &QDoubleSpinBox::valueChanged, this, &AFQAdvAudioCtrl::volumeChanged);
+	connect(percent, &QSpinBox::valueChanged, this, &AFQAdvAudioCtrl::percentChanged);
+	connect(forceMono, &QCheckBox::clicked, this, &AFQAdvAudioCtrl::downmixMonoChanged);
+	connect(balance, &BalanceSlider::valueChanged, this, &AFQAdvAudioCtrl::balanceChanged);
+	connect(balance, &BalanceSlider::doubleClicked, this, &AFQAdvAudioCtrl::ResetBalance);
+	connect(syncOffset, &QSpinBox::valueChanged, this, &AFQAdvAudioCtrl::syncOffsetChanged);
 	if (obs_audio_monitoring_available())
-		connect(monitoringType, &QComboBox::currentIndexChanged, this,
-			&AFQAdvAudioCtrl::monitoringTypeChanged);
+		connect(monitoringType, &QComboBox::currentIndexChanged, this, &AFQAdvAudioCtrl::monitoringTypeChanged);
 
 	auto connectMixer = [this](QCheckBox* mixer, int num) {
 		connect(mixer, &QCheckBox::clicked, [this, num](bool checked) {
 			setMixer(source, num, checked);
-			});
-		};
+		});
+	};
 	connectMixer(mixer1, 0);
 	connectMixer(mixer2, 1);
 	connectMixer(mixer3, 2);
@@ -287,11 +257,11 @@ AFQAdvAudioCtrl::~AFQAdvAudioCtrl()
 {
 	nameLabel->deleteLater();
 	active->deleteLater();
-	volumeStackWidget->deleteLater();
+	stackedWidget->deleteLater();
 	forceMono->deleteLater();
 	balanceContainer->deleteLater();
 	syncOffset->deleteLater();
-	if (obs_audio_monitoring_available())
+	if(obs_audio_monitoring_available())
 		monitoringType->deleteLater();
 	mixerContainer->deleteLater();
 	nameContainer->deleteLater();
@@ -313,7 +283,7 @@ void AFQAdvAudioCtrl::ShowAudioControl(QGridLayout *layout)
 
 	SetSourceName(nameLabel->text());
 	layout->addWidget(active, lastRow, idx++);
-	layout->addWidget(volumeStackWidget, lastRow, idx++);
+	layout->addWidget(stackedWidget, lastRow, idx++);
 	layout->addWidget(forceMono, lastRow, idx++);
 	layout->addWidget(balanceContainer, lastRow, idx++);
 	layout->addWidget(syncOffset, lastRow, idx++);
@@ -323,15 +293,15 @@ void AFQAdvAudioCtrl::ShowAudioControl(QGridLayout *layout)
 	layout->layout()->setAlignment(mixerContainer, Qt::AlignVCenter);
 	layout->setHorizontalSpacing(15);
 
-	_SetContentsProperties();
+	setContentsProperties();
 }
 
-void AFQAdvAudioCtrl::_SetContentsProperties()
+void AFQAdvAudioCtrl::setContentsProperties()
 {
 	nameLabel->setFixedHeight(40);
 	active->setFixedHeight(40);
 	forceMono->setFixedHeight(40);
-	volumeStackWidget->setFixedHeight(40);
+	stackedWidget->setFixedHeight(40);
 	balance->setFixedHeight(40);
 	balanceContainer->setFixedHeight(40);
 	syncOffset->setFixedHeight(40);
@@ -347,67 +317,56 @@ void AFQAdvAudioCtrl::_SetContentsProperties()
 
 void AFQAdvAudioCtrl::OBSSourceActivated(void *param, calldata_t *)
 {
-	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param),
-				  "SourceActiveChanged", Q_ARG(bool, true));
+	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param), "SourceActiveChanged", Q_ARG(bool, true));
 }
 
 void AFQAdvAudioCtrl::OBSSourceDeactivated(void *param, calldata_t *)
 {
-	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param),
-				  "SourceActiveChanged", Q_ARG(bool, false));
+	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param), "SourceActiveChanged", Q_ARG(bool, false));
 }
 
 void AFQAdvAudioCtrl::OBSSourceFlagsChanged(void *param, calldata_t *calldata)
 {
 	uint32_t flags = (uint32_t)calldata_int(calldata, "flags");
-	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param),
-				  "SourceFlagsChanged", Q_ARG(uint32_t, flags));
+	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param), "SourceFlagsChanged", Q_ARG(uint32_t, flags));
 }
 
 void AFQAdvAudioCtrl::OBSSourceVolumeChanged(void *param, calldata_t *calldata)
 {
 	float volume = (float)calldata_float(calldata, "volume");
-	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param),
-				  "SourceVolumeChanged", Q_ARG(float, volume));
+	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param), "SourceVolumeChanged", Q_ARG(float, volume));
 }
 
 void AFQAdvAudioCtrl::OBSSourceSyncChanged(void *param, calldata_t *calldata)
 {
 	int64_t offset = calldata_int(calldata, "offset");
-	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param),
-				  "SourceSyncChanged", Q_ARG(int64_t, offset));
+	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param), "SourceSyncChanged", Q_ARG(int64_t, offset));
 }
 
 void AFQAdvAudioCtrl::OBSSourceMonitoringTypeChanged(void *param,
 						     calldata_t *calldata)
 {
 	int type = calldata_int(calldata, "type");
-	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param),
-				  "SourceMonitoringTypeChanged",
-				  Q_ARG(int, type));
+	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param), "SourceMonitoringTypeChanged", Q_ARG(int, type));
 }
 
 void AFQAdvAudioCtrl::OBSSourceMixersChanged(void *param, calldata_t *calldata)
 {
 	uint32_t mixers = (uint32_t)calldata_int(calldata, "mixers");
-	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param),
-				  "SourceMixersChanged",
-				  Q_ARG(uint32_t, mixers));
+	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param), "SourceMixersChanged", Q_ARG(uint32_t, mixers));
 }
 
 void AFQAdvAudioCtrl::OBSSourceBalanceChanged(void *param, calldata_t *calldata)
 {
 	int balance = (float)calldata_float(calldata, "balance") * 100.0f;
-	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param),
-				  "SourceBalanceChanged", Q_ARG(int, balance));
+	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param), "SourceBalanceChanged", Q_ARG(int, balance));
 }
 
 void AFQAdvAudioCtrl::OBSSourceRenamed(void *param, calldata_t *calldata)
 {
 	QString newName = QT_UTF8(calldata_string(calldata, "new_name"));
 
-	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param),
-				  "SetSourceName", Q_ARG(QString, newName));
+	QMetaObject::invokeMethod(reinterpret_cast<AFQAdvAudioCtrl *>(param), "SetSourceName", Q_ARG(QString, newName));
 }
 
 /* ------------------------------------------------------------------------- */
@@ -420,13 +379,14 @@ static inline void setCheckboxState(QCheckBox *checkbox, bool checked)
 	checkbox->blockSignals(false);
 }
 
+// [copy-obs]remove : text lookup
 void AFQAdvAudioCtrl::SourceActiveChanged(bool isActive)
 {
-	if (isActive) {
-		active->setText(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Stats.Status.Active"));
+	if (isActive && obs_source_audio_active(source)) {
+		active->setText(QTStr("Basic.Stats.Status.Active"));
 		setThemeID(active, "error");
 	} else {
-		active->setText(AFLocaleTextManager::GetSingletonInstance().Str("Basic.Stats.Status.Inactive"));
+		active->setText(QTStr("Basic.Stats.Status.Inactive"));
 		setThemeID(active, "");
 	}
 }
@@ -442,7 +402,7 @@ void AFQAdvAudioCtrl::SourceVolumeChanged(float value)
 {
 	volume->blockSignals(true);
 	percent->blockSignals(true);
-	volume->setValue(obs_mul_to_db(value) + TO_POSITIVENUM);
+	volume->setValue(obs_mul_to_db(value));
 	percent->setValue((int)std::round(value * 100.0f));
 	percent->blockSignals(false);
 	volume->blockSignals(false);
@@ -492,8 +452,6 @@ void AFQAdvAudioCtrl::volumeChanged(double db)
 		db = MIN_DB;
 	}
 
-	db -= TO_POSITIVENUM;
-
 	float val = obs_db_to_mul(db);
 	obs_source_set_volume(source, val);
 
@@ -504,11 +462,10 @@ void AFQAdvAudioCtrl::volumeChanged(double db)
 
 	const char *name = obs_source_get_name(source);
 	const char *uuid = obs_source_get_uuid(source);
-	AFMainFrame* main = App()->GetMainView();
-	main->m_undo_s.AddAction(QTStr("Undo.Volume.Change").arg(name),
-							 std::bind(undo_redo, std::placeholders::_1, prev),
-							 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid,
-							 true);
+	UNDO_STACK.AddAction(QTStr("Undo.Volume.Change").arg(name),
+						 std::bind(undo_redo, std::placeholders::_1, prev),
+						 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid,
+						 true);
 }
 
 void AFQAdvAudioCtrl::percentChanged(int percent)
@@ -525,11 +482,10 @@ void AFQAdvAudioCtrl::percentChanged(int percent)
 
 	const char *name = obs_source_get_name(source);
 	const char *uuid = obs_source_get_uuid(source);
-	AFMainFrame* main = App()->GetMainView();
-	main->m_undo_s.AddAction(QTStr("Undo.Volume.Change").arg(name),
-							 std::bind(undo_redo, std::placeholders::_1, prev),
-							 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid,
-							 true);
+	UNDO_STACK.AddAction(QTStr("Undo.Volume.Change").arg(name),
+						 std::bind(undo_redo, std::placeholders::_1, prev),
+						 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid,
+						 true);
 }
 
 static inline void set_mono(obs_source_t *source, bool mono)
@@ -558,19 +514,18 @@ void AFQAdvAudioCtrl::downmixMonoChanged(bool val)
 	obs_source_set_flags(source, flags);
 
 	auto undo_redo = [](const std::string &uuid, bool val) {
-		OBSSourceAutoRelease source =
-			obs_get_source_by_uuid(uuid.c_str());
+		OBSSourceAutoRelease source = obs_get_source_by_uuid(uuid.c_str());
 		set_mono(source, val);
 	};
 
+	// [copy-obs]remvoe : text lookup
 	QString text = QTStr(val ? "Undo.ForceMono.On" : "Undo.ForceMono.Off");
 
 	const char *name = obs_source_get_name(source);
 	const char *uuid = obs_source_get_uuid(source);
-	AFMainFrame* main = App()->GetMainView();
-	main->m_undo_s.AddAction(text.arg(name),
-							 std::bind(undo_redo, std::placeholders::_1, !val),
-							 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid);
+	UNDO_STACK.AddAction(text.arg(name),
+						 std::bind(undo_redo, std::placeholders::_1, !val),
+						 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid);
 }
 
 void AFQAdvAudioCtrl::balanceChanged(int val)
@@ -594,11 +549,10 @@ void AFQAdvAudioCtrl::balanceChanged(int val)
 
 	const char *name = obs_source_get_name(source);
 	const char *uuid = obs_source_get_uuid(source);
-	AFMainFrame* main = App()->GetMainView();
-	main->m_undo_s.AddAction(QTStr("Undo.Balance.Change").arg(name),
-							 std::bind(undo_redo, std::placeholders::_1, prev),
-							 std::bind(undo_redo, std::placeholders::_1, bal), uuid, uuid,
-							 true);
+	UNDO_STACK.AddAction(QTStr("Undo.Balance.Change").arg(name),
+						 std::bind(undo_redo, std::placeholders::_1, prev),
+						 std::bind(undo_redo, std::placeholders::_1, bal), uuid, uuid,
+						 true);
 }
 
 void AFQAdvAudioCtrl::ResetBalance()
@@ -623,19 +577,17 @@ void AFQAdvAudioCtrl::syncOffsetChanged(int milliseconds)
 
 	const char *name = obs_source_get_name(source);
 	const char *uuid = obs_source_get_uuid(source);
-	AFMainFrame* main = App()->GetMainView();
-	main->m_undo_s.AddAction(QTStr("Undo.SyncOffset.Change").arg(name),
-							 std::bind(undo_redo, std::placeholders::_1, prev),
-							 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid,
-							 true);
+	UNDO_STACK.AddAction(QTStr("Undo.SyncOffset.Change").arg(name),
+						 std::bind(undo_redo, std::placeholders::_1, prev),
+						 std::bind(undo_redo, std::placeholders::_1, val), uuid, uuid,
+						 true);
 }
 
 void AFQAdvAudioCtrl::monitoringTypeChanged(int index)
 {
 	obs_monitoring_type prev = obs_source_get_monitoring_type(source);
 
-	obs_monitoring_type mt =
-		(obs_monitoring_type)monitoringType->itemData(index).toInt();
+	obs_monitoring_type mt = (obs_monitoring_type)monitoringType->itemData(index).toInt();
 	obs_source_set_monitoring_type(source, mt);
 
 	const char *type = nullptr;
@@ -662,14 +614,12 @@ void AFQAdvAudioCtrl::monitoringTypeChanged(int index)
 	};
 
 	const char *uuid = obs_source_get_uuid(source);
-	AFMainFrame* main = App()->GetMainView();
-	main->m_undo_s.AddAction(QTStr("Undo.MonitoringType.Change").arg(name),
-							 std::bind(undo_redo, std::placeholders::_1, prev),
-							 std::bind(undo_redo, std::placeholders::_1, mt), uuid, uuid);
+	UNDO_STACK.AddAction(QTStr("Undo.MonitoringType.Change").arg(name),
+						 std::bind(undo_redo, std::placeholders::_1, prev),
+						 std::bind(undo_redo, std::placeholders::_1, mt), uuid, uuid);
 }
 
-static inline void setMixer(obs_source_t *source, const int mixerIdx,
-			    const bool checked)
+static inline void setMixer(obs_source_t *source, const int mixerIdx, const bool checked)
 {
 	uint32_t mixers = obs_source_get_audio_mixers(source);
 	uint32_t new_mixers = mixers;
@@ -688,25 +638,29 @@ static inline void setMixer(obs_source_t *source, const int mixerIdx,
 
 	const char *name = obs_source_get_name(source);
 	const char *uuid = obs_source_get_uuid(source);
-	AFMainFrame* main = App()->GetMainView();
-	main->m_undo_s.AddAction(QTStr("Undo.Mixers.Change").arg(name),
-							 std::bind(undo_redo, std::placeholders::_1, mixers),
-							 std::bind(undo_redo, std::placeholders::_1, new_mixers), uuid, uuid);
+	UNDO_STACK.AddAction(QTStr("Undo.Mixers.Change").arg(name),
+						 std::bind(undo_redo, std::placeholders::_1, mixers),
+						 std::bind(undo_redo, std::placeholders::_1, new_mixers), uuid, uuid);
 }
 
 void AFQAdvAudioCtrl::SetVolumeWidget(VolumeType type)
 {
 	switch (type) {
 	case VolumeType::Percent:
-		volumeStackWidget->setCurrentWidget(percent);
+		stackedWidget->setCurrentWidget(percent);
 		break;
 	case VolumeType::dB:
-		volumeStackWidget->setCurrentWidget(volume);
+		stackedWidget->setCurrentWidget(volume);
 		break;
 	}
 }
 
+void AFQAdvAudioCtrl::SetIconVisible(bool visible)
+{
+	visible ? iconLabel->show() : iconLabel->hide();
+}
+
 void AFQAdvAudioCtrl::SetSourceName(QString newName)
 {
-	TruncateTextToLabelWidth(nameLabel, newName);
+	TruncateTextToLabelWidth(nameLabel, newName, 20);
 }

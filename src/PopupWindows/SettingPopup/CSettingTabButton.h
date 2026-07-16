@@ -15,21 +15,21 @@ public:
     explicit AFQSettingTabButton(QWidget *parent = nullptr);
     ~AFQSettingTabButton();
     void SetButton(const char* type, QString name);
-    const char* GetButtonType() { return m_pTypeName; };
+    const char* GetButtonType() { return typeName; };
 
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 public slots:
-    void qslotButtonClicked();
-    void qslotButtonUnchecked();
+    void OnButtonClicked();
+    void OnButtonUnchecked();
 
 signals:
-    void qsignalButtonClicked();
+    void ButtonClicked();
 
 private:
     Ui::AFQSettingTabButton *ui;
-    const char* m_pTypeName;
+    const char* typeName;
 };
 
 #endif // CSETTINGTABBUTTON_H

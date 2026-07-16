@@ -20,7 +20,7 @@
 #include <util/base.h>
 #include <util/threading.h>
 #include <obs-config.h>
-#include "platform.hpp"
+#include "platform/platform.hpp"
 #include "Application/CApplication.h"
 
 #include <unistd.h>
@@ -28,7 +28,14 @@
 #import <AppKit/AppKit.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <AVFoundation/AVFoundation.h>
+#import <Foundation/Foundation.h>
+#import <IOKit/IOKitLib.h>
+#import <sys/sysctl.h>
+#import <Metal/Metal.h>
 #import <ApplicationServices/ApplicationServices.h>
+
+#import "CrashReporter/CrashReporter.h"
+
 
 #include "CoreModel/Locale/CLocaleTextManager.h"
 
@@ -68,7 +75,8 @@ string GetDefaultVideoSavePath()
     if (!url)
         return getenv("HOME");
 
-    return url.path.fileSystemRepresentation;
+	//return url.path.fileSystemRepresentation;
+    return url.path.fileSystemRepresentation + string("/SOOP");
 }
 
 vector<string> GetPreferredLocales()
@@ -320,6 +328,181 @@ int GetHeightDock(QWidget* window)
     return visibleFrame.origin.y - screenFrame.origin.y;
 }
 
+void InitPLCrashReporter(CrashSignalCallback crashCallback)
+{
+    PLCrashReporterSignalHandlerType signalHandlerType = PLCrashReporterSignalHandlerTypeMach;
+    PLCrashReporterConfig* config = [[PLCrashReporterConfig alloc]
+                                     initWithSignalHandlerType: signalHandlerType
+                                     symbolicationStrategy: PLCrashReporterSymbolicationStrategyAll];
+    PLCrashReporter* reporter = [[PLCrashReporter alloc] initWithConfiguration: config];
+
+    PLCrashReporterCallbacks cb = {
+        .version = 0,
+        .context = (__bridge void *) reporter,
+        .handleSignal = crashCallback
+    };
+    
+    [reporter setCrashCallbacks: &cb];
+    
+    NSError* error = nil;
+    if (![reporter enableCrashReporterAndReturnError: &error])
+        blog(LOG_INFO, "[macOS] Fail to enable crash reporter");
+}
+
+std::string PrintLogCrash(void* pobjPLCrashReporter)
+{
+    std::string res;
+    res.clear();
+    
+    NSError* error = nil;
+    
+    PLCrashReporter* reporter = (__bridge PLCrashReporter*)pobjPLCrashReporter;
+    
+    NSData* data = [reporter loadPendingCrashReportDataAndReturnError: &error];
+    if (data == nil)
+    {
+        blog(LOG_INFO, "[macOS] Fail to load pending crash report data");
+        return res;
+    }
+    
+    [reporter purgePendingCrashReport];
+    
+    PLCrashReport* report = [[PLCrashReport alloc] initWithData: data error: &error];
+    if (report == nil)
+    {
+        blog(LOG_INFO, "[macOS] Fail to make crash report data");
+        return res;
+    }
+    
+    
+    NSString* text = [PLCrashReportTextFormatter 
+                      stringValueForCrashReport: report
+                      withTextFormat: PLCrashReportTextFormatiOS];
+    
+    if (text != nil)
+        return [text UTF8String];
+    
+    
+    return res;
+}
+
+std::string GetCPUModel()
+{
+    size_t size;
+    if (sysctlbyname("machdep.cpu.brand_string", NULL, &size, NULL, 0) == 0)
+    {
+        char* cpuModel = (char*)malloc(size);
+        sysctlbyname("machdep.cpu.brand_string", cpuModel, &size, NULL, 0);
+        
+        NSString *cpuModelStr = [NSString stringWithUTF8String:cpuModel];
+        free(cpuModel);
+        
+        return [cpuModelStr UTF8String];
+    }
+}
+
+std::string GetHWModel()
+{
+    size_t size;
+    sysctlbyname("hw.model", NULL, &size, NULL, 0);
+    
+    char* model = (char*)malloc(size);
+    sysctlbyname("hw.model", model, &size, NULL, 0);
+    
+    NSString *machineModel = [NSString stringWithUTF8String:model];
+    free(model);
+    
+    return [machineModel UTF8String];
+}
+
+std::string GetOSVersion()
+{
+    NSProcessInfo *processInfo = [NSProcessInfo processInfo];
+    NSOperatingSystemVersion version = [processInfo operatingSystemVersion];
+    return [[NSString stringWithFormat:@"macOS %ld.%ld.%ld",
+            version.majorVersion, version.minorVersion, version.patchVersion] UTF8String];
+}
+
+std::string GetMemSize()
+{
+    int64_t memSize;
+    size_t size = sizeof(memSize);
+    sysctlbyname("hw.memsize", &memSize, &size, NULL, 0);
+    return [[NSString stringWithFormat:@"%lld GB", memSize / (1024 * 1024 * 1024)] UTF8String];
+}
+
+std::string GetGPUModel()
+{
+    io_iterator_t iter;
+    io_service_t service;
+    NSString* gpuModel = nil;
+
+    if (IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOPCIDevice"), &iter) == KERN_SUCCESS) {
+        while ((service = IOIteratorNext(iter))) {
+            CFTypeRef gpuName = IORegistryEntryCreateCFProperty(service, CFSTR("model"), kCFAllocatorDefault, 0);
+            if (gpuName) {
+                if (CFGetTypeID(gpuName) == CFDataGetTypeID()) {
+                    // CFData → NSString
+                    const UInt8* bytes = CFDataGetBytePtr((CFDataRef)gpuName);
+                    long length = CFDataGetLength((CFDataRef)gpuName);
+                    gpuModel = [[NSString alloc] initWithBytes:bytes length:length encoding:NSUTF8StringEncoding];
+                    CFRelease(gpuName);
+                } else if (CFGetTypeID(gpuName) == CFStringGetTypeID()) {
+                    // CFString → NSString (ARC가 관리하므로 CFRelease 금지)
+                    gpuModel = (__bridge_transfer NSString *)gpuName;
+                    // CFRelease(gpuName) -> __bridge_transfer ㅇㅔㅅㅓ ㅊㅓㄹㅣ
+                } else {
+                    CFRelease(gpuName);
+                }
+
+                IOObjectRelease(service);
+                break;
+            }
+            IOObjectRelease(service);
+        }
+        IOObjectRelease(iter);
+    }
+
+    // Metal fallback
+    if (gpuModel == nil || [gpuModel length] == 0) {
+        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+        gpuModel = [device name];
+    }
+
+    return gpuModel ? [gpuModel UTF8String] : "Unknown GPU";
+}
+
+std::string GetGPUMemSize()
+{
+    io_iterator_t iter;
+    io_service_t service;
+    NSString* gpuMemory = @"Unknown GPU Memory";
+    
+    if (IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOPCIDevice"), &iter) == KERN_SUCCESS) {
+        while ((service = IOIteratorNext(iter))) {
+            CFTypeRef vramSize = IORegistryEntryCreateCFProperty(service, CFSTR("VRAM,totalMB"), kCFAllocatorDefault, 0);
+            if (vramSize) {
+                gpuMemory = [NSString stringWithFormat:@"%@ MB", vramSize];
+                CFRelease(vramSize);
+                IOObjectRelease(service);
+                break;
+            }
+            IOObjectRelease(service);
+        }
+        IOObjectRelease(iter);
+    }
+    
+    
+    if ([gpuMemory isEqualToString:@"Unknown GPU Memory"])
+    {
+        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+        uint64_t vramSize = [device recommendedMaxWorkingSetSize] / (1024.0 * 1024.0);
+        gpuMemory = [NSString stringWithFormat:@"%d MB", vramSize];
+    }
+    
+    return [gpuMemory UTF8String];
+}
+
 void TaskbarOverlayInit() {}
 
 void TaskbarOverlaySetStatus(TaskbarOverlayStatus status)
@@ -373,4 +556,9 @@ void InstallNSThreadLocks()
 void InstallNSApplicationSubclass()
 {
     [OBSApplication sharedApplication];
+}
+
+bool HighContrastEnabled()
+{
+    return [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldIncreaseContrast];
 }

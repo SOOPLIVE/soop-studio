@@ -10,19 +10,15 @@ class AFQBalloonWidget;
 
 class AFQBalloonWidget : public QWidget
 {
-	Q_OBJECT;
+	Q_OBJECT
+
 public:
 	explicit AFQBalloonWidget(QWidget* parent = nullptr);
 	~AFQBalloonWidget();
 
-#pragma region QT Field
-public slots:
-	
 signals:
 	void qsignalFromChild(bool);
-#pragma endregion QT Field
 
-#pragma region public func
 public:
 	void BalloonWidgetInit(QString tooltip = "");
 	void BalloonWidgetInit(QMargins margin, int spacing);
@@ -32,26 +28,21 @@ public:
 
 	bool AddWidgetToBalloon(QWidget* widget);
 	bool AddTextToBalloon(QString text);
-#pragma endregion public func
 
-#pragma region protected func
 protected:
 	void paintEvent(QPaintEvent* e) override;
-#pragma endregion protected func
 
-#pragma region private func
 private:
 	void _AdjustBalloonGeometry();
-#pragma endregion private func
 
-#pragma region private member var
 private:
 	Ui::AFQBalloonWidget* ui;
-	bool m_bIsTooltip = false;
-	QLabel* m_Tooltiplabel = nullptr;
-
-	QBrush m_LineBrush = QBrush(QColor(255, 255, 255, 26));
-#pragma endregion private member var
+	bool m_isTooltip = false;
+	QLabel* m_pTooltiplabel = nullptr;
 };
 
 #endif // CBALLOONWIDGET_H
+
+// Not Used
+//QBrush m_lineBrush = QBrush(QColor(255, 255, 255, 26));
+//

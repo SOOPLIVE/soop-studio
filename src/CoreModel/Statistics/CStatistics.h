@@ -9,6 +9,12 @@
 #include <util/threading.h>
 #include <util/util.hpp>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <psapi.h>
+#include <pdh.h>
+#endif
+
 #include "CoreModel/OBSOutput/SBasicOutputHandler.h"
 
 
@@ -28,31 +34,39 @@ enum class PCStatState {
 class AFStatistics : public QObject
 {
 	Q_OBJECT
-#pragma region QT Field, CTOR/DTOR
-public:
-	AFStatistics();
-    ~AFStatistics();
-#pragma endregion QT Field, CTOR/DTOR
 
-#pragma region public func
 public:
-    void StatisticsInit(int interval = 3000); // interval ms
+    AFStatistics();
+    ~AFStatistics();
+
+public:
+    void StatisticsInit(int interval = 1000); // interval ms
     void BroadStatus(bool broad);
     void Reset();
     static void InitializeValues();
-    void SetOutputHandler(AFBasicOutputHandler* handler) { m_outputHandler = handler; }
+    void SetOutputHandler(AFBasicOutputHandler* handler) { m_pOutputHandler = handler; }
     void SetCongestionUpdate(bool start) { m_firstCongestionUpdate = start; }
     void SetDisconnected(bool disconnected);
     void ClearCongestionArray();
+    void SetDiskFullTimer(bool start);
 
-    /*inline QTimer* GetCpuUsageTimer() { return m_CpuUsageTimer.data(); }
-    inline QTimer* GetMemoryTimer() { return m_MemoryTimer.data(); }
-    inline QTimer* GetDiskFullTimer() { return m_DiskFullTimer.data(); }*/
+    /*inline QTimer* GetCpuUsageTimer() { return m_cpuUsageTimer.data(); }
+    inline QTimer* GetMemoryTimer() { return m_memoryTimer.data(); }
+    inline QTimer* GetDiskFullTimer() { return m_diskFullTimer.data(); }*/
 
     inline int GetNetworkState() const { return m_networkState; }
     inline double GetCPUUsage() const { return m_cpuUsage; }
+    inline double GetCPUTotalUsage() const { return m_cpuTotal; }
     inline double GetCurFPS() const { return m_curFPS; }
+    inline double GetEncoderFPS() const { return m_encoderFPS; }
+    inline std::string GetCPUInfo() const { return m_cpuInfo; }
+    inline std::string GetOSInfo() const { return m_osInfo; }
+    inline std::string GetGPUInfo() const { return m_gpuInfo; }
+    inline std::string GetDisplayInfo() const { return m_displayInfo; }
+
     inline long double GetMemorySize() const { return m_memorySize; }
+    inline long double GetMemoryTotalUsage() const { return m_memoryTotalUsage; }
+    inline long double GetVirtualMemorySize() const { return m_virtualMemory; }
     inline long double GetOBSAvgFrameTime() const { return m_obsAvgFrameTime; }
     inline long double GetSkippedFrameRate() const { return m_skippedFrameRate; }
     inline long double GetLaggedFrameRate() const { return m_laggedFrameRate; }
@@ -69,7 +83,6 @@ public:
     inline PCStatState GetSkippedFrameIconState() const { return m_skippedFrameIconState; }
     inline PCStatState GetLaggedFrameIconState() const { return m_laggedFrameIconState; }
 
-
     // Stream, Rec
     inline int GetStreamTotalFrame() const { return m_streamTotalFrame; }
     inline int GetStreamDroppedFrame() const { return m_streamDroppedFrame; }
@@ -78,6 +91,8 @@ public:
     inline long double GetStreamBitrate() const { return m_streamBitrate; }
     inline long double GetRecMegabytesSent() const { return m_recMegabytesSent; }
     inline long double GetRecBitrate() const { return m_recBitrate; }
+
+    void GetNetworkBandWidth(std::string& sentBits, std::string& recvBits);
 
 signals:
     void qsignalCheckDiskSpaceRemaining(uint64_t num_bytes);
@@ -94,21 +109,17 @@ signals:
     void qsignalNetworkError();
     void qsignalCPUError();
     void qsignalMemoryError();
-#pragma endregion public func
 
-#pragma region private func
 private:
-    const char* _GetCurrentOutputPath();
-    void        _UpdateStreamRecState(obs_output_t* output, bool rec);
-    void        _ChangeNetworkIconState(PCStatState state);
-    void        _ChangeCPUIconState(PCStatState state);
-    void        _ChangeDiskIconState(PCStatState state);
-    void        _ChangeMemoryIconState(PCStatState state);
-    void        _ChangeSkippedFrameIconState(PCStatState state);
-    void        _ChangeLaggedFrameIconState(PCStatState state);
-#pragma endregion private func
+    void _UpdateStreamRecState(obs_output_t* output, bool rec);
+    void _ChangeNetworkIconState(PCStatState state);
+    void _ChangeCPUIconState(PCStatState state);
+    void _ChangeDiskIconState(PCStatState state);
+    void _ChangeMemoryIconState(PCStatState state);
+    void _ChangeSkippedFrameIconState(PCStatState state);
+    void _ChangeLaggedFrameIconState(PCStatState state);
+    bool _GetPCInfomation();
 
-#pragma region private slot func
 private slots:
     void qslotUpdateNetworkState();
     void qslotUpdateCPUUsage();
@@ -118,57 +129,70 @@ private slots:
     void qslotUpdateSkippedFrame();
     void qslotUpdateLaggedFrame();
     void qslotUpdateStreamRecResource();
-#pragma endregion private slot func
 
-#pragma region public member var
-public:
-
-#pragma endregion public member var
-
-#pragma region private member var
 private:
-    AFBasicOutputHandler* m_outputHandler = nullptr;
+    AFBasicOutputHandler* m_pOutputHandler = nullptr;
 
-    QPointer<QTimer> m_CpuUsageTimer;
-    QPointer<QTimer> m_MemoryTimer;
-    QPointer<QTimer> m_DiskFullTimer;
+    QPointer<QTimer> m_cpuUsageTimer;
+    QPointer<QTimer> m_memoryTimer;
+    QPointer<QTimer> m_diskFullTimer;
+    //
+    os_cpu_usage_info_t* m_pCpuUsageInfo = nullptr;
+    
+#ifdef _WIN32
+    PDH_HQUERY _cpuQuery = nullptr;
+    PDH_HCOUNTER _cpuTotal = nullptr;
 
-    os_cpu_usage_info_t* m_cpuUsageInfo = nullptr;
+    PDH_HQUERY network_query = nullptr;
+    PDH_HCOUNTER recv_bytes = nullptr;
+    PDH_HCOUNTER sent_bytes = nullptr;
+#endif // _WIN32
 
+    std::string m_cpuInfo;
+    std::string m_osInfo;
+    std::string m_gpuInfo;
+    std::string m_displayInfo;
+    //
+    std::string network_info;
 
-    int         m_networkState = 0;
-    double      m_cpuUsage = 0;
-    double      m_curFPS = 0;
-    uint64_t    m_diskSize = 0;
-    uint32_t    m_totalEncoded = 0;
-    uint32_t    m_totalSkipped = 0;
-    uint32_t    m_totalRendered = 0;
-    uint32_t    m_totalLagged = 0;
+    int m_networkState = 0;
+    double m_cpuUsage = 0;
+    double m_cpuTotal = 0;
+           
+    double m_curFPS = 0;
+    double m_encoderFPS = 0;
+    uint64_t m_diskSize = 0;
+    uint32_t m_totalEncoded = 0;
+    uint32_t m_totalSkipped = 0;
+    uint32_t m_totalRendered = 0;
+    uint32_t m_totalLagged = 0;
     long double m_skippedFrameRate = 0;
     long double m_laggedFrameRate = 0;
     long double m_memorySize = 0;
+    long double m_memoryTotalUsage = 0;
+    long double m_virtualMemory = 0;
     long double m_obsAvgFrameTime = 0;
 
     // Stream, Rec
-    bool        m_disconnected = false;
-    bool        m_firstCongestionUpdate = false;
+    bool m_disconnected = false;
+    bool m_firstCongestionUpdate = false;
 
     std::vector<float> congestionArray;
 
-    int         m_streamFirstTotal = 0;
-    int         m_streamFirstDropped = 0;
-    int         m_streamTotalFrame = 0;
-    int         m_streamDroppedFrame = 0;
-    uint64_t    m_streamLastBytesSent = 0;
-    uint64_t    m_streamLastBytesSentTime = 0;
-    uint64_t    m_recLastBytesSent = 0;
-    uint64_t    m_recLastBytesSentTime = 0;
+    int m_streamFirstTotal = 0;
+    int m_streamFirstDropped = 0;
+    int m_streamTotalFrame = 0;
+    int m_streamDroppedFrame = 0;
+    uint64_t m_streamLastBytesSent = 0;
+    uint64_t m_streamLastBytesSentTime = 0;
+    uint64_t m_recLastBytesSent = 0;
+    uint64_t m_recLastBytesSentTime = 0;
     long double m_streamDroppedFrameRate = 0;
     long double m_streamMegabytesSent = 0;
     long double m_streamBitrate = 0;
     long double m_recMegabytesSent = 0;
     long double m_recBitrate = 0;
-    float       m_lastCongestion = 0.0f;
+    float m_lastCongestion = 0.0f;
 
     PCStatState m_networkIconState = PCStatState::None;
     PCStatState m_cpuIconState = PCStatState::None;
@@ -176,5 +200,12 @@ private:
     PCStatState m_memoryIconState = PCStatState::None;
     PCStatState m_skippedFrameIconState = PCStatState::None;
     PCStatState m_laggedFrameIconState = PCStatState::None;
-#pragma endregion private member var
+
+    uint64_t m_lastTotalRendered = 0;
+    uint64_t m_lastLaggedRendered = 0;
+    uint64_t m_lastUpdateTimeRendered = 0;
+
+    uint64_t m_lastTotalStream = 0;
+    uint64_t m_lastLaggedStream = 0;
+    uint64_t m_lastUpdateTimeStream = 0;
 };

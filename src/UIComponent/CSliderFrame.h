@@ -4,10 +4,12 @@
 #include "UIComponent/CMouseClickSlider.h"
 #include <QFrame>
 #include <QTimer>
+#include <QPointer>
+
+#define MIN_PEAK -60;
 
 class AFQSysVolumeSlider final : public AFQMouseClickSlider
 {
-#pragma region QT Field, CTOR/DTOR
 	Q_OBJECT
 
 public:
@@ -16,55 +18,46 @@ public:
 
 private slots:
 	void qslotUpdate();
-#pragma endregion QT Field, CTOR/DTOR
 
-#pragma region public func
 public:
 	void SetCurrentPeak(float curPeak);
 	void SetMuted(bool muted);
-	bool IsMuted() { return m_bMuted; }
-#pragma endregion public func
+	bool IsMuted() { return m_muted; }
 
-#pragma region protected func
 protected:
 	void paintEvent(QPaintEvent* event);
 	void showEvent(QShowEvent* event);
 	void hideEvent(QHideEvent* event);
-#pragma endregion protected func
 
-#pragma region private func, var
 private:
-	QPointer<QTimer> m_qTimer;
-	const float m_fMinPeak = -60.0;
-	float m_fMaxPeak = 0.f;
-	float m_fCurrentPeak = -60.0;
-	bool m_bMuted = false;
-#pragma endregion private func, var
+	QPointer<QTimer> m_timer;
+	const float m_minPeak = MIN_PEAK;
+	float m_maxPeak = 0.f;
+	float m_currentPeak = MIN_PEAK;
+	bool m_muted = false;
 };
 
 namespace Ui {
-class AFQSliderFrame;
+	class AFQSliderFrame;
 }
 
 class AFQSliderFrame : public QFrame
 {
-#pragma region QT Field
 	Q_OBJECT
 
-#pragma region class initializer, destructor
 public:
 	explicit AFQSliderFrame(QWidget* parent = nullptr);
 	~AFQSliderFrame();
-#pragma endregion class initializer, destructor
 
 signals:
 	void qsignalMouseEnterSlider();
 	void qsignalMouseLeave();
-	void qsignalVolumeChanged(int volume);
+	void qsignalVolumeChanged(float volume);
 	void qsignalMuteButtonClicked();
-#pragma endregion QT Field
 
-#pragma region public func
+private slots:
+	void qslotSliderValueChanged(int sliderValue);
+
 public:
 	void InitSliderFrame(const char* imagepath, bool buttonchecked = true, int sliderTotal = 100, int volume = 0);
 	int VolumeSize();
@@ -76,22 +69,17 @@ public:
 	bool ButtonIsChecked();
 	void BlockSliderSignal(bool block);
 	bool IsVolumeMuted();
-#pragma endregion public func
 
-#pragma region protected func
 protected:
 	bool event(QEvent* e) override;
-#pragma endregion protected func
+	bool eventFilter(QObject* obj, QEvent* event);
 
-#pragma region private func
 private:
+	void _SetSliderStateProperty(QString state);
 	void _ApplyShadowEffect();
-#pragma endregion private func
 
-#pragma region private var
 private:
     Ui::AFQSliderFrame *ui;
-#pragma endregion private var
 };
 
 #endif // CSLIDERFRAME_H

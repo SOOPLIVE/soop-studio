@@ -1,23 +1,35 @@
 ﻿#include "CSceneSelectDialog.h"
 
-#include "qt-wrapper.h"
+#include "qt-wrappers.hpp"
+
 #include "CoreModel/Scene/CSceneContext.h"
 #include "CoreModel/Source/CSource.h"
 
+#include "MainFrame/CMainFrame.h"
+
 AFQSceneSelectDialog::AFQSceneSelectDialog(QWidget* parent) : 
-	AFQRoundedDialogBase(parent),
+    AFTTopBaseDialog(parent),
 	ui(new Ui::AFQSceneSelectDialog)
 {
 	ui->setupUi(this);
 
+    ui->titleFrame->setProperty("MoveInAllArea", true);
+
+    QPushButton* okButton = ui->buttonBox->button(QDialogButtonBox::Ok);
+    okButton->setProperty("pushButtonTheme", "type2");
+    PolishStyleSheet(okButton);
+
+    QPushButton* cancelButton = ui->buttonBox->button(QDialogButtonBox::Cancel);
+    cancelButton->setProperty("pushButtonTheme", "type4");
+    PolishStyleSheet(cancelButton);
+
+
     NoFocusListTempDelegate* delegate = new NoFocusListTempDelegate(this);
     ui->sceneListWidget->setItemDelegate(delegate);
 
-	AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
+	OBSScene curScene = SCENE_CONTEXT.GetCurrentScene();
 
-	OBSScene curScene = sceneContext.GetCurrOBSScene();
-
-	SceneItemVector& sceneItemVector = sceneContext.GetSceneItemVector();
+	SceneItemVector& sceneItemVector = SCENE_CONTEXT.GetSceneItemVector();
 
     int  sceneCount = 0;
     auto iter = sceneItemVector.begin();
@@ -45,7 +57,6 @@ AFQSceneSelectDialog::AFQSceneSelectDialog(QWidget* parent) :
 
     connect(ui->buttonBox, &QDialogButtonBox::clicked, 
             this, &AFQSceneSelectDialog::qSlotButtonBoxClicked);
-
 }
 
 AFQSceneSelectDialog::~AFQSceneSelectDialog()

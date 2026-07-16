@@ -5,42 +5,18 @@
 #include <QMap>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QCheckBox>
 
 #include "MainFrame/CMainBaseWidget.h"
+#include "UIComponent/CLengthAwareCustomLineEdit.h"
+
+#define CUSTOMBROWSERINFO AFQCustomBrowserCollection::CustomBrowserInfo 
+#define CUSTOM_MAX_COUNT 20
 
 namespace Ui {
 class AFQCustomBrowserCollection;
 }
 
-class AFQRememberLineEdit : public QLineEdit {
-
-#pragma region QT Field
-    Q_OBJECT
-public:
-    AFQRememberLineEdit(QWidget* parent = nullptr) : QLineEdit(parent) {}
-
-#pragma endregion QT Field
-
-#pragma region protected func
-protected:
-    void focusInEvent(QFocusEvent* event) override {
-        previousText = this->text();
-        QLineEdit::focusInEvent(event);
-    }
-
-    void focusOutEvent(QFocusEvent* event) override {
-        if (this->text().isEmpty() && !previousText.isEmpty()) 
-            this->setText(previousText);
-
-        QLineEdit::focusOutEvent(event);
-    }
-#pragma endregion protected func
-
-#pragma region private member var
-private:
-    QString previousText;
-#pragma endregion private member var
-};
 
 class AFQCustomList : public QWidget {
 
@@ -61,32 +37,36 @@ signals:
 #pragma region public func
 public:
     void CustomListInit(bool newList);
-    void InsertCustomList(QString name, QString path, QString uuid);
+    void InsertCustomList(QString name, QString path, QString uuid, bool isOpen);
 
     void SetDeleteButtonEnable(bool enable);
-    void FirstCreated() { m_bNew = true; };
+    void FirstCreated() { m_new = true; };
 
     QString GetName();
     QString GetUrl();
-    QString GetUuid() { return m_sUuid; };
+    bool    IsOpen();
+    QString GetUuid() { return m_uuid; };
+
+    QCheckBox* getCheckBox() { return m_showPopupCheckBox; };
 
 #pragma endregion public func
 
 
 #pragma region private member var
 private:
-    AFQRememberLineEdit*   m_qNameLineEdit = nullptr;
-    AFQRememberLineEdit*   m_qUrlLineEdit = nullptr;
-    QPushButton*           m_qClearButton = nullptr;
+    AFQBasicLineEdit*   m_pNameLineEdit = nullptr;
+    AFQBasicLineEdit*   m_pUrlLineEdit = nullptr;
+    QPushButton*           m_pClearButton = nullptr;
+    QCheckBox*          m_showPopupCheckBox = nullptr;
 
-    QString m_sUuid;
+    QString m_uuid;
     
-    bool m_bNew = false;
+    bool m_new = false;
 #pragma endregion private member var
 };
 
 
-class AFQCustomBrowserCollection : public AFCQMainBaseWidget
+class AFQCustomBrowserCollection : public QWidget
 {
 #pragma region QT Field
     Q_OBJECT
@@ -104,10 +84,12 @@ public:
         int y = 0;
         int width = 0;
         int height = 0;
-        bool newCustom = false;
+        bool isDock = true;
+        bool isOpen = true;
     };
 
 public slots:
+    void qslotShowCheckChanged(bool checked);
 
 private slots:
     void qslotDeleteCustomBrowser();
@@ -115,6 +97,7 @@ private slots:
     void qslotApplyTriggered();
 
 signals:
+    void qsignalCloseTriggered(int type);
 
 #pragma endregion QT Field
 
@@ -122,32 +105,32 @@ signals:
 public:
     void CustomBrowserCollectionInit(
         QVector<AFQCustomBrowserCollection::CustomBrowserInfo> vec);
-    void ReloadCustomBrowserList(
-        QVector<AFQCustomBrowserCollection::CustomBrowserInfo> vec);
 
 #pragma endregion public func
 
 #pragma region protected func
 protected:
+    void closeEvent(QCloseEvent* event) override;
 #pragma endregion protected func
 
 #pragma region private func
 private:
     void _AddNewCustomBrowser();
-    void _LoadCustomBrowser(QString name, QString path, QString uuid);
+    void _LoadCustomBrowser(QString name, QString path, QString uuid, bool isOpen);
     void _LoadCustomBrowserList(
         QVector<AFQCustomBrowserCollection::CustomBrowserInfo> vec);
     QList<QString> _SaveCustomBrowserList();
+    void _ConnectSignal();
 #pragma endregion private func
 
 #pragma region private member var
 private:
     Ui::AFQCustomBrowserCollection* ui;
 
-    AFQCustomList* m_qNewLineWidget = nullptr;
-    QVector<AFQCustomBrowserCollection::CustomBrowserInfo> m_qInfoVec;
+    AFQCustomList* m_pNewLineWidget = nullptr;
+    QVector<AFQCustomBrowserCollection::CustomBrowserInfo> m_infoVec;
 
-    int m_LoadedCustomBrowser = 0;
+    int m_loadedCustomBrowser = 0;
 
 #pragma endregion private member var
 };

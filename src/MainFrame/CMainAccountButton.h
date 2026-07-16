@@ -2,12 +2,13 @@
 #define AFMAINACCOUNTBUTTON_H
 
 #include <QPushButton>
-#include "CoreModel/Auth/CAuthManager.h"
 
 namespace Ui {
 class AFMainAccountButton;
 }
 
+class AFChannelData;
+//
 class AFMainAccountButton : public QPushButton
 {
     Q_OBJECT
@@ -15,6 +16,13 @@ class AFMainAccountButton : public QPushButton
 public slots:
     void qslotQuitStream();
     void qslotStartStream();
+    void qslotHoverPlatformImage(bool hover);
+    void qslotPressedPlatformImage(bool pressed);
+
+signals:
+    void qsignalAccountButtonMouseMove();
+    void qsignalAccountButtonHover(bool enter);
+    void qsignalAccountButtonPressed(bool pressed);
 
 public:
     enum ChannelState {
@@ -29,25 +37,39 @@ public:
     ~AFMainAccountButton();
 
     void SetChannelData(AFChannelData* data);
-    AFChannelData* GetChannelData() { return m_dChannelData; };
+    AFChannelData* GetChannelData() { return m_pChannelData; };
 
     void SetStreaming(bool streaming, bool setLive = true, bool disable = false);
 
-    bool IsMainAccount() { return m_bIsMainAccount; };
-    void SetMainAccount() { m_bIsMainAccount = true; };
+    bool IsMainAccount() { return m_isMainAccount; };
+    void SetMainAccount() { m_isMainAccount = true; };
 
-    bool GetCurrentState() { return m_eCurrentState; };
-    void SetCurrentState(ChannelState state) { m_eCurrentState = state; };
+    bool GetCurrentState() { return m_currentState; };
+    void SetCurrentState(ChannelState state) { m_currentState = state; };
 
-    void SetPlatformImage(std::string platform, bool disable = false);
+    std::string GetCurrentPlatform() { return m_platformStr; };
+
+    void TransparentPlatformImage(bool transparent);
+    void SetPlatform(std::string platform, bool hover = true);
+    void SetImage(QPixmap* image);
+    QSize SetFixedSize(QSize size);
+    void SetChecked(bool checked);
+    void checkChecked();
+
+    bool IsLive();
+protected:
+    bool event(QEvent* event) override;
+
 private:
-
-
     Ui::AFMainAccountButton *ui;
 
-    AFChannelData* m_dChannelData = nullptr;
-    bool m_bIsMainAccount = false;
-    ChannelState m_eCurrentState = ChannelState::Disable;
+    AFChannelData* m_pChannelData = nullptr;
+    bool m_isMainAccount = false;
+    ChannelState m_currentState = ChannelState::Disable;
+    std::string m_platformStr;
+
+    bool m_isTransparent = false;
+    bool m_isDisable = false;
 };
 
 #endif // AFMAINACCOUNTBUTTON_H

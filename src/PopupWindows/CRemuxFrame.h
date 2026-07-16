@@ -11,7 +11,8 @@
 
 #include "media-io/media-remux.h"
 #include "util/threading.h"
-#include "UIComponent/CRoundedDialogBase.h"
+
+#include "UIComponent/CTopBaseWindow.h"
 
 class AFRemuxQueueModel;
 class AFRemuxWorker;
@@ -27,7 +28,7 @@ enum RemuxEntryState {
 };
 Q_DECLARE_METATYPE(RemuxEntryState);
 
-class AFQRemux : public AFQRoundedDialogBase
+class AFQRemux : public AFTTopBaseDialog
 {
 	Q_OBJECT
 
@@ -95,7 +96,7 @@ private:
 	bool							m_autoRemux = false;
 	QString							m_autoRemuxFile;
 
-	using job_t = std::shared_ptr<struct media_remux_job>;
+	using job_t = std::shared_ptr<struct media_remux_job>;  // type define convention ??
 
 #pragma endregion private var
 };

@@ -3,8 +3,9 @@
 
 #include <obs.hpp>
 
-#include "qt-wrapper.h"
+#include "qt-wrappers.hpp"
 
+#include "CoreModel/Source/CSource.h"
 
 void AFIconContext::InitContext()
 {
@@ -16,187 +17,162 @@ QIcon AFIconContext::GetSourceIcon(const char* id)
 	obs_icon_type type = obs_source_get_icon_type(id);
 	switch (type) {
 	case OBS_ICON_TYPE_GAME_CAPTURE:
-		return _GetGameCapIcon();
+		return _GetSourceIcon("game_capture");
 	case OBS_ICON_TYPE_DESKTOP_CAPTURE:
-		return _GetDesktopCapIcon();
+		return _GetSourceIcon("monitor_capture");
 	case OBS_ICON_TYPE_WINDOW_CAPTURE:
-		return _GetWindowCapIcon();
+	{
+		QString strId = id;
+		if (0 == strId.compare("window_area_capture"))
+			return _GetSourceIcon("window_area_capture");
+		else
+			return _GetSourceIcon("window_capture");
+	}		
 	case OBS_ICON_TYPE_CAMERA:
-		return _GetVideoCapIcon();
+		return _GetSourceIcon("dshow_input");
 	case OBS_ICON_TYPE_AUDIO_INPUT:
-		return _GetAudioInputCaptureIcon();
+		return _GetSourceIcon("wasapi_input_capture");
 	case OBS_ICON_TYPE_AUDIO_OUTPUT:
-		return _GetAudioOutputCaptureIcon();
+		return _GetSourceIcon("wasapi_output_capture");
 	case OBS_ICON_TYPE_PROCESS_AUDIO_OUTPUT:
-		return _GetAudioProcessCaptureIcon();
+		return _GetSourceIcon("wasapi_process_output_capture");
 	case OBS_ICON_TYPE_BROWSER:
-		return _GetBrowserCaptureIcon();
+	{
+		QString strId = id;
+		if(0 == strId.compare("browser_source"))
+			return _GetSourceIcon("browser_source");
+		else if (AFSourceUtil::IsSoopKBOSource(id))
+			return _GetSourceIcon("soop_kbo_graphic_source");
+		else if (AFSourceUtil::IsSoopFootballSource(id))
+			return _GetSourceIcon("soop_football_graphic_source");
+		else 
+			return _GetSourceIcon(strId);
+	}
 	case OBS_ICON_TYPE_IMAGE:
-		return _GetImageSourceIcon();
+		return _GetSourceIcon("image_source");
 	case OBS_ICON_TYPE_SLIDESHOW:
-		return _GetImageSliderIcon();
+		return _GetSourceIcon("slideshow");
 	case OBS_ICON_TYPE_MEDIA:
-		return _GetMediaSourceIcon();
+	{
+		QString strId = id;
+		if (0 == strId.compare("ffmpeg_source"))
+			return _GetSourceIcon("ffmpeg_source");
+		else
+			return _GetSourceIcon(strId);
+	}
+		return _GetSourceIcon("game_capture");
 	case OBS_ICON_TYPE_TEXT:
-		return _GetTextSourceIcon();
+		return _GetSourceIcon("text_gdiplus");
 	case OBS_ICON_TYPE_COLOR:
-		return _GetColorPaletteIcon();
+		return _GetSourceIcon("color_source");
+	case SOOP_ICON_TYPE_SPOUT2:
+		return _GetSourceIcon("soop_spout2");
 
 	default:
-		break;
+		return _GetSourceIcon("default_source");
 	}
 
-	return QIcon();
+	return _GetSourceIcon("default_source");
 }
 
 void AFIconContext::_LoadStudioIcon()
 {
 	// Source List View
-	_LoadGameCaptureIcon();
-	_LoadVideoCaptureIcon();
-	_LoadDesktopCaptureIcon();
-	_LoadWindowCaptureIcon();
-	_LoadAudioInputCaptureIcon();
-	_LoadAudioOutputCaptureIcon();
-	_LoadAudioProcessCaptureIcon();
-	_LoadBrowserCaptureIcon();
-	_LoadImageSourceIcon();
-	_LoadImageSliderIcon();
-	_LoadMediaSourceIcon();
-	_LoadTextSourceIcon();
-	_LoadColorPaletteIcon();
+	_LoadSourceIcon("game_capture");
+	_LoadSourceIcon("monitor_capture");
+	_LoadSourceIcon("window_capture");
+	_LoadSourceIcon("window_area_capture");
+	_LoadSourceIcon("dshow_input");
+	_LoadSourceIcon("wasapi_input_capture");
+	_LoadSourceIcon("wasapi_output_capture");
+	_LoadSourceIcon("wasapi_process_output_capture");
+	_LoadSourceIcon("browser_source");
+	_LoadSourceIcon("image_source");
+	_LoadSourceIcon("slideshow");
+	_LoadSourceIcon("ffmpeg_source");
+	_LoadSourceIcon("ffmpeg_list_source");
+	_LoadSourceIcon("text_gdiplus");
+	_LoadSourceIcon("color_source");
+
+	_LoadSourceIcon("soop_spout2");
+	_LoadSourceIcon("soop_directbroad_source");
+	_LoadSourceIcon("soop_tv_cable_source");
+	_LoadSourceIcon("soop_anivod_source");
+	_LoadSourceIcon("soop_sportvod_source");
+	_LoadSourceIcon("soop_dramavod_source");
+	_LoadSourceIcon("soop_movievod_source");
+
+	_LoadSourceIcon("soop_chat_source_chat");
+	_LoadSourceIcon("soop_chat_source_notice");
+	_LoadSourceIcon("soop_chat_source_goal");
+	_LoadSourceIcon("soop_chat_source_banner");
+	_LoadSourceIcon("soop_chat_source_subtitle");
+	_LoadSourceIcon("soop_chat_source_c_mission");
+	_LoadSourceIcon("soop_chat_source_timer");
+	_LoadSourceIcon("soop_chat_source_score");
+	_LoadSourceIcon("soop_chat_source_mood_check");
+	_LoadSourceIcon("soop_kbo_graphic_source");
+	_LoadSourceIcon("soop_football_graphic_source");
+	_LoadSourceIcon("soop_commerce_source_goal");
+	_LoadSourceIcon("soop_commerce_source_rank");
+	_LoadSourceIcon("soop_videoballoon_source");
+	_LoadSourceIcon("soop_particle_effect_source");
+	_LoadSourceIcon("soop_chat_source_anmSubtitle");
+
+	_LoadSourceIcon("painter_source");
+	_LoadSourceIcon("soop_aimanager_source");
+	_LoadSourceIcon("default_source");
+
 	_LoadSceneIcon();
 	_LoadGroupIcon();
 
 	_LoadHotkeyConflictIcon();
 }
 
-void AFIconContext::_LoadGameCaptureIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_game_capture.svg", gameCapIcon);
-}
+void AFIconContext::_LoadSourceIcon(QString id)
+{
+	QString path = QString("assets/scene-source-block/source-icon/ic_%1.svg")
+						   .arg(id);
 
-void AFIconContext::_LoadVideoCaptureIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_video_capture.svg", cameraIcon);
-}
-
-void AFIconContext::_LoadDesktopCaptureIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_desktop_capture.svg", desktopCapIcon);
-}
-
-void AFIconContext::_LoadWindowCaptureIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_window_capture.svg", windowCapIcon);
-}
-
-void AFIconContext::_LoadAudioInputCaptureIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_audio_input_capture.svg", audioInputIcon);
-}
-
-void AFIconContext::_LoadAudioOutputCaptureIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_audio_output_capture.svg", audioOutputIcon);
-}
-
-void AFIconContext::_LoadAudioProcessCaptureIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_audio_process_capture.svg", audioProcessOutputIcon);
-}
-
-void AFIconContext::_LoadBrowserCaptureIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_browser_capture.svg", browserIcon);
-}
-
-void AFIconContext::_LoadImageSourceIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_image_source.svg", imageIcon);
-}
-
-void AFIconContext::_LoadImageSliderIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_image_slider.svg", slideshowIcon);
-}
-
-void AFIconContext::_LoadMediaSourceIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_media_source.svg", mediaIcon);
-}
-
-void AFIconContext::_LoadTextSourceIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_text_source.svg", textIcon);
-}
-
-void AFIconContext::_LoadColorPaletteIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_color_palette.svg", colorIcon);
+	QIcon icon;
+	LoadIconFromABSPath(path.toStdString().c_str(), icon);
+	m_sourceIcons[id] = icon;
 }
 
 void AFIconContext::_LoadSceneIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_scene.svg", sceneIcon);
+    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_scene.svg", m_sceneIcon);
 }
 
 void AFIconContext::_LoadGroupIcon() {
-    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_group.svg", groupIcon);
+    LoadIconFromABSPath("assets/scene-source-block/source-icon/ic_group.svg", m_groupIcon);
 }
 
 void AFIconContext::_LoadHotkeyConflictIcon() {
-	LoadIconFromABSPath("assets/setting-dialog/Hotkey/button_conflict_hotkey.svg", hotkeyConflictIcon);
+	LoadIconFromABSPath("assets/setting-dialog/Hotkey/button_conflict_hotkey.svg", m_hotkeyConflictIcon);
 }
 
-QIcon AFIconContext::_GetGameCapIcon() const
-{
-	return gameCapIcon;
+QIcon AFIconContext::_GetSourceIcon(QString id) const 
+{	
+	auto it = m_sourceIcons.find(id);
+	if (it == m_sourceIcons.end()) {
+		it = m_sourceIcons.find("default_source");
+		return (*it).second;
+	}
+
+	return (*it).second;
 }
-QIcon AFIconContext::_GetVideoCapIcon() const
-{
-	return cameraIcon;
-}
-QIcon AFIconContext::_GetDesktopCapIcon() const
-{
-	return desktopCapIcon;
-}
-QIcon AFIconContext::_GetWindowCapIcon() const
-{
-	return windowCapIcon;
-}
-QIcon AFIconContext::_GetAudioInputCaptureIcon() const
-{
-	return audioInputIcon;
-}
-QIcon AFIconContext::_GetAudioOutputCaptureIcon() const
-{
-	return audioOutputIcon;
-}
-QIcon AFIconContext::_GetAudioProcessCaptureIcon() const
-{
-	return audioProcessOutputIcon;
-}
-QIcon AFIconContext::_GetBrowserCaptureIcon() const
-{
-	return browserIcon;
-}
-QIcon AFIconContext::_GetImageSourceIcon() const
-{
-	return imageIcon;
-}
-QIcon AFIconContext::_GetImageSliderIcon() const
-{
-	return slideshowIcon;
-}
-QIcon AFIconContext::_GetMediaSourceIcon() const
-{
-	return mediaIcon;
-}
-QIcon AFIconContext::_GetTextSourceIcon() const
-{
-	return textIcon;
-}
-QIcon AFIconContext::_GetColorPaletteIcon() const
-{
-	return colorIcon;
-}
+
 QIcon AFIconContext::GetSceneIcon() const
 {
-	return sceneIcon;
+	return m_sceneIcon;
 }
+
 QIcon AFIconContext::GetGroupIcon() const
 {
-	return groupIcon;
+	return m_groupIcon;
 }
 
 QIcon AFIconContext::GetHotkeyConflictIcon() const
 {
-	return hotkeyConflictIcon;
+	return m_hotkeyConflictIcon;
 }

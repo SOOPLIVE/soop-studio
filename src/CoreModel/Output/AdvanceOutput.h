@@ -7,13 +7,10 @@
 //
 class AFAdvanceOutput : public AFBasicOutputHandler
 {
-#pragma region QT Field, CTOR/DTOR
 public:
     AFAdvanceOutput(AFMainFrame* main);
     ~AFAdvanceOutput();
-#pragma endregion QT Field, CTOR/DTOR
 
-#pragma region public func
 public:
     void UpdateStreamSettings();
     void UpdateRecordingSettings();
@@ -39,29 +36,18 @@ public:
     virtual bool RecordingActive() const override;
     virtual bool ReplayBufferActive() const override;
     bool allowsMultiTrack();
-#pragma endregion public func
 
-#pragma region private func
 private:
-#pragma endregion private func
+    OBSEncoder m_streamAudioEnc;
+    OBSEncoder m_streamArchiveEnc;
+    OBSEncoder m_streamTrack[MAX_AUDIO_MIXES] = {nullptr,};
+    OBSEncoder m_recordTrack[MAX_AUDIO_MIXES] = {nullptr,};
+    OBSEncoder m_videoStreaming;
+    OBSEncoder m_videoRecording;
 
-#pragma region public member var
-#pragma endregion public member var
-
-#pragma region private member var
-    OBSEncoder streamAudioEnc;
-    OBSEncoder streamArchiveEnc;
-    OBSEncoder streamTrack[MAX_AUDIO_MIXES];
-    OBSEncoder recordTrack[MAX_AUDIO_MIXES];
-    OBSEncoder videoStreaming;
-    OBSEncoder videoRecording;
-
-    bool ffmpegOutput = false;
-    bool ffmpegRecording = false;
-    bool useStreamEncoder = false;
-    bool useStreamAudioEncoder = false;
-    bool usesBitrate = false;
-#pragma endregion private member var
+    bool m_ffmpegOutput = false;
+    bool m_ffmpegRecording = false;
+    bool m_useStreamEncoder = false;
+    bool m_useStreamAudioEncoder = false;
+    bool m_usesBitrate = false;
 };
-
-#include "COutput.inl"

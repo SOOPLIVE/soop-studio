@@ -2,141 +2,141 @@
 #include "Application/CApplication.h"
 #include "UIComponent/CItemWidgetHelper.h"
 #include "CAudioAdvControl.h"
-#include "qt-wrapper.h"
-#include "CoreModel/Config/CConfigManager.h"
-#include "CoreModel/Locale/CLocaleTextManager.h"
 #include "ui_audio-adv-setting-area.h"
 
-#pragma region class initializer, destructor
+#include "MainFrame/CMainFrame.h"
+
 AFQAudioAdvSettingDialog::AFQAudioAdvSettingDialog(QWidget* parent)
-	: AFQRoundedDialogBase(parent),
+	: AFTTopBaseDialog(parent),
 	ui(new Ui::AFQAudioAdvSettingDialog),
-	m_sourceAddedSignal(obs_get_signal_handler(), "source_activate",
-	_OBSSourceAdded, this),
-	m_sourceRemovedSignal(obs_get_signal_handler(), "source_deactivate",
-	_OBSSourceRemoved, this),
-	m_bShowInactive(false)
+	showInactive(false)
 {
 	ui->setupUi(this);
-	setAttribute(Qt::WA_DeleteOnClose, true);
-	
-	_ChangeLanguage();
 
-	VolumeType volType = (VolumeType)config_get_int(
-		AFConfigManager::GetSingletonInstance().GetGlobal(), "BasicWindow", "AdvAudioVolumeType");
+	setAttribute(Qt::WA_DeleteOnClose, true);
+
+	signal_handler_t* sh = obs_get_signal_handler();
+	sigs.emplace_back(sh, "source_audio_activate", OBSSourceAdded, this);
+	sigs.emplace_back(sh, "source_audio_deactivate", OBSSourceRemoved, this);
+	sigs.emplace_back(sh, "source_activate", OBSSourceActivated, this);
+	sigs.emplace_back(sh, "source_deactivate", OBSSourceRemoved, this);
+    
+#ifdef __APPLE__
+    setWindowTitle(QTStr("Basic.AdvAudio"));
+    ui->titleFrame->hide();
+#endif
+	
+	VolumeType volType = (VolumeType)config_get_int(USERCONFIG, "BasicWindow", "AdvAudioVolumeType");
 
 	if (volType == VolumeType::Percent)
-		ui->checkBox_UsePercent->setChecked(true);
+		ui->usePercent->setChecked(true);
 
-	connect(ui->checkBox_UsePercent, &QCheckBox::clicked, this, &AFQAudioAdvSettingDialog::qslotOnUsePercentToggled);
-	connect(ui->checkBox_ShowActiveOnly, &QCheckBox::clicked, this, &AFQAudioAdvSettingDialog::qslotOnActiveOnlyToggled);
-	connect(ui->pushButton_Close, &QPushButton::clicked, this, &AFQAudioAdvSettingDialog::qslotCloseButtonClicked);
+	connect(ui->usePercent, &QCheckBox::clicked, 
+		this, &AFQAudioAdvSettingDialog::OnUsePercentToggled);
+	connect(ui->activeOnly, &QCheckBox::clicked, 
+		this, &AFQAudioAdvSettingDialog::OnActiveOnlyToggled);
+	connect(ui->closeButton, &QPushButton::clicked, 
+		this, &AFQAudioAdvSettingDialog::CloseButtonClicked);
 
 	installEventFilter(CreateShortcutFilter());
 
 	/* enum user scene/sources */
-	obs_enum_sources(_EnumSources, this);
+	obs_enum_sources(EnumSources, this);
 }
 
 AFQAudioAdvSettingDialog::~AFQAudioAdvSettingDialog()
 {
-	for (size_t i = 0; i < m_vControls.size(); ++i)
-		delete m_vControls[i];
+	for(auto control : controls)
+		delete control;
 
-	App()->GetMainView()->qslotSaveProject();
-}
-#pragma endregion class initializer, destructor
-
-#pragma region private func
-void AFQAudioAdvSettingDialog::_ChangeLanguage()
-{
-	QList<QLabel*> labelList = findChildren<QLabel*>();
-	QList<QCheckBox*> checkboxList = findChildren<QCheckBox*>();
-
-	foreach(QLabel * label, labelList)
-	{
-		label->setText(QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str(label->text().toUtf8().constData())));
-	}
-
-	foreach(QCheckBox * checkbox, checkboxList)
-	{
-		checkbox->setText(QT_UTF8(AFLocaleTextManager::GetSingletonInstance().Str(checkbox->text().toUtf8().constData())));
-	}
+	MAINFRAME->qslotSaveProject();
 }
 
-inline void AFQAudioAdvSettingDialog::_AddAudioSource(obs_source_t* source)
+inline void AFQAudioAdvSettingDialog::AddAudioSource(obs_source_t* source)
 {
-	for (size_t i = 0; i < m_vControls.size(); i++) {
-		if (m_vControls[i]->GetSource() == source)
+	for(auto control : controls) {
+		if (control->GetSource() == source)
 			return;
 	}
 
-	AFQAdvAudioCtrl* control = new AFQAdvAudioCtrl(ui->gridLayout_AdvSettingArea, source);
+	AFQAdvAudioCtrl* control = new AFQAdvAudioCtrl(ui->mainLayout, source);
 
-	InsertQObjectByName(m_vControls, control);
+#pragma region _SOOP_BREAKTIME
+	auto channel = obs_get_output_source_channel(source);
+	if(channel == 7) // BreakTime BGM
+		controls.insert(controls.begin(), control); // Must Front Add
+	else
+		InsertQObjectByName(controls, control); // Sort Control  
+#pragma endregion
 
-	for (auto control : m_vControls) {
-		control->ShowAudioControl(ui->gridLayout_AdvSettingArea);
-	}
+	for (auto control : controls)
+		control->ShowAudioControl(ui->mainLayout);
 }
 
-bool AFQAudioAdvSettingDialog::_EnumSources(void* param, obs_source_t* source)
+bool AFQAudioAdvSettingDialog::EnumSources(void* param, obs_source_t* source)
 {
 	AFQAudioAdvSettingDialog* dialog = reinterpret_cast<AFQAudioAdvSettingDialog*>(param);
 	uint32_t flags = obs_source_get_output_flags(source);
 
 	if ((flags & OBS_SOURCE_AUDIO) != 0 &&
-		(dialog->m_bShowInactive || obs_source_active(source)))
-		dialog->_AddAudioSource(source);
+		(dialog->showInactive || (obs_source_active(source) && obs_source_audio_active(source))))
+		dialog->AddAudioSource(source);
 
 	return true;
 }
 
-void AFQAudioAdvSettingDialog::_OBSSourceAdded(void* param, calldata_t* calldata)
+void AFQAudioAdvSettingDialog::OBSSourceAdded(void* param, calldata_t* calldata)
 {
 	OBSSource source((obs_source_t*)calldata_ptr(calldata, "source"));
 
 	QMetaObject::invokeMethod(reinterpret_cast<AFQAudioAdvSettingDialog*>(param),
-		"SourceAdded", Q_ARG(OBSSource, source));
+							  "SourceAdded", Q_ARG(OBSSource, source));
 }
 
-void AFQAudioAdvSettingDialog::_OBSSourceRemoved(void* param, calldata_t* calldata)
+void AFQAudioAdvSettingDialog::OBSSourceRemoved(void* param, calldata_t* calldata)
 {
 	OBSSource source((obs_source_t*)calldata_ptr(calldata, "source"));
 
 	QMetaObject::invokeMethod(reinterpret_cast<AFQAudioAdvSettingDialog*>(param),
-		"SourceRemoved", Q_ARG(OBSSource, source));
+							  "SourceRemoved", Q_ARG(OBSSource, source));
 }
-#pragma endregion private func
 
-#pragma region QT Field
-void AFQAudioAdvSettingDialog::qslotSourceAdded(OBSSource source)
+void AFQAudioAdvSettingDialog::OBSSourceActivated(void* param, calldata_t* calldata)
+{
+	OBSSource source((obs_source_t*)calldata_ptr(calldata, "source"));
+
+	if(obs_source_audio_active(source))
+		QMetaObject::invokeMethod(reinterpret_cast<AFQAudioAdvSettingDialog*>(param),
+							      "SourceAdded", Q_ARG(OBSSource, source));
+}
+
+void AFQAudioAdvSettingDialog::SourceAdded(OBSSource source)
 {
 	uint32_t flags = obs_source_get_output_flags(source);
 
 	if ((flags & OBS_SOURCE_AUDIO) == 0)
 		return;
 
-	_AddAudioSource(source);
+	AddAudioSource(source);
 }
 
-void AFQAudioAdvSettingDialog::qslotSourceRemoved(OBSSource source)
+void AFQAudioAdvSettingDialog::SourceRemoved(OBSSource source)
 {
 	uint32_t flags = obs_source_get_output_flags(source);
 
 	if ((flags & OBS_SOURCE_AUDIO) == 0)
 		return;
 
-	for (size_t i = 0; i < m_vControls.size(); i++) {
-		if (m_vControls[i]->GetSource() == source) {
-			delete m_vControls[i];
-			m_vControls.erase(m_vControls.begin() + i);
+	for (size_t i = 0; i < controls.size(); i++) {
+		if (controls[i]->GetSource() == source) {
+			delete controls[i];
+			controls.erase(controls.begin() + i);
 			break;
 		}
 	}
 }
 
-void AFQAudioAdvSettingDialog::qslotOnUsePercentToggled(bool checked)
+void AFQAudioAdvSettingDialog::OnUsePercentToggled(bool checked)
 {
 	VolumeType type;
 
@@ -145,61 +145,66 @@ void AFQAudioAdvSettingDialog::qslotOnUsePercentToggled(bool checked)
 	else
 		type = VolumeType::dB;
 
-	for (size_t i = 0; i < m_vControls.size(); i++)
-		m_vControls[i]->SetVolumeWidget(type);
+	for(auto contrl : controls)
+		contrl->SetVolumeWidget(type);
 
-	config_set_int(AFConfigManager::GetSingletonInstance().GetGlobal(), "BasicWindow", "AdvAudioVolumeType",
-		(int)type);
+	config_set_int(USERCONFIG, "BasicWindow", "AdvAudioVolumeType", (int)type);
 }
 
-void AFQAudioAdvSettingDialog::qslotOnActiveOnlyToggled(bool checked)
+void AFQAudioAdvSettingDialog::OnActiveOnlyToggled(bool checked)
 {
 	SetShowInactive(!checked);
 }
 
-void AFQAudioAdvSettingDialog::qslotCloseButtonClicked()
+void AFQAudioAdvSettingDialog::CloseButtonClicked()
 {
 	close();
 }
-#pragma endregion QT Field
 
-#pragma region public func
 void AFQAudioAdvSettingDialog::SetShowInactive(bool show)
 {
-	if (m_bShowInactive == show)
+	if (showInactive == show)
 		return;
 
-	m_bShowInactive = show;
+	showInactive = show;
 
-	m_sourceAddedSignal.Disconnect();
-	m_sourceRemovedSignal.Disconnect();
+	sigs.clear();
 
-	if (m_bShowInactive) {
-		m_sourceAddedSignal.Connect(obs_get_signal_handler(),
-			"source_create", _OBSSourceAdded,
-			this);
-		m_sourceRemovedSignal.Connect(obs_get_signal_handler(),
-			"source_remove", _OBSSourceRemoved,
-			this);
+	signal_handler_t* sh = obs_get_signal_handler();
+	if (showInactive) {
+		sigs.emplace_back(sh, "source_create", OBSSourceAdded, this);
+		sigs.emplace_back(sh, "source_remove", OBSSourceRemoved, this);
 
-		obs_enum_sources(_EnumSources, this);
+		obs_enum_sources(EnumSources, this);
+
+		//SetIconsVisible(showInactive);
 	}
 	else {
-		m_sourceAddedSignal.Connect(obs_get_signal_handler(),
-			"source_activate", _OBSSourceAdded,
-			this);
-		m_sourceRemovedSignal.Connect(obs_get_signal_handler(),
-			"source_deactivate",
-			_OBSSourceRemoved, this);
+		sigs.emplace_back(sh, "source_audio_activate", OBSSourceAdded, this);
+		sigs.emplace_back(sh, "source_audio_deactivate", OBSSourceRemoved, this);
+		sigs.emplace_back(sh, "source_activate", OBSSourceActivated, this);
+		sigs.emplace_back(sh, "source_deactivate", OBSSourceRemoved, this);
 
-		for (size_t i = 0; i < m_vControls.size(); i++) {
-			const auto source = m_vControls[i]->GetSource();
+		for (size_t i = 0; i < controls.size(); i++) {
+			const auto source = controls[i]->GetSource();
 			if (!obs_source_active(source)) {
-				delete m_vControls[i];
-				m_vControls.erase(m_vControls.begin() + i);
+				delete controls[i];
+				controls.erase(controls.begin() + i);
 				i--;
 			}
 		}
 	}
 }
-#pragma endregion public func
+
+void AFQAudioAdvSettingDialog::SetIconsVisible(bool visible)
+{
+	showVisible = visible;
+
+	QLayoutItem* item = ui->mainLayout->itemAtPosition(0, 0);
+	QLabel* headerLabel = qobject_cast<QLabel*>(item->widget());
+	visible ? headerLabel->show() : headerLabel->hide();
+
+	for(size_t i = 0; i < controls.size(); i++) {
+		controls[i]->SetIconVisible(visible);
+	}
+}

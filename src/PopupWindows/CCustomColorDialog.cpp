@@ -3,34 +3,58 @@
 #include "ui_custom-color-dialog.h"
 
 AFQCustomColorDialog::AFQCustomColorDialog(const QColor& initial, const QString& title, QWidget* parent) :
-	AFQRoundedDialogBase(parent),
+	AFTTopBaseDialog(parent),
 	ui(new Ui::AFQCustomColorDialog)
 {
     ui->setupUi(this);
 
-	m_colorPicker = new QColorDialog(initial, this);
-	m_colorPicker->setWindowFlags(Qt::Widget);
+#ifdef _WIN32
+	ui->colorDialogtitleFrame->setProperty("MoveInAllArea", true);
+#elif defined(__APPLE__)
+    setWindowFlags(Qt::Window|Qt::WindowCloseButtonHint|Qt::CustomizeWindowHint);
+    ui->colorDialogtitleFrame->hide();
+#endif
+    
 
-	connect(m_colorPicker, &QDialog::accepted, this, &AFQCustomColorDialog::qSlotAccept);
-	connect(m_colorPicker, &QDialog::rejected, this, &AFQCustomColorDialog::qSlotAccept);
-	connect(ui->closeButton, &QPushButton::clicked , this, &AFQCustomColorDialog::qSlotReject);
+	m_pColorPicker = new QColorDialog(initial, this);
+	m_pColorPicker->setWindowFlags(Qt::Widget);
+
+	// set colorLuminancepicker boder transparent
+	QList<QWidget*> children = m_pColorPicker->findChildren<QWidget*>();
+	for (QWidget* widget : children) {
+		const QMetaObject* metaObject = widget->metaObject();
+		const char* className = metaObject->className();
+		
+		std::string classNameStr = className;
+		if (classNameStr.find("QColorLuminancePicker") != std::string::npos) {
+			QPalette pal = m_pColorPicker->palette();
+			pal.setColor(QPalette::Light, Qt::transparent);
+			pal.setColor(QPalette::Midlight, Qt::transparent);
+			pal.setColor(QPalette::Dark, Qt::transparent);
+			widget->setPalette(pal);
+			break;
+		}
+	}
+	//
+
+	connect(m_pColorPicker, &QDialog::accepted, this, &AFQCustomColorDialog::qslotAccept);
+	connect(m_pColorPicker, &QDialog::rejected, this, &AFQCustomColorDialog::qslotAccept);
+	connect(ui->closeButton, &QPushButton::clicked , this, &AFQCustomColorDialog::qslotReject);
 	
-	connect(m_colorPicker, &QColorDialog::currentColorChanged, 
-			this, &AFQCustomColorDialog::qSlotCurrentColorChanged);
+	connect(m_pColorPicker, &QColorDialog::currentColorChanged, 
+			this, &AFQCustomColorDialog::qslotCurrentColorChanged);
 
-	connect(m_colorPicker, &QColorDialog::colorSelected,
-		this, &AFQCustomColorDialog::qSignalColorSelected);
+	connect(m_pColorPicker, &QColorDialog::colorSelected,
+		this, &AFQCustomColorDialog::qsignalColorSelected);
 
-	connect(m_colorPicker, &QColorDialog::rejected,
-			this, &AFQCustomColorDialog::qSlotReject);
+	connect(m_pColorPicker, &QColorDialog::rejected,
+			this, &AFQCustomColorDialog::qslotReject);
 
 	ui->labelTitle->setText(title);
-	ui->layoutColorPicker->addWidget((QWidget*)m_colorPicker);
+	ui->layoutColorPicker->addWidget((QWidget*)m_pColorPicker);
 
-	setStyleSheet("AFQCustomColorDialog { border:1px solid #111 }");
-
-    this->SetHeightFixed(true);
-    this->SetWidthFixed(true);
+    SetWidthResizeEnabled(false);
+    SetHeightResizeEnabled(false);
 }
 
 AFQCustomColorDialog::~AFQCustomColorDialog()
@@ -46,11 +70,11 @@ QColor AFQCustomColorDialog::getColor(const QColor& initial, QWidget* parent,
 
 	dlg.setOptions(options);
 
-	dlg.m_colorPicker->setOptions(options);
-	dlg.m_colorPicker->setCurrentColor(initial);
+	dlg.m_pColorPicker->setOptions(options);
+	dlg.m_pColorPicker->setCurrentColor(initial);
 	dlg.exec();
 
-	QColor color = dlg.m_colorPicker->selectedColor();
+	QColor color = dlg.m_pColorPicker->selectedColor();
 
 	return color;
 }
@@ -60,28 +84,28 @@ void AFQCustomColorDialog::setOptions(QColorDialog::ColorDialogOptions options)
 	if (options == QColorDialog::ShowAlphaChannel)
 		setFixedHeight(578);
 
-	m_colorPicker->setOptions(options);
+	m_pColorPicker->setOptions(options);
 }
 
-void AFQCustomColorDialog::qSlotAccept()
+void AFQCustomColorDialog::qslotAccept()
 {
 	this->accept();
 }
 
-void AFQCustomColorDialog::qSlotReject()
+void AFQCustomColorDialog::qslotReject()
 {
 	this->reject();
 
-	emit qSignalReject();
+	emit qsignalReject();
 }
 
-void AFQCustomColorDialog::qSlotCurrentColorChanged(const QColor& color)
+void AFQCustomColorDialog::qslotCurrentColorChanged(const QColor& color)
 {
-	emit qSignalCurrentColorChanged(color);
+	emit qsignalCurrentColorChanged(color);
 }
 
 
-void AFQCustomColorDialog::qSlotColorSelected(const QColor& color)
+void AFQCustomColorDialog::qslotColorSelected(const QColor& color)
 {
-	emit qSignalColorSelected(color);
+	emit qsignalColorSelected(color);
 }

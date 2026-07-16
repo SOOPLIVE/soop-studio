@@ -14,5 +14,5 @@ static inline long long color_to_int(const QColor& color)
 static inline QColor rgba_to_color(uint32_t rgba)
 {
 	return QColor::fromRgb(rgba & 0xFF, (rgba >> 8) & 0xFF,
-		(rgba >> 16) & 0xFF, (rgba >> 24) & 0xFF);
+						   (rgba >> 16) & 0xFF, (rgba >> 24) & 0xFF);
 }

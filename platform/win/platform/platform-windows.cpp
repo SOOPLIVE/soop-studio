@@ -1,8 +1,13 @@
 ﻿#include <algorithm>
 #include <sstream>
 #include "obs-config.h"
-#include "qt-wrapper.h"
-#include "platform/platform.hpp"
+#include "qt-wrappers.hpp"
+#include "platform/platform.hpp"   //[copy-obs] copied
+
+#include <QSettings>
+#include <QVariant>
+#include <QFileInfo>
+#include <QDir>
 
 #include <util/windows/win-version.h>
 #include <util/platform.h>
@@ -21,7 +26,6 @@
 
 
 #include "CoreModel/Locale/CLocaleTextManager.h"
-#include "CoreModel/Config/CConfigManager.h"
 
 
 using namespace std;
@@ -55,7 +59,8 @@ string GetDefaultVideoSavePath()
 			 path_utf16);
 
 	os_wcs_to_utf8(path_utf16, wcslen(path_utf16), path_utf8, MAX_PATH);
-	return string(path_utf8);
+	//return string(path_utf8);
+	return string(path_utf8) + "\\SOOP";
 }
 
 static vector<string> GetUserPreferredLocales()
@@ -166,7 +171,7 @@ bool IsAlwaysOnTop(QWidget *window)
 
 void SetAlwaysOnTop(QWidget *window, bool enable)
 {
-    QWidget *parentMostWindow = window->window();  // Top window
+    QWidget *parentMostWindow = window->window();
     HWND hwnd = (HWND)parentMostWindow->winId();
 	
     SetWindowPos(hwnd, enable ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
@@ -289,14 +294,13 @@ RunOnceMutex CheckIfAlreadyRunning(bool &already_running)
 {
 	string name;
 
-	//if (!portable_mode) {   // portable_mode : false Temp
-		name = "ANETAStudio-Core";
+		name = "FreecshotPlusCore";
 	//} else {
 	//	char path[500];
 	//	char absPath[512];
 	//	*path = 0;
 	//	*absPath = 0;
-	//	AFConfigManager::GetSingletonInstance().GetConfigPath(path, sizeof(path), "");
+	//	CONFIG_CONTEXT.GetConfigPath(path, sizeof(path), "");
 	//	os_get_abs_path(path, absPath, sizeof(absPath));
 	//	name = "ANETAStudio-Portable";
 	//	name += absPath;
@@ -345,70 +349,6 @@ static BOOL CALLBACK GetMonitorCallback(HMONITOR monitor, HDC, LPRECT,
 	return true;
 }
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
-#define GENERIC_MONITOR_NAME QStringLiteral("Generic PnP Monitor")
-
-QString GetMonitorName(const QString &id)
-{
-	MonitorData data = {};
-	data.id = (const wchar_t *)id.utf16();
-	data.info.cbSize = sizeof(data.info);
-
-	EnumDisplayMonitors(nullptr, nullptr, GetMonitorCallback,
-			    (LPARAM)&data);
-	if (!data.found) {
-		return GENERIC_MONITOR_NAME;
-	}
-
-	UINT32 numPath, numMode;
-	if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &numPath,
-					&numMode) != ERROR_SUCCESS) {
-		return GENERIC_MONITOR_NAME;
-	}
-
-	std::vector<DISPLAYCONFIG_PATH_INFO> paths(numPath);
-	std::vector<DISPLAYCONFIG_MODE_INFO> modes(numMode);
-
-	if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &numPath, paths.data(),
-			       &numMode, modes.data(),
-			       nullptr) != ERROR_SUCCESS) {
-		return GENERIC_MONITOR_NAME;
-	}
-
-	DISPLAYCONFIG_TARGET_DEVICE_NAME target;
-	bool found = false;
-
-	paths.resize(numPath);
-	for (size_t i = 0; i < numPath; ++i) {
-		const DISPLAYCONFIG_PATH_INFO &path = paths[i];
-
-		DISPLAYCONFIG_SOURCE_DEVICE_NAME s;
-		s.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
-		s.header.size = sizeof(s);
-		s.header.adapterId = path.sourceInfo.adapterId;
-		s.header.id = path.sourceInfo.id;
-
-		if (DisplayConfigGetDeviceInfo(&s.header) == ERROR_SUCCESS &&
-		    wcscmp(data.info.szDevice, s.viewGdiDeviceName) == 0) {
-			target.header.type =
-				DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
-			target.header.size = sizeof(target);
-			target.header.adapterId = path.sourceInfo.adapterId;
-			target.header.id = path.targetInfo.id;
-			found = DisplayConfigGetDeviceInfo(&target.header) ==
-				ERROR_SUCCESS;
-			break;
-		}
-	}
-
-	if (!found) {
-		return GENERIC_MONITOR_NAME;
-	}
-
-	return QString::fromWCharArray(target.monitorFriendlyDeviceName);
-}
-#endif
-
 /* Based on https://www.winehq.org/pipermail/wine-devel/2008-September/069387.html */
 typedef const char *(CDECL *WINEGETVERSION)(void);
 bool IsRunningOnWine()
@@ -432,7 +372,8 @@ bool IsRunningOnWine()
 HWND hwnd;
 void TaskbarOverlayInit()
 {
-	//hwnd = (HWND)App()->GetMainWindow()->winId();
+	//[copy-obs]remove
+	//hwnd = (HWND)MAINFRAME->winId();
 }
 
 void TaskbarOverlaySetStatus(TaskbarOverlayStatus status)
@@ -457,12 +398,10 @@ void TaskbarOverlaySetStatus(TaskbarOverlayStatus status)
 	QIcon qicon;
 	switch (status) {
 	case TaskbarOverlayStatusActive:
-		qicon = QIcon::fromTheme("obs-active",
-					 QIcon(":/res/images/active.png"));
+		qicon = QIcon::fromTheme("obs-active", QIcon(":/res/images/active.png"));
 		break;
 	case TaskbarOverlayStatusPaused:
-		qicon = QIcon::fromTheme("obs-paused",
-					 QIcon(":/res/images/paused.png"));
+		qicon = QIcon::fromTheme("obs-paused", QIcon(":/res/images/paused.png"));
 		break;
 	case TaskbarOverlayStatusInactive:
 		taskbarIcon->SetOverlayIcon(hwnd, nullptr, nullptr);
@@ -473,13 +412,139 @@ void TaskbarOverlaySetStatus(TaskbarOverlayStatus status)
 	HICON hicon = nullptr;
 	if (!qicon.isNull()) {
 		Q_GUI_EXPORT HICON qt_pixmapToWinHICON(const QPixmap &p);
-		hicon = qt_pixmapToWinHICON(
-			qicon.pixmap(GetSystemMetrics(SM_CXSMICON)));
-		if (!hicon)
-			return;
+		hicon = qt_pixmapToWinHICON(qicon.pixmap(GetSystemMetrics(SM_CXSMICON)));
 	}
+	if(!hicon)
+		return;
 
 	taskbarIcon->SetOverlayIcon(hwnd, hicon, nullptr);
 	DestroyIcon(hicon);
 	taskbarIcon->Release();
+}
+
+bool HighContrastEnabled()
+{
+	HIGHCONTRAST hc = {};
+	hc.cbSize = sizeof(HIGHCONTRAST);
+
+	if(SystemParametersInfo(SPI_GETHIGHCONTRAST, hc.cbSize, &hc, 0))
+		return hc.dwFlags & HCF_HIGHCONTRASTON;
+
+	return false;
+}
+
+inline QString appendPath(const QString& root, const QString& subKey)
+{
+	QString path = root;
+	QString cleanSubKey = QDir::toNativeSeparators(subKey);
+
+	if(!path.endsWith('\\') && !cleanSubKey.startsWith('\\')) {
+		path += '\\';
+	}
+	path += cleanSubKey;
+
+	return QDir::toNativeSeparators(path);
+}
+
+bool RegKeyExists(const QString& key)
+{
+	QString path = QDir::toNativeSeparators(key);
+	int lastSlash = path.lastIndexOf('\\');
+	if(lastSlash == -1) return false;
+
+	QString parent = path.left(lastSlash);
+	QString target = path.mid(lastSlash + 1);
+
+	QSettings settings(parent, QSettings::NativeFormat);
+	return settings.childGroups().contains(target, Qt::CaseInsensitive);
+}
+bool RegKeyExists(const QString& key, const QString& subKey)
+{
+	QString fullPath = appendPath(key, subKey);
+
+	int lastSlash = fullPath.lastIndexOf('\\');
+
+	if(lastSlash == -1) return false;
+
+	QString parentPath = fullPath.left(lastSlash);
+	QString targetKeyName = fullPath.mid(lastSlash + 1);
+
+	QSettings parentSettings(parentPath, QSettings::NativeFormat);
+
+	return parentSettings.childGroups().contains(targetKeyName, Qt::CaseInsensitive);
+}
+bool RegValueExists(const QString& key, const QString& valueName)
+{
+	QSettings settings(key, QSettings::NativeFormat);
+	return settings.contains(valueName);
+}
+
+inline QVariant getValue(const QString& root, const QString& subKey, const QString& valueName, const QVariant& defaultValue = QVariant())
+{
+	QString fullPath = appendPath(root, subKey);
+	QSettings settings(fullPath, QSettings::NativeFormat);
+
+	return settings.value(valueName, defaultValue);
+}
+
+bool GetRegKeyValue(const QString& key, const QString& subKey, const QString& valueName, QString& value)
+{
+	QString value_ = getValue(key, subKey, valueName).toString();
+	if(value_.isEmpty())
+		return false;
+	//
+	value = value_;
+	return true;
+}
+
+UninstallResult RunUninstallerWithUAC(const QString& exePath, const QString& params, uint32_t timeoutMs)
+{
+	SHELLEXECUTEINFOW sei = {sizeof(SHELLEXECUTEINFOW)};
+	sei.lpVerb = L"runas"; // Need UAC
+	sei.lpFile = reinterpret_cast<LPCWSTR>(exePath.utf16());
+	sei.lpParameters = reinterpret_cast<LPCWSTR>(params.utf16());
+	sei.nShow = SW_HIDE;
+	sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+
+	const std::wstring workDir = QFileInfo(exePath).absoluteDir().absolutePath().toStdWString();
+	sei.lpDirectory = workDir.c_str();
+
+	if(!::ShellExecuteExW(&sei)) {
+		DWORD err = ::GetLastError();
+		if(err == ERROR_CANCELLED /*1223*/) {
+			blog(LOG_WARNING, "[FreecShot Unistall]:UAC cancelled");
+			return UninstallResult::UacCanceled;
+		}
+		blog(LOG_WARNING, "[FreecShot Uninstall]:ShellExecuteExW failed: %lu", err);
+		return UninstallResult::LaunchFailed;
+	}
+
+	// Wait for shutdown (Timeout)
+	DWORD wait = ::WaitForSingleObject(sei.hProcess, timeoutMs);
+	if(wait == WAIT_TIMEOUT) {
+		blog(LOG_WARNING, "[FreecShot Uninstall]:Uninstaller timeout");
+		::CloseHandle(sei.hProcess);
+		return UninstallResult::Timeout;
+	}
+
+	DWORD exitCode = 0xFFFFFFFF;
+	if(!::GetExitCodeProcess(sei.hProcess, &exitCode)) {
+		blog(LOG_WARNING, "[FreecShot Uninstall]:GetExitCodeProcess failed: %lu", GetLastError());
+		::CloseHandle(sei.hProcess);
+		return UninstallResult::FailedWithExitCode;
+	}
+
+	::CloseHandle(sei.hProcess);
+
+	// Representative exit codes by installer type (including MSI)
+	switch(exitCode) {
+		case 0:    return UninstallResult::Succeeded;        // Success
+		case 3010: return UninstallResult::RebootRequired;   // Reboot required (MSI)
+		case 1602: return UninstallResult::UserCanceled;     // User canceled (MSI)
+		case 1603: // Fatal error (MSI)
+		case 1618: // Another installation is already in progress (MSI)
+		default:
+			blog(LOG_WARNING, "[FreecShot Uninstall]:Uninstaller exit code: %d", static_cast<int>(exitCode));
+			return UninstallResult::FailedWithExitCode;
+	}
 }

@@ -15,17 +15,17 @@ AFQBaseClickWidget::AFQBaseClickWidget(QWidget* parent)
 
 void AFQBaseClickWidget::mousePressEvent(QMouseEvent *event)
 {
-    if (m_bCheckable)
-        m_bChecked = !m_bChecked;
+    if (m_checkable)
+        m_checked = !m_checked;
 
     if (event->button() == Qt::LeftButton)
     {
-        emit qsignalLeftClicked(m_bChecked);
+        emit qsignalLeftClicked(m_checked);
         emit qsignalLeftClick();
     }
     else if (event->button() == Qt::RightButton)
     {
-        emit qsignalRightClicked(m_bChecked);
+        emit qsignalRightClicked(m_checked);
         emit qsignalRightClick();
     }
 
@@ -54,14 +54,10 @@ bool AFQBaseClickWidget::eventFilter(QObject* obj, QEvent* event)
 {
     if (event->type() == QEvent::HoverEnter) {
         this->setProperty("hover", true);
-        //style()->unpolish(this);
-        //style()->polish(this);
         emit qsignalHoverEntered();
     }
     else if (event->type() == QEvent::HoverLeave) {
         this->setProperty("hover", false);
-        //style()->unpolish(this);
-        //style()->polish(this);
         emit qsignalHoverLeaved();
     }
     return QWidget::eventFilter(obj, event);

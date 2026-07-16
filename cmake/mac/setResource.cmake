@@ -1,0 +1,4 @@
+if(CMAKE_HOST_SYSTEM_NAME MATCHES "(Darwin)")
+file(GLOB_RECURSE ALL_MM_FILE_LIST 
+     "${SOURCE_DIR}/*.mm*")
+endif()

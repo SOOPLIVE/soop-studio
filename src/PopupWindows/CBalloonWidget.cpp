@@ -27,24 +27,24 @@ void AFQBalloonWidget::BalloonWidgetInit(QString tooltip)
 {
     setWindowFlags(windowFlags() | Qt::Tool);
     
-    m_bIsTooltip = true;
+    m_isTooltip = true;
     
-    if (m_Tooltiplabel == nullptr)
+    if (m_pTooltiplabel == nullptr)
     {
-        m_Tooltiplabel = new QLabel(this);
-        m_Tooltiplabel->setAlignment(Qt::AlignCenter);
-        m_Tooltiplabel->setText(tooltip);
-        m_Tooltiplabel->adjustSize();
+        m_pTooltiplabel = new QLabel(this);
+        m_pTooltiplabel->setAlignment(Qt::AlignCenter);
+        m_pTooltiplabel->setText(tooltip);
+        m_pTooltiplabel->adjustSize();
     }
 
-    QSize tooltipsize = m_Tooltiplabel->size();
-    ui->widget_Contents->layout()->addWidget(m_Tooltiplabel);
+    QSize tooltipsize = m_pTooltiplabel->size();
+    ui->widget_Contents->layout()->addWidget(m_pTooltiplabel);
 
     QMargins contentsMargin = ui->widget_Contents->layout()->contentsMargins();
     int w = contentsMargin.left() + contentsMargin.right()
-        + m_Tooltiplabel->width();
+        + m_pTooltiplabel->width();
     int h = contentsMargin.top() + contentsMargin.bottom()
-        + m_Tooltiplabel->height() + ui->label_balloonPoint->height();
+        + m_pTooltiplabel->height() + ui->label_balloonPoint->height();
     resize(w, h);
     
     _AdjustBalloonGeometry();
@@ -63,16 +63,16 @@ void AFQBalloonWidget::BalloonWidgetInit(QMargins margin, int spacing)
 
 void AFQBalloonWidget::ChangeTooltipText(QString text)
 {
-    if (m_bIsTooltip && m_Tooltiplabel != nullptr)
+    if (m_isTooltip && m_pTooltiplabel != nullptr)
     {
-        m_Tooltiplabel->setText(text);
-        m_Tooltiplabel->adjustSize();
+        m_pTooltiplabel->setText(text);
+        m_pTooltiplabel->adjustSize();
 
         QMargins contentsMargin = ui->widget_Contents->layout()->contentsMargins();
-        int w = m_Tooltiplabel->width() + contentsMargin.left() + contentsMargin.right();
-        int h = m_Tooltiplabel->height() + contentsMargin.top() + contentsMargin.bottom() + 10;
+        int w = m_pTooltiplabel->width() + contentsMargin.left() + contentsMargin.right();
+        int h = m_pTooltiplabel->height() + contentsMargin.top() + contentsMargin.bottom() + 10;
         resize(w, h);
-        m_Tooltiplabel->repaint();
+        m_pTooltiplabel->repaint();
 
         _AdjustBalloonGeometry();
     }
@@ -100,22 +100,24 @@ void AFQBalloonWidget::paintEvent(QPaintEvent* e)
 
 bool AFQBalloonWidget::AddWidgetToBalloon(QWidget* widget)
 {
-    if (!m_bIsTooltip)
+    if (!m_isTooltip)
     {
         ui->widget_Contents->layout()->addWidget(widget);
 
         QMargins contentsMargin = ui->widget_Contents->layout()->contentsMargins();
         int w = widget->width() + contentsMargin.left() + contentsMargin.right();
-        int h = height() + widget->height() + ui->widget_Contents->layout()->spacing();
+        int h = widget->height() + ui->widget_Contents->layout()->spacing();
+        h += height();
+
         resize(w, h);
         _AdjustBalloonGeometry();
     }
-    return m_bIsTooltip ? false : true;
+    return m_isTooltip ? false : true;
 }
 
 bool AFQBalloonWidget::AddTextToBalloon(QString text)
 {
-    if (!m_bIsTooltip)
+    if (!m_isTooltip)
     {
         QLabel* label = new QLabel(this);
         label->setText(text);
@@ -125,7 +127,7 @@ bool AFQBalloonWidget::AddTextToBalloon(QString text)
         resize(width() + label->width(), height() + label->height());
         _AdjustBalloonGeometry();
     }
-    return m_bIsTooltip ? false : true;
+    return m_isTooltip ? false : true;
 }
 
 void AFQBalloonWidget::_AdjustBalloonGeometry()

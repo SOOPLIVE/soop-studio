@@ -7,41 +7,20 @@
 #include <QMimeDatabase>
 #include <QFile>
 
-
-#include "qt-wrapper.h"
-
-#include "CoreModel/Auth/CAuthManager.h"
+#include "qt-wrappers.hpp"
+#include "Application/CApplication.h"
 
 #include "auth-youtube.hpp"
 
-#include "Application/CApplication.h"
+#include "CoreModel/Auth/CAuthManager.h"
+
 #include "MainFrame/CMainFrame.h"
 
 #include "src/PopupWindows/SettingPopup/CAddStreamWidget.h"
+#include "Common/StudioDefine.h"
 
 using namespace json11;
 
-/* ------------------------------------------------------------------------- */
-#define YOUTUBE_RTMP_URL	"rtmp://a.rtmp.youtube.com/live2"
-#define YOUTUBE_LIVE_API_URL "https://www.googleapis.com/youtube/v3"
-
-#define YOUTUBE_LIVE_STREAM_URL YOUTUBE_LIVE_API_URL "/liveStreams"
-#define YOUTUBE_LIVE_BROADCAST_URL YOUTUBE_LIVE_API_URL "/liveBroadcasts"
-#define YOUTUBE_LIVE_BROADCAST_TRANSITION_URL \
-	YOUTUBE_LIVE_BROADCAST_URL "/transition"
-#define YOUTUBE_LIVE_BROADCAST_BIND_URL YOUTUBE_LIVE_BROADCAST_URL "/bind"
-
-#define YOUTUBE_LIVE_CHANNEL_URL YOUTUBE_LIVE_API_URL "/channels"
-#define YOUTUBE_LIVE_TOKEN_URL "https://oauth2.googleapis.com/token"
-#define YOUTUBE_LIVE_VIDEOCATEGORIES_URL YOUTUBE_LIVE_API_URL "/videoCategories"
-#define YOUTUBE_LIVE_VIDEOS_URL YOUTUBE_LIVE_API_URL "/videos"
-#define YOUTUBE_LIVE_CHAT_MESSAGES_URL YOUTUBE_LIVE_API_URL "/liveChat/messages"
-#define YOUTUBE_LIVE_THUMBNAIL_URL \
-	"https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
-
-#define DEFAULT_BROADCASTS_PER_QUERY \
-	"50" // acceptable values are 0 to 50, inclusive
-/* ------------------------------------------------------------------------- */
 
 bool IsYouTubeService(const std::string &service)
 {
@@ -51,23 +30,11 @@ bool IsYouTubeService(const std::string &service)
 			  });
 	return it != youtubeServices.end();
 }
-bool IsUserSignedIntoYT()
-{
-    AFAuth *auth = App()->GetMainView()->GetAuth();
-	if (auth) {
-		YoutubeApiWrappers *apiYouTube(
-			dynamic_cast<YoutubeApiWrappers *>(auth));
-		if (apiYouTube) {
-			return true;
-		}
-	}
-	return false;
-}
 
 bool YoutubeApiWrappers::GetTranslatedError(QString &error_message)
 {
 	QString translated =
-		QTStr("YouTube.Errors." + lastErrorReason.toUtf8());
+		QTStr("YouTube.Errors." + m_lastErrorReason.toUtf8());
 	// No translation found
 	if (translated.startsWith("YouTube.Errors."))
 		return false;
@@ -109,7 +76,7 @@ void YoutubeApiWrappers::GetAuthInfo(AFAddStreamWidget* widget)
 
 YoutubeApiWrappers::YoutubeApiWrappers(const Def& d, AFAddStreamWidget* widget)
 	: YoutubeAuth(d, widget)
-	,lastError(0)
+	,m_lastError(0)
 {}
 
 bool YoutubeApiWrappers::TryInsertCommand(const char *url,
@@ -125,7 +92,7 @@ bool YoutubeApiWrappers::TryInsertCommand(const char *url,
 	if (data && data[0] == '{') // only log JSON data
 		blog(LOG_DEBUG, "YouTube API command data: %s", data);
 #endif
-	if (token.empty())
+	if (m_token.empty())
 		return false;
 	std::string output;
 	std::string error;
@@ -133,7 +100,7 @@ bool YoutubeApiWrappers::TryInsertCommand(const char *url,
 	int timeout = 60 + data_size / 125000;
 	bool success = GetRemoteFile(url, output, error, &httpStatusCode,
 				     content_type, request_type, data,
-				     {"Authorization: Bearer " + token},
+				     {"Authorization: Bearer " + m_token},
 				     nullptr, timeout, false, data_size);
 	if (error_code)
 		*error_code = httpStatusCode;
@@ -158,7 +125,7 @@ bool YoutubeApiWrappers::TryInsertCommand(const char *url,
 
 bool YoutubeApiWrappers::UpdateAccessToken()
 {
-	if (refresh_token.empty()) {
+	if (m_refreshToken.empty()) {
 		return false;
 	}
 
@@ -168,7 +135,7 @@ bool YoutubeApiWrappers::UpdateAccessToken()
 
     
 	std::string r_token =
-		QUrl::toPercentEncoding(refresh_token.c_str()).toStdString();
+		QUrl::toPercentEncoding(m_refreshToken.c_str()).toStdString();
 	const QString url = YOUTUBE_LIVE_TOKEN_URL;
 	const QString data_template = "client_id=%1"
 				      "&client_secret=%2"
@@ -185,16 +152,15 @@ bool YoutubeApiWrappers::UpdateAccessToken()
 	if (!success || json_out.object_items().find("error") !=
 				json_out.object_items().end())
 		return false;
-	token = json_out["access_token"].string_value();
+	m_token = json_out["access_token"].string_value();
     
     
-    bool res = token.empty() ? false : true;
+    bool res = m_token.empty() ? false : true;
     
-    if (res && pConnectedAFAuth != nullptr)
+    if (res && m_pConnectedAFAuth != nullptr)
     {
-        pConnectedAFAuth->strAccessToken = token;
-        auto& authManager = AFAuthManager::GetSingletonInstance();
-        authManager.SaveAllAuthed();
+        m_pConnectedAFAuth->accessToken = m_token;
+		AUTH_CONTEXT.SaveAllAuthed();
     }
     
     return res;
@@ -225,12 +191,12 @@ bool YoutubeApiWrappers::InsertCommand(const char *url,
 		     "YouTube API error:\n\tHTTP status: %ld\n\tURL: %s\n\tJSON: %s",
 		     error_code, url, json_out.dump().c_str());
 
-		lastError = json_out["error"]["code"].int_value();
-		lastErrorReason =
+		m_lastError = json_out["error"]["code"].int_value();
+		m_lastErrorReason =
 			QString(json_out["error"]["errors"][0]["reason"]
 					.string_value()
 					.c_str());
-		lastErrorMessage = QString(
+		m_lastErrorMessage = QString(
 			json_out["error"]["message"].string_value().c_str());
 
 		// The existence of an error implies non-success even if the HTTP status code disagrees.
@@ -244,8 +210,8 @@ std::string YoutubeApiWrappers::GetUrlProfileImg()
     std::string resUrl;
     resUrl.clear();
     
-    lastErrorMessage.clear();
-    lastErrorReason.clear();
+    m_lastErrorMessage.clear();
+    m_lastErrorReason.clear();
     const QByteArray url = YOUTUBE_LIVE_CHANNEL_URL
         "?part=snippet,contentDetails,statistics"
         "&mine=true";
@@ -255,7 +221,8 @@ std::string YoutubeApiWrappers::GetUrlProfileImg()
     }
 
     if (json_out["pageInfo"]["totalResults"].int_value() == 0) {
-        lastErrorMessage = QTStr("YouTube.Auth.NoChannels");
+        
+        m_lastErrorMessage = QTStr("YouTube.Auth.NoChannels");
         return resUrl;
     }
     
@@ -268,18 +235,19 @@ std::string YoutubeApiWrappers::GetUrlProfileImg()
 bool YoutubeApiWrappers::GetChannelDescription(
 	ChannelDescription &channel_description)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 	const QByteArray url = YOUTUBE_LIVE_CHANNEL_URL
 		"?part=snippet,contentDetails,statistics"
 		"&mine=true";
+
 	Json json_out;
 	if (!InsertCommand(url, "application/json", "", nullptr, json_out)) {
 		return false;
 	}
 
 	if (json_out["pageInfo"]["totalResults"].int_value() == 0) {
-		lastErrorMessage = QTStr("YouTube.Auth.NoChannels");
+		m_lastErrorMessage = QTStr("YouTube.Auth.NoChannels");
 		return false;
 	}
 
@@ -294,8 +262,8 @@ bool YoutubeApiWrappers::GetChannelDescription(
 
 bool YoutubeApiWrappers::InsertBroadcast(BroadcastDescription &broadcast)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 	const QByteArray url = YOUTUBE_LIVE_BROADCAST_URL
 		"?part=snippet,status,contentDetails";
 	const Json data = Json::object{
@@ -337,8 +305,8 @@ bool YoutubeApiWrappers::InsertBroadcast(BroadcastDescription &broadcast)
 
 bool YoutubeApiWrappers::InsertStream(StreamDescription &stream)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 	const QByteArray url = YOUTUBE_LIVE_STREAM_URL
 		"?part=snippet,cdn,status,contentDetails";
 	const Json data = Json::object{
@@ -370,15 +338,15 @@ bool YoutubeApiWrappers::BindStream(const QString broadcast_id,
 				    const QString stream_id,
 				    json11::Json &json_out)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 	const QString url_template = YOUTUBE_LIVE_BROADCAST_BIND_URL
 		"?id=%1"
 		"&streamId=%2"
 		"&part=id,snippet,contentDetails,status";
 	const QString url = url_template.arg(broadcast_id, stream_id);
 	const Json data = Json::object{};
-	this->broadcast_id = broadcast_id;
+	this->m_broadcastId = broadcast_id;
 	return InsertCommand(QT_TO_UTF8(url), "application/json", "",
 			     data.dump().c_str(), json_out);
 }
@@ -386,8 +354,8 @@ bool YoutubeApiWrappers::BindStream(const QString broadcast_id,
 bool YoutubeApiWrappers::GetBroadcastsList(Json &json_out, const QString &page,
 					   const QString &status)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 	QByteArray url = YOUTUBE_LIVE_BROADCAST_URL
 		"?part=snippet,contentDetails,status"
 		"&broadcastType=all&maxResults=" DEFAULT_BROADCASTS_PER_QUERY;
@@ -405,8 +373,8 @@ bool YoutubeApiWrappers::GetBroadcastsList(Json &json_out, const QString &page,
 bool YoutubeApiWrappers::GetVideoCategoriesList(
 	QVector<CategoryDescription> &category_list_out)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 	const QString url_template = YOUTUBE_LIVE_VIDEOCATEGORIES_URL
 		"?part=snippet"
 		"&regionCode=%1"
@@ -425,8 +393,8 @@ bool YoutubeApiWrappers::GetVideoCategoriesList(
 	Json json_out;
 	if (!InsertCommand(QT_TO_UTF8(url), "application/json", "", nullptr,
 			   json_out)) {
-		if (lastErrorReason != "unsupportedLanguageCode" &&
-		    lastErrorReason != "invalidLanguage")
+		if (m_lastErrorReason != "unsupportedLanguageCode" &&
+		    m_lastErrorReason != "invalidLanguage")
 			return false;
 		// Try again with en-US if YouTube error indicates an unsupported locale
 		url = url_template.arg("US", "en_US");
@@ -451,8 +419,8 @@ bool YoutubeApiWrappers::SetVideoCategory(const QString &video_id,
 					  const QString &video_description,
 					  const QString &categorie_id)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 	const QByteArray url = YOUTUBE_LIVE_VIDEOS_URL "?part=snippet";
 	const Json data = Json::object{
 		{"id", QT_TO_UTF8(video_id)},
@@ -471,18 +439,18 @@ bool YoutubeApiWrappers::SetVideoCategory(const QString &video_id,
 bool YoutubeApiWrappers::SetVideoThumbnail(const QString &video_id,
 					   const QString &thumbnail_file)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 
 	// Make sure the file hasn't been deleted since originally selecting it
 	if (!QFile::exists(thumbnail_file)) {
-		lastErrorMessage = QTStr("YouTube.Actions.Error.FileMissing");
+		m_lastErrorMessage = QTStr("YouTube.Actions.Error.FileMissing");
 		return false;
 	}
 
 	QFile thumbFile(thumbnail_file);
 	if (!thumbFile.open(QFile::ReadOnly)) {
-		lastErrorMessage =
+		m_lastErrorMessage =
 			QTStr("YouTube.Actions.Error.FileOpeningFailed");
 		return false;
 	}
@@ -500,8 +468,8 @@ bool YoutubeApiWrappers::SetVideoThumbnail(const QString &video_id,
 
 bool YoutubeApiWrappers::StartBroadcast(const QString &broadcast_id)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 
 	Json json_out;
 	if (!FindBroadcast(broadcast_id, json_out))
@@ -515,9 +483,9 @@ bool YoutubeApiWrappers::StartBroadcast(const QString &broadcast_id)
 		return true;
 	else if (lifeCycleStatus == "testStarting") {
 		// User will need to wait a few seconds before attempting to start broadcast
-		lastErrorMessage =
+		m_lastErrorMessage =
 			QTStr("YouTube.Actions.Error.BroadcastTestStarting");
-		lastErrorReason.clear();
+		m_lastErrorReason.clear();
 		return false;
 	}
 
@@ -538,18 +506,18 @@ bool YoutubeApiWrappers::StartBroadcast(const QString &broadcast_id)
 	bool success = InsertCommand(QT_TO_UTF8(live), "application/json",
 				     "POST", "{}", json_out);
 	// Return a success if the command failed, but was redundant (broadcast already live)
-	return success || lastErrorReason == "redundantTransition";
+	return success || m_lastErrorReason == "redundantTransition";
 }
 
 bool YoutubeApiWrappers::StartLatestBroadcast()
 {
-	return StartBroadcast(this->broadcast_id);
+	return StartBroadcast(this->m_broadcastId);
 }
 
 bool YoutubeApiWrappers::StopBroadcast(const QString &broadcast_id)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 
 	const QString url_template = YOUTUBE_LIVE_BROADCAST_TRANSITION_URL
 		"?id=%1"
@@ -560,29 +528,29 @@ bool YoutubeApiWrappers::StopBroadcast(const QString &broadcast_id)
 	bool success = InsertCommand(QT_TO_UTF8(url), "application/json",
 				     "POST", "{}", json_out);
 	// Return a success if the command failed, but was redundant (broadcast already stopped)
-	return success || lastErrorReason == "redundantTransition";
+	return success || m_lastErrorReason == "redundantTransition";
 }
 
 bool YoutubeApiWrappers::StopLatestBroadcast()
 {
-	return StopBroadcast(this->broadcast_id);
+	return StopBroadcast(this->m_broadcastId);
 }
 
 void YoutubeApiWrappers::SetBroadcastId(QString &broadcast_id)
 {
-	this->broadcast_id = broadcast_id;
+	this->m_broadcastId = broadcast_id;
 }
 
 QString YoutubeApiWrappers::GetBroadcastId()
 {
-	return this->broadcast_id;
+	return this->m_broadcastId;
 }
 
 bool YoutubeApiWrappers::ResetBroadcast(const QString &broadcast_id,
 					json11::Json &json_out)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 
 	auto snippet = json_out["items"][0]["snippet"];
 	auto status = json_out["items"][0]["status"];
@@ -637,8 +605,8 @@ bool YoutubeApiWrappers::ResetBroadcast(const QString &broadcast_id,
 bool YoutubeApiWrappers::FindBroadcast(const QString &id,
 				       json11::Json &json_out)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 	QByteArray url = YOUTUBE_LIVE_BROADCAST_URL
 		"?part=id,snippet,contentDetails,status"
 		"&broadcastType=all&maxResults=1";
@@ -649,7 +617,7 @@ bool YoutubeApiWrappers::FindBroadcast(const QString &id,
 
 	auto items = json_out["items"].array_items();
 	if (items.size() != 1) {
-		lastErrorMessage =
+		m_lastErrorMessage =
 			QTStr("YouTube.Actions.Error.BroadcastNotFound");
 		return false;
 	}
@@ -659,8 +627,8 @@ bool YoutubeApiWrappers::FindBroadcast(const QString &id,
 
 bool YoutubeApiWrappers::FindStream(const QString &id, json11::Json &json_out)
 {
-	lastErrorMessage.clear();
-	lastErrorReason.clear();
+	m_lastErrorMessage.clear();
+	m_lastErrorReason.clear();
 	QByteArray url = YOUTUBE_LIVE_STREAM_URL "?part=id,snippet,cdn,status"
 						 "&maxResults=1";
 	url += "&id=" + id.toUtf8();
@@ -670,7 +638,7 @@ bool YoutubeApiWrappers::FindStream(const QString &id, json11::Json &json_out)
 
 	auto items = json_out["items"].array_items();
 	if (items.size() != 1) {
-		lastErrorMessage = "No active broadcast found.";
+		m_lastErrorMessage = "No active broadcast found.";
 		return false;
 	}
 

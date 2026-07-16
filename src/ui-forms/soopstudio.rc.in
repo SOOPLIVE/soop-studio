@@ -1,4 +1,12 @@
-IDI_ICON1 ICON DISCARDABLE "../assets/soopicon.ico"
+#include "resource.h"
+
+
+
+IDI_ICON1 ICON DISCARDABLE "../assets/freecshotplus_icon.ico"
+
+IDR_ONNX_FEATURE_EX_MODEL RCDATA "../onnx-models/feature_extractor.onnx"
+IDR_ONNX_HEY_SARSA_MODEL RCDATA "../onnx-models/heysarsa_model_new.onnx"
+
 
 1 VERSIONINFO
 FILEVERSION 1,0,0,0
@@ -7,15 +15,15 @@ BEGIN
   BEGIN
     BLOCK "040904B0"
     BEGIN
-      VALUE "CompanyName", "Soop"
-      VALUE "FileDescription", "Soop Studio"
+      VALUE "CompanyName", "SOOP Co., Ltd."
+      VALUE "FileDescription", "FreecShot Plus"
       VALUE "FileVersion", "${UI_VERSION}"
       VALUE "InternalName", "soopstudio"
-      VALUE "OriginalFilename", "soopstudio"
-      VALUE "ProductName", "Soop Studio"
+      VALUE "OriginalFilename", "SoopStudio.exe"
+      VALUE "ProductName", "FreecShot Plus"
       VALUE "ProductVersion", "${UI_VERSION}"
       VALUE "Comments", "Free and open source software for video recording and live streaming"
-      VALUE "LegalCopyright", ""
+      VALUE "LegalCopyright", "Copyright (c) SOOP Co., Ltd. All rights reserved."
     END
   END
 

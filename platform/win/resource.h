@@ -1,0 +1,8 @@
+﻿//#define IDI_ICON1 103
+
+
+#define IDR_ONNX_FEATURE_EX_MODEL			101
+#define IDR_ONNX_HEY_SARSA_MODEL			102
+
+
+

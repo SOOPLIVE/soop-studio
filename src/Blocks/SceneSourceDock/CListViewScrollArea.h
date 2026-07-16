@@ -21,5 +21,5 @@ protected:
 	void wheelEvent(QWheelEvent* event) override;
 
 private:
-	QTimer* m_timerScrollVisible = nullptr;
+	QTimer* m_pTimerScrollVisible = nullptr;
 };

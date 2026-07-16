@@ -245,6 +245,9 @@
               <property name="text">
                <string>Text</string>
               </property>
+              <property name="wordWrap">
+               <bool>false</bool>
+              </property>
              </widget>
             </item>
            </layout>

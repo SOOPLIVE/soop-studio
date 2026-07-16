@@ -6,59 +6,59 @@
 #include <QScreen>
 #include <QWindow>
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN 1
-#include <Windows.h>
-#endif
+#include "qt-wrappers.hpp"
+#include "display-helpers.hpp"
 
-#include "qt-wrapper.h"
+#include "Application/CApplication.h"
+
 #include "Common/MathMiscUtils.h"
 #include "Common/EventFilterUtils.h"
 
 #include "CoreModel/Locale/CLocaleTextManager.h"
 
 AFQBrowserInteraction::AFQBrowserInteraction(QWidget* parent, OBSSource source) :
-	AFQRoundedDialogBase((QDialog*)parent),
+	AFTTopBaseDialog((QDialog*)parent),
 	ui(new Ui::AFQBrowserInteraction),
 	m_obsSource(source),
-	m_signalRemoved(obs_source_get_signal_handler(m_obsSource), "remove",
-					AFQBrowserInteraction::SourceRemoved, this),
-	m_signalRenamed(obs_source_get_signal_handler(m_obsSource), "rename",
-					AFQBrowserInteraction::SourceRenamed, this),
+	m_signalRemoved(obs_source_get_signal_handler(m_obsSource), "remove", AFQBrowserInteraction::SourceRemoved, this),
+	m_signalRenamed(obs_source_get_signal_handler(m_obsSource), "rename", AFQBrowserInteraction::SourceRenamed, this),
 	m_eventFilter(BuildEventFilter()),
 	m_props(obs_source_properties(m_obsSource), obs_properties_destroy)
 {
-	Qt::WindowFlags flags = windowFlags();
-	Qt::WindowFlags helpFlag = Qt::WindowContextHelpButtonHint;
-	setWindowFlags(flags & (~helpFlag));
+	//Qt::WindowFlags flags = windowFlags();
+	//Qt::WindowFlags helpFlag = Qt::WindowContextHelpButtonHint;
+	//setWindowFlags(flags & (~helpFlag));
 
 	ui->setupUi(this);
 
+#ifdef _WIN32
+    setWindowFlags(Qt::Window);
+#elif defined(__APPLE__)
+    setWindowFlags(Qt::Window|Qt::WindowCloseButtonHint|Qt::CustomizeWindowHint);
+    ui->titleWidget->hide();
+#endif
+    
 	ui->preview->setMouseTracking(true);
-	ui->preview->setFocusPolicy(Qt::StrongFocus);
+	ui->preview->setFocusPolicy(Qt::NoFocus);
 	ui->preview->installEventFilter(m_eventFilter.get());
 
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
 	const char* name = obs_source_get_name(source);
-	QString title = locale.Str("Basic.InteractionWindow");
+	QString title = Str("Basic.InteractionWindow");
 
 	qslotSetWindowTitle((title.arg(QT_UTF8(name))));
 
-	connect(ui->preview, &AFQTDisplay::qsignalDisplayCreated,
-			this, &AFQBrowserInteraction::qslotDrawCallback);
+	connect(ui->preview, &AFQTDisplay::qsignalDisplayCreated, this, &AFQBrowserInteraction::qslotDrawCallback);
 
-	connect(ui->refreshButton, &QPushButton::clicked,
-			this, &AFQBrowserInteraction::qslotRefreshBrowser);
+	connect(ui->refreshButton, &QPushButton::clicked, this, &AFQBrowserInteraction::qslotRefreshBrowser);
 
-	connect(ui->closeButton, &QPushButton::clicked,
-			this, &AFQBrowserInteraction::qslotCloseButtonClicked);
+	connect(ui->closeButton, &QPushButton::clicked, this, &AFQBrowserInteraction::qslotCloseButtonClicked);
 
-	this->SetWidthFixed(true);
+	//SetWidthResizeEnabled(false);
 
 #ifdef _WIN32
-	m_dummyInteraction = new CDummyInteraction(this, m_obsSource);
-	if(m_dummyInteraction)
-		ui->verticalLayout->addWidget(m_dummyInteraction->GetWidget());
+	m_pDummyInteraction = new CDummyInteraction(this, m_obsSource);
+	if(m_pDummyInteraction)
+		ui->verticalLayout->addWidget(m_pDummyInteraction->GetWidget());
 #endif
 }
 
@@ -67,8 +67,10 @@ AFQBrowserInteraction::~AFQBrowserInteraction()
 	ui->preview->removeEventFilter(m_eventFilter.get());
 
 #ifdef _WIN32
-	delete m_dummyInteraction;
-	m_dummyInteraction = nullptr;
+	if(m_pDummyInteraction) {
+		delete m_pDummyInteraction;
+		m_pDummyInteraction = nullptr;
+	}
 #endif
 
 	m_obsSource = nullptr;
@@ -79,7 +81,7 @@ AFQBrowserInteraction::~AFQBrowserInteraction()
 void AFQBrowserInteraction::qslotDrawCallback()
 {
 	obs_display_add_draw_callback(ui->preview->GetDisplay(),
-							      AFQBrowserInteraction::DrawPreview,
+								  AFQBrowserInteraction::DrawPreview,
 								  this);
 }
 
@@ -96,7 +98,7 @@ void AFQBrowserInteraction::qslotRefreshBrowser()
 
 void AFQBrowserInteraction::qslotCloseButtonClicked()
 {
-	qsignalClearPopup(m_obsSource);
+	close();
 }
 
 void AFQBrowserInteraction::qslotSetWindowTitle(QString title)
@@ -108,35 +110,33 @@ void AFQBrowserInteraction::qslotSetWindowTitle(QString title)
 
 void AFQBrowserInteraction::closeEvent(QCloseEvent* event)
 {
+	qsignalClearPopup(m_obsSource);
+
+	if (m_obsSource)
+		obs_source_send_focus(m_obsSource, false);
+
 	QDialog::closeEvent(event);
 	if (!event->isAccepted())
 		return;
 
-	//config_set_int(App()->GlobalConfig(), "InteractionWindow", "cx",
-	//	width());
-	//config_set_int(App()->GlobalConfig(), "InteractionWindow", "cy",
-	//	height());
+	//config_set_int(APPCONFIG, "InteractionWindow", "cx", width());
+	//config_set_int(APPCONFIG, "InteractionWindow", "cy", height());
 
-	obs_display_remove_draw_callback(ui->preview->GetDisplay(),
-									 AFQBrowserInteraction::DrawPreview,
-									 this);
+	obs_display_remove_draw_callback(ui->preview->GetDisplay(), AFQBrowserInteraction::DrawPreview, this);
 }
 
-bool AFQBrowserInteraction::nativeEvent(const QByteArray&, void* message,
-										qintptr*)
+bool AFQBrowserInteraction::nativeEvent(const QByteArray& b, void* message, qintptr* re)
 {
 #ifdef _WIN32
 	const MSG& msg = *static_cast<MSG*>(message);
 	switch (msg.message) {
 	case WM_MOVE:
-		for (AFQTDisplay* const display :
-		findChildren<AFQTDisplay*>()) {
+		for (AFQTDisplay* const display : findChildren<AFQTDisplay*>()) {
 			display->OnMove();
 		}
 		break;
 	case WM_DISPLAYCHANGE:
-		for (AFQTDisplay* const display :
-		findChildren<AFQTDisplay*>()) {
+		for (AFQTDisplay* const display : findChildren<AFQTDisplay*>()) {
 			display->OnDisplayChange();
 		}
 	}
@@ -144,32 +144,27 @@ bool AFQBrowserInteraction::nativeEvent(const QByteArray&, void* message,
 	UNUSED_PARAMETER(message);
 #endif
 
-	return false;
+	return AFTTopBaseDialog::nativeEvent(b, message, re);
 }
 
 
 void AFQBrowserInteraction::SourceRemoved(void* data, calldata_t* params)
 {
-	QMetaObject::invokeMethod(static_cast<AFQBrowserInteraction*>(data),
-							  "close");
+	QMetaObject::invokeMethod(static_cast<AFQBrowserInteraction*>(data), "close");
 }
 
 void AFQBrowserInteraction::SourceRenamed(void* data, calldata_t* params)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	const char* name = calldata_string(params, "new_name");
-	QString title = locale.Str("Basic.InteractionWindow");
+	QString title = Str("Basic.InteractionWindow");
 	title = title.arg(QT_UTF8(name));
 
-	QMetaObject::invokeMethod(static_cast<AFQBrowserInteraction*>(data),
-							  "qslotSetWindowTitle", Q_ARG(QString, title));
+	QMetaObject::invokeMethod(static_cast<AFQBrowserInteraction*>(data), "qslotSetWindowTitle", Q_ARG(QString, title));
 }
 
 void AFQBrowserInteraction::DrawPreview(void* data, uint32_t cx, uint32_t cy)
 {
 	AFQBrowserInteraction* window = static_cast<AFQBrowserInteraction*>(data);
-
 	if (!window->m_obsSource)
 		return;
 
@@ -198,8 +193,7 @@ void AFQBrowserInteraction::DrawPreview(void* data, uint32_t cx, uint32_t cy)
 	gs_viewport_pop();
 }
 
-static int TranslateQtKeyboardEventModifiers(QInputEvent* event,
-	bool mouseEvent)
+static int TranslateQtKeyboardEventModifiers(QInputEvent* event, bool mouseEvent)
 {
 	int obsModifiers = INTERACT_NONE;
 
@@ -214,6 +208,7 @@ static int TranslateQtKeyboardEventModifiers(QInputEvent* event,
 	if (event->modifiers().testFlag(Qt::MetaModifier))
 		obsModifiers |= INTERACT_CONTROL_KEY;
 #else
+	// Handle windows key? Can a browser even trap that key?
 	if (event->modifiers().testFlag(Qt::ControlModifier))
 		obsModifiers |= INTERACT_CONTROL_KEY;
 #endif
@@ -240,8 +235,7 @@ static int TranslateQtMouseEventModifiers(QMouseEvent* event)
 	return modifiers;
 }
 
-bool AFQBrowserInteraction::GetSourceRelativeXY(int mouseX, int mouseY, int& relX,
-	int& relY)
+bool AFQBrowserInteraction::GetSourceRelativeXY(int mouseX, int mouseY, int& relX, int& relY)
 {
 	float pixelRatio = devicePixelRatioF();
 	int mouseXscaled = (int)roundf(mouseX * pixelRatio);
@@ -255,8 +249,7 @@ bool AFQBrowserInteraction::GetSourceRelativeXY(int mouseX, int mouseY, int& rel
 	int x, y;
 	float scale;
 
-	GetScaleAndCenterPos(sourceCX, sourceCY, size.width(), size.height(), x,
-		y, scale);
+	GetScaleAndCenterPos(sourceCX, sourceCY, size.width(), size.height(), x, y, scale);
 
 	if (x > 0) {
 		relX = int(float(mouseXscaled - x) / scale);
@@ -304,18 +297,19 @@ bool AFQBrowserInteraction::HandleMouseClickEvent(QMouseEvent* event)
 		return false;
 	}
 
+	// Why doesn't this work?
+	//if (event->flags().testFlag(Qt::MouseEventCreatedDoubleClick))
+	//	clickCount = 2;
 
 	QPoint pos = event->pos();
-	bool insideSource = GetSourceRelativeXY(pos.x(), pos.y(), mouseEvent.x,
-		mouseEvent.y);
+	bool insideSource = GetSourceRelativeXY(pos.x(), pos.y(), mouseEvent.x, mouseEvent.y);
 
 	if (mouseUp || insideSource)
-		obs_source_send_mouse_click(m_obsSource, &mouseEvent, button,
-			mouseUp, clickCount);
+		obs_source_send_mouse_click(m_obsSource, &mouseEvent, button, mouseUp, clickCount);
 
 #ifdef _WIN32
-	if(m_dummyInteraction)
-		SetFocus(m_dummyInteraction->GetHwnd());
+	if(m_pDummyInteraction)
+		SetFocus(m_pDummyInteraction->GetHwnd());
 #endif
     
 	return true;
@@ -330,8 +324,7 @@ bool AFQBrowserInteraction::HandleMouseMoveEvent(QMouseEvent* event)
 	if (!mouseLeave) {
 		mouseEvent.modifiers = TranslateQtMouseEventModifiers(event);
 		QPoint pos = event->pos();
-		mouseLeave = !GetSourceRelativeXY(pos.x(), pos.y(),
-			mouseEvent.x, mouseEvent.y);
+		mouseLeave = !GetSourceRelativeXY(pos.x(), pos.y(), mouseEvent.x, mouseEvent.y);
 	}
 
 	obs_source_send_mouse_move(m_obsSource, &mouseEvent, mouseLeave);
@@ -367,8 +360,7 @@ bool AFQBrowserInteraction::HandleMouseWheelEvent(QWheelEvent* event)
 	const int y = position.y();
 
 	if (GetSourceRelativeXY(x, y, mouseEvent.x, mouseEvent.y)) {
-		obs_source_send_mouse_wheel(m_obsSource, &mouseEvent, xDelta,
-			yDelta);
+		obs_source_send_mouse_wheel(m_obsSource, &mouseEvent, xDelta, yDelta);
 	}
 
 	return true;
@@ -408,28 +400,23 @@ OBSEventFilter* AFQBrowserInteraction::BuildEventFilter()
 			case QEvent::MouseButtonPress:
 			case QEvent::MouseButtonRelease:
 			case QEvent::MouseButtonDblClick:
-				return this->HandleMouseClickEvent(
-					static_cast<QMouseEvent*>(event));
+				return this->HandleMouseClickEvent(static_cast<QMouseEvent*>(event));
 			case QEvent::MouseMove:
 			case QEvent::Enter:
 			case QEvent::Leave:
-				return this->HandleMouseMoveEvent(
-					static_cast<QMouseEvent*>(event));
+				return this->HandleMouseMoveEvent(static_cast<QMouseEvent*>(event));
 
 			case QEvent::Wheel:
-				return this->HandleMouseWheelEvent(
-					static_cast<QWheelEvent*>(event));
+				return this->HandleMouseWheelEvent(static_cast<QWheelEvent*>(event));
 			case QEvent::FocusIn:
 			case QEvent::FocusOut:
-				return this->HandleFocusEvent(
-					static_cast<QFocusEvent*>(event));
+				return this->HandleFocusEvent(static_cast<QFocusEvent*>(event));
 #if _WIN32
-				// WIN32 Use m_dummyInteraction Window KeyEvent Message
+				// WIN32 Use m_pDummyInteraction Window KeyEvent Message
 #else
 			case QEvent::KeyPress:
 			case QEvent::KeyRelease:
-				return this->HandleKeyEvent(
-					static_cast<QKeyEvent*>(event));
+				return this->HandleKeyEvent(static_cast<QKeyEvent*>(event));
 #endif
 		default:
 			return false;
@@ -443,7 +430,7 @@ OBSEventFilter* AFQBrowserInteraction::BuildEventFilter()
 // For Dummy Browser Interaction 
 #ifdef _WIN32
 CDummyInteraction::CDummyInteraction(QWidget* parent, OBSSource source) :
-	m_parent(parent),
+	m_pParent(parent),
 	m_obsSource(source)
 {
 	// Using the WINAPI to create a window.
@@ -451,20 +438,20 @@ CDummyInteraction::CDummyInteraction(QWidget* parent, OBSSource source) :
 
 	// Convert HWND to QWidget
 	if (m_hwnd) {
-		m_qWindow = QWindow::fromWinId((WId)m_hwnd);
-		m_widgetContainter = QWidget::createWindowContainer(m_qWindow, m_parent);
+		m_pWindow = QWindow::fromWinId((WId)m_hwnd);
+		m_pWidgetContainter = QWidget::createWindowContainer(m_pWindow, m_pParent);
 
-		m_widgetContainter->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-		m_widgetContainter->setMouseTracking(true);
-		m_widgetContainter->setFocusPolicy(Qt::StrongFocus);
+		m_pWidgetContainter->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+		m_pWidgetContainter->setMouseTracking(true);
+		m_pWidgetContainter->setFocusPolicy(Qt::StrongFocus);
 	}
 }
 
 CDummyInteraction::~CDummyInteraction() 
 {
-	if (m_qWindow) {
-		delete m_qWindow;
-		m_qWindow = nullptr;
+	if (m_pWindow) {
+		delete m_pWindow;
+		m_pWindow = nullptr;
 	}
 
 	m_obsSource = nullptr;
@@ -472,7 +459,7 @@ CDummyInteraction::~CDummyInteraction()
 	DestroyWindow(m_hwnd);
 	m_hwnd = NULL;
 
-	m_parent = nullptr;
+	m_pParent = nullptr;
 }
 
 void CDummyInteraction::_CreateInterationWindow() 
@@ -485,11 +472,9 @@ void CDummyInteraction::_CreateInterationWindow()
 	wc.lpszClassName = L"CDummyInteraction";
 	RegisterClass(&wc);
 
-	m_hwnd = CreateWindowEx(
-		0, L"CDummyInteraction", L"DummyInteractionWindow",
-		WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 450, 120,
-		nullptr, nullptr, hInstance, nullptr
-	);
+	m_hwnd = CreateWindowEx(0, L"CDummyInteraction", L"DummyInteractionWindow",
+							WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 450, 120,
+							nullptr, nullptr, hInstance, nullptr);
 
 	::SetWindowLongPtr(m_hwnd, GWLP_USERDATA, (LONG_PTR)this);
 	::SetWindowLongPtr(m_hwnd, GWLP_WNDPROC, (LONG_PTR)WindowProc);

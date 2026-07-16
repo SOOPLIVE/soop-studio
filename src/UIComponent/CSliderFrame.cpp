@@ -5,28 +5,36 @@
 #include <QPainter>
 #include <QGraphicsDropShadowEffect>
 
+#include "qt-wrappers.hpp"
 #include "platform/platform.hpp"
+
+#define HANDLE_STATE_PROPERTY "sliderState"
+#define HANDLE_STATE_PROPERTY_DEFAULT "default"
+#define HANDLE_STATE_PROPERTY_HOVER "hover"
+#define HANDLE_STATE_PROPERTY_PRESSED "pressed"
 
 AFQSysVolumeSlider::AFQSysVolumeSlider(QWidget* parent) :
     AFQMouseClickSlider(parent)
 {
-    m_qTimer = new QTimer(this);
-    connect(m_qTimer, &QTimer::timeout, this, &AFQSysVolumeSlider::qslotUpdate);
+    m_timer = new QTimer(this);
+    connect(m_timer, &QTimer::timeout, this, &AFQSysVolumeSlider::qslotUpdate);
 }
 
 void AFQSysVolumeSlider::paintEvent(QPaintEvent* event)
 {
     QSlider::paintEvent(event);
-    
-    if (m_bMuted)
-        m_fCurrentPeak = m_fMinPeak;
+
+    if (m_muted)
+        m_currentPeak = m_minPeak;
 
     QStyleOptionSlider opt;
     initStyleOption(&opt);
-    QColor drawColor = QColor(0, 224, 255);
+
+    //QColor drawColor = palette().light().color();
+    QColor drawColor = QColor(1, 130, 255);
 
     opt.subControls = QStyle::SC_SliderGroove | QStyle::SC_SliderHandle;
-    if (tickPosition() != NoTicks) 
+    if (tickPosition() != NoTicks)
     {
         opt.subControls |= QStyle::SC_SliderTickmarks;
     }
@@ -34,9 +42,9 @@ void AFQSysVolumeSlider::paintEvent(QPaintEvent* event)
     QRect grooveRect = style()->subControlRect(QStyle::CC_Slider, &opt, QStyle::SC_SliderGroove, this);
     QRect handleRect = style()->subControlRect(QStyle::CC_Slider, &opt, QStyle::SC_SliderHandle, this);
 
-    float fRatio = (m_fCurrentPeak - m_fMinPeak) / (m_fMaxPeak - m_fMinPeak);
+    float fRatio = (m_currentPeak - m_minPeak) / (m_maxPeak - m_minPeak);
     fRatio *= -1.f;
-    
+
     int drawRectHeight = grooveRect.height() * fRatio;
 
     // Prevent drawing above the handle
@@ -50,12 +58,12 @@ void AFQSysVolumeSlider::paintEvent(QPaintEvent* event)
 
 void AFQSysVolumeSlider::showEvent(QShowEvent* event)
 {
-    m_qTimer->start(50);
+    m_timer->start(50);
 }
 
 void AFQSysVolumeSlider::hideEvent(QHideEvent* event) 
 {
-    m_qTimer->stop();
+    m_timer->stop();
 }
 
 void AFQSysVolumeSlider::qslotUpdate()
@@ -65,22 +73,24 @@ void AFQSysVolumeSlider::qslotUpdate()
 
 void AFQSysVolumeSlider::SetCurrentPeak(float curPeak)
 {
-    if (curPeak < m_fMinPeak)
-        m_fCurrentPeak = m_fMinPeak;
-    else if (curPeak > m_fMaxPeak)
-        m_fCurrentPeak = m_fMaxPeak;
+    if (curPeak < m_minPeak)
+        m_currentPeak = m_minPeak;
+    else if (curPeak > m_maxPeak)
+        m_currentPeak = m_maxPeak;
     else
-        m_fCurrentPeak = curPeak;
+        m_currentPeak = curPeak;
 }
 
 void AFQSysVolumeSlider::SetMuted(bool muted)
 {
-    m_bMuted = muted;
+    m_muted = muted;
 
     if (muted)
-        this->setStyleSheet("QSlider::add-page{ background: rgba(255, 255, 255, 0.40); }");
+        this->setProperty("Mute", true);
     else
-        this->setStyleSheet("QSlider::add-page{ background: rgba(252, 252, 253, 100%); }");
+        this->setProperty("Mute", false);
+
+    PolishStyleSheet(this);
 }
 
 AFQSliderFrame::AFQSliderFrame(QWidget *parent) :
@@ -89,12 +99,16 @@ AFQSliderFrame::AFQSliderFrame(QWidget *parent) :
 {
     ui->setupUi(this);
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
-    setAttribute(Qt::WA_TranslucentBackground);
+    //setAttribute(Qt::WA_TranslucentBackground);
     setMouseTracking(true);
     setAttribute(Qt::WA_Hover);
     installEventFilter(this);
 
-    _ApplyShadowEffect();
+    ui->verticalSlider->setAttribute(Qt::WA_Hover, true);
+    ui->verticalSlider->installEventFilter(this);
+    _SetSliderStateProperty(HANDLE_STATE_PROPERTY_DEFAULT);
+
+    //_ApplyShadowEffect();
 }
 
 AFQSliderFrame::~AFQSliderFrame()
@@ -102,19 +116,25 @@ AFQSliderFrame::~AFQSliderFrame()
     delete ui;
 }
 
-void AFQSliderFrame::InitSliderFrame(const char* imagepath, bool buttonchecked, int sliderTotal, int volume)
+void AFQSliderFrame::qslotSliderValueChanged(int sliderValue)
 {
-    std::string absPath;
-    GetDataFilePath(imagepath, absPath);
-    QString qstrImgPath(absPath.data());
-    
-    QString style = "QPushButton {image: url(%1) 0 0 0 0 stretch stretch;}";
-    //ui->pushButton->setStyleSheet(style.arg(qstrImgPath));
+    auto normalize = (float)(sliderValue - ui->verticalSlider->maximum()) / (float)ui->verticalSlider->maximum(); // -1 ~ 0
+    emit qsignalVolumeChanged(normalize);
+}
+
+void AFQSliderFrame::InitSliderFrame(const char* /*imagepath*/, bool buttonchecked, int sliderTotal, int volume)
+{
     ui->pushButton->setChecked(buttonchecked);
-    ui->verticalSlider->setValue(volume);
     ui->verticalSlider->setMaximum(sliderTotal);
 
-    connect(ui->verticalSlider, &QSlider::valueChanged, this, &AFQSliderFrame::qsignalVolumeChanged);
+    if (volume > sliderTotal)
+        volume = sliderTotal;
+    else if (volume < 0)
+        volume = 0;
+
+    ui->verticalSlider->setValue(volume);
+
+    connect(ui->verticalSlider, &QSlider::valueChanged, this, &AFQSliderFrame::qslotSliderValueChanged);
     connect(ui->pushButton, &QPushButton::clicked, this, &AFQSliderFrame::qsignalMuteButtonClicked);
 }
 
@@ -126,8 +146,8 @@ int AFQSliderFrame::VolumeSize()
 void AFQSliderFrame::SetButtonProperty(const char* property)
 {
     ui->pushButton->setProperty("AudioSliderBtnType", property);
-    style()->unpolish(ui->pushButton);
-    style()->polish(ui->pushButton);
+
+    PolishStyleSheet(ui->pushButton);
 }
 
 void AFQSliderFrame::SetVolumeSize(int volume)
@@ -179,6 +199,34 @@ bool AFQSliderFrame::event(QEvent* e)
         break;
     }
     return QWidget::event(e);
+}
+
+bool AFQSliderFrame::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == ui->verticalSlider) {
+        if (event->type() == QEvent::HoverEnter) {
+            _SetSliderStateProperty(HANDLE_STATE_PROPERTY_HOVER);
+        }
+        else if (event->type() == QEvent::HoverLeave) {
+            _SetSliderStateProperty(HANDLE_STATE_PROPERTY_DEFAULT);
+        }
+        else if (event->type() == QEvent::MouseButtonPress) {
+            _SetSliderStateProperty(HANDLE_STATE_PROPERTY_PRESSED);
+        }
+        else if (event->type() == QEvent::MouseButtonRelease) {
+            _SetSliderStateProperty(HANDLE_STATE_PROPERTY_HOVER);
+        }
+    }
+    return QWidget::eventFilter(obj, event);
+}
+
+void AFQSliderFrame::_SetSliderStateProperty(QString state)
+{
+    if (ui->verticalSlider->property(HANDLE_STATE_PROPERTY).toString() == state)
+        return;
+
+    ui->verticalSlider->setProperty(HANDLE_STATE_PROPERTY, state);
+    PolishStyleSheet(ui->verticalSlider);
 }
 
 void AFQSliderFrame::_ApplyShadowEffect()

@@ -1,9 +1,28 @@
-﻿#pragma once
+﻿/******************************************************************************
+	Copyright (C) 2023 by Lain Bailey <lain@obsproject.com>
+
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 2 of the License, or
+	(at your option) any later version.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+******************************************************************************/
+
+#pragma once
 
 #include <util/c99defs.h>
 
 #include <string>
 #include <vector>
+
+#include <QString>
 
 class QWidget;
 
@@ -18,6 +37,8 @@ bool IsAlwaysOnTop(QWidget *window);
 void SetAlwaysOnTop(QWidget *window, bool enable);
 
 bool SetDisplayAffinitySupported(void);
+
+bool HighContrastEnabled();
 
 enum TaskbarOverlayStatus {
 	TaskbarOverlayStatusInactive,
@@ -57,13 +78,31 @@ public:
 	RunOnceMutex &operator=(RunOnceMutex &&rom);
 };
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
-QString GetMonitorName(const QString &id);
-#endif
 bool IsRunningOnWine();
-#endif
+
+// for FreecShot UnInstaller
+enum class UninstallResult {
+	Launched,            // Default
+	UacCanceled,         // UAC Canceled
+	LaunchFailed,
+	Timeout,
+	Succeeded,           // ExitCode == 0
+	RebootRequired,      // MSI Need Reboot(3010)
+	UserCanceled,
+	FailedWithExitCode
+};
+
+const QString CurrentUserRegKey = "HKEY_CURRENT_USER\\";
+bool RegKeyExists(const QString& key, const QString& subKey);
+bool GetRegKeyValue(const QString& key, const QString& subKey, const QString& valueName, QString& value);
+
+UninstallResult RunUninstallerWithUAC(const QString& exePath, const QString& params = QStringLiteral("/S"),
+									  uint32_t timeoutMs = 5 * 60 * 1000); // Timeout 5Min
+#endif // _WIN32
 
 #ifdef __APPLE__
+typedef void (*CrashSignalCallback)(siginfo_t* info, ucontext_t* uap, void* context);
+
 typedef enum {
 	kAudioDeviceAccess = 0,
 	kVideoDeviceAccess = 1,
@@ -85,11 +124,20 @@ void InstallNSApplicationSubclass();
 void InstallNSThreadLocks();
 void disableColorSpaceConversion(QWidget *window);
 void SetMacOSDarkMode(bool dark);
+//
 int GetHeightDock(QWidget* window);
+void InitPLCrashReporter(CrashSignalCallback crashCallback);
+std::string PrintLogCrash(void* pobjPLCrashReporter);
 
-MacPermissionStatus CheckPermissionWithPrompt(MacPermissionType type,
-					      bool prompt_for_permission);
+std::string GetCPUModel();
+std::string GetHWModel();
+std::string GetOSVersion();
+std::string GetMemSize();
+std::string GetGPUModel();
+std::string GetGPUMemSize();
+
+MacPermissionStatus CheckPermissionWithPrompt(MacPermissionType type, bool prompt_for_permission);
 #define CheckPermission(x) CheckPermissionWithPrompt(x, false)
 #define RequestPermission(x) CheckPermissionWithPrompt(x, true)
 void OpenMacOSPrivacyPreferences(const char *tab);
-#endif
+#endif // __APPLE__

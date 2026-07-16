@@ -3,13 +3,11 @@
 #include <util/profiler.hpp>
 
 #include "Common/SettingsMiscDef.h"
+
+#include "Application/CApplication.h"
+
 #include "CoreModel/Config/CConfigManager.h"
 
-AFServiceManager::~AFServiceManager()
-{
-    service = nullptr;
-}
-//
 bool AFServiceManager::InitService()
 {
     ProfileScope("OBSBasic::InitService");
@@ -20,6 +18,7 @@ bool AFServiceManager::InitService()
     service = obs_service_create("rtmp_common", "default_service", nullptr, nullptr);
     if(!service)
         return false;
+
     obs_service_release(service);
 
     return true;
@@ -29,10 +28,8 @@ void AFServiceManager::SaveService()
     if(!service)
         return;
 
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    //
     char serviceJsonPath[512] = {0,};
-    int ret = confManager.GetProfilePath(serviceJsonPath, sizeof(serviceJsonPath), SERVICE_PATH);
+    int ret = GetProfilePath(serviceJsonPath, sizeof(serviceJsonPath), SERVICE_PATH);
     if(ret <= 0)
         return;
 
@@ -47,11 +44,9 @@ void AFServiceManager::SaveService()
 }
 bool AFServiceManager::LoadService()
 {
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    //
     const char* type = nullptr;
     char serviceJsonPath[512] = {0,};
-    int ret = confManager.GetProfilePath(serviceJsonPath, sizeof(serviceJsonPath), SERVICE_PATH);
+    int ret = GetProfilePath(serviceJsonPath, sizeof(serviceJsonPath), SERVICE_PATH);
     if(ret <= 0)
         return false;
 
@@ -73,15 +68,17 @@ bool AFServiceManager::LoadService()
     /* Enforce Opus on FTL if needed */
     if(strcmp(obs_service_get_protocol(service), "FTL") == 0 ||
         strcmp(obs_service_get_protocol(service), "WHIP") == 0) {
-        const char* option = config_get_string(confManager.GetBasic(), "SimpleOutput", "StreamAudioEncoder");
+        auto activeConfig = ACTIVECONFIG;
+        //
+        const char* option = config_get_string(activeConfig, "SimpleOutput", "StreamAudioEncoder");
         if(strcmp(option, "opus") != 0)
-            config_set_string(confManager.GetBasic(), "SimpleOutput", "StreamAudioEncoder", "opus");
+            config_set_string(activeConfig, "SimpleOutput", "StreamAudioEncoder", "opus");
 
-        option = config_get_string(confManager.GetBasic(), "AdvOut", "AudioEncoder");
+        option = config_get_string(activeConfig, "AdvOut", "AudioEncoder");
 
         const char* encoder_codec = obs_get_encoder_codec(option);
         if(!encoder_codec || strcmp(encoder_codec, "opus") != 0)
-            config_set_string(confManager.GetBasic(), "AdvOut", "AudioEncoder", "ffmpeg_opus");
+            config_set_string(activeConfig, "AdvOut", "AudioEncoder", "ffmpeg_opus");
     }
 
     return true;

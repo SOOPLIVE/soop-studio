@@ -1,34 +1,38 @@
 ﻿#include "CStatusbarTemp.h"
 
 #include "Application/CApplication.h"
+
+#include "CoreModel/Statistics/CStatistics.h"
+#include "CoreModel/Auth/CAuthManager.h"
+
 #include "MainFrame/CMainFrame.h"
-
-
+#include "CoreModel/OBSOutput/COutput.h"
+#include "UIComponent/CMessageBox.h"
 //
 void AFStatusbarTemp::SetOutputHandler(AFBasicOutputHandler* handler) 
 { 
 	if (!handler)
 		return;
 
-	outputHandler = handler; 
-	streamOutput = outputHandler->streamOutput;
+	m_pOutputHandler = handler; 
+	m_pStreamOutput = m_pOutputHandler->streamOutput;
 }
 
 void AFStatusbarTemp::StreamDelayStarting(int sec)
 {
-    if(!outputHandler) {
+    if(!m_pOutputHandler) {
         return;
     }
-    streamOutput = outputHandler->streamOutput;
+    m_pStreamOutput = m_pOutputHandler->streamOutput;
 
-    delaySecTotal = delaySecStarting = sec;
+    m_delaySecTotal = m_delaySecStarting = sec;
 
     UpdateDelayMsg();
     Activate();
 }
 void AFStatusbarTemp::StreamDelayStopping(int sec)
 {
-	delaySecTotal = delaySecStopping = sec;
+	m_delaySecTotal = m_delaySecStopping = sec;
 	UpdateDelayMsg();
 }
 void AFStatusbarTemp::StreamStarted(obs_output_t* output)
@@ -36,12 +40,12 @@ void AFStatusbarTemp::StreamStarted(obs_output_t* output)
 	if (!output)
 		return;
 
-	streamSigs.emplace_back(obs_output_get_signal_handler(output), "reconnect", OBSOutputReconnect, this);
-	streamSigs.emplace_back(obs_output_get_signal_handler(output), "reconnect_success", OBSOutputReconnectSuccess, this);
+	m_streamSigs.emplace_back(obs_output_get_signal_handler(output), "reconnect", OBSOutputReconnect, this);
+	m_streamSigs.emplace_back(obs_output_get_signal_handler(output), "reconnect_success", OBSOutputReconnectSuccess, this);
 
-	retries = 0;
-	lastBytesSent = 0;
-	lastBytesSentTime = os_gettime_ns();
+	m_retries = 0;
+	m_lastBytesSent = 0;
+	m_lastBytesSentTime = os_gettime_ns();
 	Activate();
 }
 void AFStatusbarTemp::StreamStopped(obs_output_t* output)
@@ -49,28 +53,23 @@ void AFStatusbarTemp::StreamStopped(obs_output_t* output)
 	if (!output)
 		return;
 
-	signal_handler_disconnect(
-		obs_output_get_signal_handler(output),
-		"reconnect", OBSOutputReconnect, this);
-	signal_handler_disconnect(
-		obs_output_get_signal_handler(output),
-		"reconnect_success", OBSOutputReconnectSuccess, this);
+	signal_handler_disconnect(obs_output_get_signal_handler(output), "reconnect", OBSOutputReconnect, this);
+	signal_handler_disconnect(obs_output_get_signal_handler(output), "reconnect_success", OBSOutputReconnectSuccess, this);
 
-	if(streamOutput) {
+	if(m_pStreamOutput) {
 		ReconnectClear();
-		streamOutput = nullptr;
-		qslotClearMessage();
+		m_pStreamOutput = nullptr;
 		Deactivate();
 	}
 }
 void AFStatusbarTemp::RecordingStarted(obs_output_t* output)
 {
-	recordOutput = output;
+	m_pRecordOutput = output;
 	Activate();
 }
 void AFStatusbarTemp::RecordingStopped()
 {
-	recordOutput = nullptr;
+	m_pRecordOutput = nullptr;
 	Deactivate();
 }
 void AFStatusbarTemp::RecordingPaused()
@@ -79,86 +78,72 @@ void AFStatusbarTemp::RecordingPaused()
 		QStringLiteral(" (PAUSED)");
 	statusWidget->ui->recordTime->setText(text);
 
-	if(recordOutput) {
+	if(m_pRecordOutput) {
 		statusWidget->ui->recordIcon->setPixmap(recordingPausePixmap);
-		streamPauseIconToggle = true;
+		m_streamPauseIconToggle = true;
 	}*/
 }
 void AFStatusbarTemp::RecordingUnpaused()
 {
-	/*if(recordOutput) {
+	/*if(m_pRecordOutput) {
 		statusWidget->ui->recordIcon->setPixmap(recordingActivePixmap);
 	}*/
 }
 
 void AFStatusbarTemp::ClearAllSignals() {
-	streamSigs.clear();
+	m_streamSigs.clear();
 }
 
 void AFStatusbarTemp::ReconnectClear()
 {
-	retries = 0;
-	reconnectTimeout = 0;
-	seconds = -1;
-	lastBytesSent = 0;
-	lastBytesSentTime = os_gettime_ns();
-	delaySecTotal = 0;
+	m_retries = 0;
+	m_reconnectTimeout = 0;
+	m_seconds = -1;
+	m_lastBytesSent = 0;
+	m_lastBytesSentTime = os_gettime_ns();
+	m_delaySecTotal = 0;
 	UpdateDelayMsg();
 }
 
-void AFStatusbarTemp::qslotShowMessage(const QString& message, int timeout)
-{
-	/*messageTimer->stop();
-
-	statusWidget->ui->message->setText(message);
-
-	if(timeout)
-		messageTimer->start(timeout);*/
-}
-void AFStatusbarTemp::qslotClearMessage()
-{
-	//statusWidget->ui->message->setText("");
-}
-//
 void AFStatusbarTemp::Activate()
 {
-	if(!active) {
+	if(!m_active) {
 		m_refreshTimer = new QTimer(this);
 		connect(m_refreshTimer, &QTimer::timeout, this, &AFStatusbarTemp::UpdateStatusBar);
 
 		int skipped = video_output_get_skipped_frames(obs_get_video());
 		int total = video_output_get_total_frames(obs_get_video());
 
-		totalStreamSeconds = 0;
-		totalRecordSeconds = 0;
-		lastSkippedFrameCount = 0;
-		startSkippedFrameCount = skipped;
-		startTotalFrameCount = total;
+		m_totalStreamSeconds = 0;
+		m_totalRecordSeconds = 0;
+		m_lastSkippedFrameCount = 0;
+		m_startSkippedFrameCount = skipped;
+		m_startTotalFrameCount = total;
 
 		m_refreshTimer->start(1000);
-		active = true;
+		m_active = true;
 
-		if(streamOutput) {
+		if(m_pStreamOutput) {
 			//statusWidget->ui->statusIcon->setPixmap(inactivePixmap);
 		}
 	}
 
-	if(streamOutput) {
+	if(m_pStreamOutput) {
 		/*statusWidget->ui->streamIcon->setPixmap(streamingActivePixmap);
 		statusWidget->ui->streamTime->setDisabled(false);
 		statusWidget->ui->issuesFrame->show();
 		statusWidget->ui->kbps->show();*/
-		firstCongestionUpdate = true;
+		m_firstCongestionUpdate = true;
 	}
 
-	if(recordOutput) {
+	if(m_pRecordOutput) {
 		/*statusWidget->ui->recordIcon->setPixmap(recordingActivePixmap);
 		statusWidget->ui->recordTime->setDisabled(false);*/
 	}
 }
 void AFStatusbarTemp::Deactivate()
 {
-	if(!streamOutput) {
+	if(!m_pStreamOutput) {
 		/*statusWidget->ui->streamTime->setText(QString("00:00:00"));
 		statusWidget->ui->streamTime->setDisabled(true);
 		statusWidget->ui->streamIcon->setPixmap(streamingInactivePixmap);
@@ -166,34 +151,36 @@ void AFStatusbarTemp::Deactivate()
 		statusWidget->ui->delayFrame->hide();
 		statusWidget->ui->issuesFrame->hide();
 		statusWidget->ui->kbps->hide();*/
-		totalStreamSeconds = 0;
-		disconnected = false;
-		firstCongestionUpdate = false;
-		App()->GetStatistics()->SetDisconnected(disconnected);
-		App()->GetStatistics()->SetCongestionUpdate(firstCongestionUpdate);
-		App()->GetStatistics()->ClearCongestionArray();
+		m_totalStreamSeconds = 0;
+		m_disconnected = false;
+		m_firstCongestionUpdate = false;
+
+		auto& statistics = STATISTICS;
+		statistics.SetDisconnected(m_disconnected);
+		statistics.SetCongestionUpdate(m_firstCongestionUpdate);
+		statistics.ClearCongestionArray();
 	}
 
-	if(!recordOutput) {
+	if(!m_pRecordOutput) {
 		/*statusWidget->ui->recordTime->setText(QString("00:00:00"));
 		statusWidget->ui->recordTime->setDisabled(true);
 		statusWidget->ui->recordIcon->setPixmap(recordingInactivePixmap);*/
-		totalRecordSeconds = 0;
+		m_totalRecordSeconds = 0;
 	}
 
-	if(outputHandler && !outputHandler->Active()) {
+	if(m_pOutputHandler && !m_pOutputHandler->Active()) {
 		delete m_refreshTimer;
 
 		/*statusWidget->ui->delayInfo->setText("");
 		statusWidget->ui->droppedFrames->setText(QTStr("DroppedFrames").arg("0", "0.0"));
 		statusWidget->ui->kbps->setText("0 kbps");*/
 
-		delaySecTotal = 0;
-		delaySecStarting = 0;
-		delaySecStopping = 0;
-		reconnectTimeout = 0;
-		active = false;
-		overloadedNotify = true;
+		m_delaySecTotal = 0;
+		m_delaySecStarting = 0;
+		m_delaySecStopping = 0;
+		m_reconnectTimeout = 0;
+		m_active = false;
+		m_overloadedNotify = true;
 
 		//statusWidget->ui->statusIcon->setPixmap(inactivePixmap);
 	}
@@ -203,22 +190,22 @@ void AFStatusbarTemp::UpdateDelayMsg()
 {
 	QString msg;
 
-	if(delaySecTotal) {
-		if(delaySecStarting && !delaySecStopping) {
+	if(m_delaySecTotal) {
+		if(m_delaySecStarting && !m_delaySecStopping) {
 			msg = QTStr("Basic.StatusBar.DelayStartingIn");
-			msg = msg.arg(QString::number(delaySecStarting));
+			msg = msg.arg(QString::number(m_delaySecStarting));
 
-		} else if(!delaySecStarting && delaySecStopping) {
+		} else if(!m_delaySecStarting && m_delaySecStopping) {
 			msg = QTStr("Basic.StatusBar.DelayStoppingIn");
-			msg = msg.arg(QString::number(delaySecStopping));
+			msg = msg.arg(QString::number(m_delaySecStopping));
 
-		} else if(delaySecStarting && delaySecStopping) {
+		} else if(m_delaySecStarting && m_delaySecStopping) {
 			msg = QTStr("Basic.StatusBar.DelayStartingStoppingIn");
-			msg = msg.arg(QString::number(delaySecStopping),
-					  QString::number(delaySecStarting));
+			msg = msg.arg(QString::number(m_delaySecStopping),
+					  QString::number(m_delaySecStarting));
 		} else {
 			msg = QTStr("Basic.StatusBar.Delay");
-			msg = msg.arg(QString::number(delaySecTotal));
+			msg = msg.arg(QString::number(m_delaySecTotal));
 		}
 	}
 }
@@ -226,40 +213,38 @@ void AFStatusbarTemp::UpdateDelayMsg()
 void AFStatusbarTemp::UpdateBandwidth() {}
 void AFStatusbarTemp::UpdateStreamTime()
 {
-	totalStreamSeconds++;
+	m_totalStreamSeconds++;
 
-	int seconds = totalStreamSeconds % 60;
-	int totalMinutes = totalStreamSeconds / 60;
+	int seconds = m_totalStreamSeconds % 60;
+	int totalMinutes = m_totalStreamSeconds / 60;
 	int minutes = totalMinutes % 60;
 	int hours = totalMinutes / 60;
 
 	QString text = QString::asprintf("%02d:%02d:%02d", hours, minutes, seconds);
 //	statusWidget->ui->streamTime->setText(text);
-	/*if(streamOutput && !statusWidget->ui->streamTime->isEnabled())
+	/*if(m_pStreamOutput && !statusWidget->ui->streamTime->isEnabled())
 		statusWidget->ui->streamTime->setDisabled(false);*/
 
-	if(reconnectTimeout > 0) {
+	if(m_reconnectTimeout > 0) {
 		QString msg = QTStr("Basic.StatusBar.Reconnecting")
-			.arg(QString::number(retries),
-			 QString::number(reconnectTimeout));
-		qslotShowMessage(msg);
-		disconnected = true;
-		App()->GetStatistics()->SetDisconnected(disconnected);
-		App()->GetStatistics()->ClearCongestionArray();
+			.arg(QString::number(m_retries),
+			 QString::number(m_reconnectTimeout));
+		m_disconnected = true;
+		STATISTICS.SetDisconnected(m_disconnected);
+		STATISTICS.ClearCongestionArray();
 //		statusWidget->ui->statusIcon->setPixmap(disconnectedPixmap);
 //		congestionArray.clear();
-		reconnectTimeout--;
+		m_reconnectTimeout--;
 
-	} else if(retries > 0) {
+	} else if(m_retries > 0) {
 		QString msg = QTStr("Basic.StatusBar.AttemptingReconnect");
-		qslotShowMessage(msg.arg(QString::number(retries)));
 	}
 
-	if(delaySecStopping > 0 || delaySecStarting > 0) {
-		if(delaySecStopping > 0)
-			--delaySecStopping;
-		if(delaySecStarting > 0)
-			--delaySecStarting;
+	if(m_delaySecStopping > 0 || m_delaySecStarting > 0) {
+		if(m_delaySecStopping > 0)
+			--m_delaySecStopping;
+		if(m_delaySecStarting > 0)
+			--m_delaySecStarting;
 		UpdateDelayMsg();
 	}
 }
@@ -269,24 +254,24 @@ void AFStatusbarTemp::UpdateRecordTime()
 	bool paused = os_atomic_load_bool(&recording_paused);
 	if(!paused)
 	{
-		totalRecordSeconds++;
+		m_totalRecordSeconds++;
 
-		int seconds = totalRecordSeconds % 60;
-		int totalMinutes = totalRecordSeconds / 60;
+		int seconds = m_totalRecordSeconds % 60;
+		int totalMinutes = m_totalRecordSeconds / 60;
 		int minutes = totalMinutes % 60;
 		int hours = totalMinutes / 60;
 
 		QString text = QString::asprintf("%02d:%02d:%02d", hours, minutes, seconds);
 
 //		statusWidget->ui->recordTime->setText(text);
-		/*if(recordOutput && !statusWidget->ui->recordTime->isEnabled())
+		/*if(m_pRecordOutput && !statusWidget->ui->recordTime->isEnabled())
 			statusWidget->ui->recordTime->setDisabled(false);*/
 	} else {
-		/*statusWidget->ui->recordIcon->setPixmap(streamPauseIconToggle
+		/*statusWidget->ui->recordIcon->setPixmap(m_streamPauseIconToggle
 												? recordingPauseInactivePixmap
 												: recordingPausePixmap);*/
 
-		streamPauseIconToggle = !streamPauseIconToggle;
+		m_streamPauseIconToggle = !m_streamPauseIconToggle;
 	}
 }
 void AFStatusbarTemp::UpdateDroppedFrames() {}
@@ -298,7 +283,7 @@ void AFStatusbarTemp::OBSOutputReconnect(void* data, calldata_t* params)
 	QMetaObject::invokeMethod(statusBar, "Reconnect", Q_ARG(int, seconds));
 
 	obs_output_t* output = (obs_output_t*)calldata_ptr(params, "output");
-	QString channelID = App()->GetMainView()->GetChannelID(output);
+	QString channelID = MAINFRAME->GetChannelID(output);
 	QString alertText = QTStr("Basic.SystemTray.Message.Reconnecting");
 
 	QMetaObject::invokeMethod(statusBar, 
@@ -311,54 +296,61 @@ void AFStatusbarTemp::OBSOutputReconnectSuccess(void* data, calldata_t* params)
 {
 	AFStatusbarTemp* statusBar = reinterpret_cast<AFStatusbarTemp*>(data);
 	QMetaObject::invokeMethod(statusBar, "ReconnectSuccess");
-
-	obs_output_t* output = (obs_output_t*)calldata_ptr(params, "output");
-	QString channelID = App()->GetMainView()->GetChannelID(output);
-	QString alertText = QTStr("Basic.StatusBar.ReconnectSuccessful");
-
-	QMetaObject::invokeMethod(statusBar,
-		"qslotShowSystemAlert",
-		Q_ARG(QString, channelID),
-		Q_ARG(QString, alertText));
 }
 //
 void AFStatusbarTemp::Reconnect(int seconds)
 {
-	reconnectTimeout = seconds;
-	if(streamOutput) {
-		delaySecTotal = obs_output_get_active_delay(streamOutput);
+	m_reconnectTimeout = seconds;
+	if(m_pStreamOutput) {
+		m_delaySecTotal = obs_output_get_active_delay(m_pStreamOutput);
 		UpdateDelayMsg();
 
-		retries++;
+		m_retries++;
 	}
 }
 void AFStatusbarTemp::ReconnectSuccess()
 {
-	QString msg = QTStr("Basic.StatusBar.ReconnectSuccessful");
-	qslotShowMessage(msg, 4000);
-
 	ReconnectClear();
 
-	if(streamOutput) {
-		delaySecTotal = obs_output_get_active_delay(streamOutput);
+	if(m_pStreamOutput) {
+		m_delaySecTotal = obs_output_get_active_delay(m_pStreamOutput);
 		UpdateDelayMsg();
-		disconnected = false;
-		firstCongestionUpdate = true;
-		App()->GetStatistics()->SetDisconnected(disconnected);
-		App()->GetStatistics()->SetCongestionUpdate(firstCongestionUpdate);
+		m_disconnected = false;
+		m_firstCongestionUpdate = true;
+		STATISTICS.SetDisconnected(m_disconnected);
+		STATISTICS.SetCongestionUpdate(m_firstCongestionUpdate);
+
+		if (AUTH_CONTEXT.IsSoopRegistered()) {
+			AUTH_CONTEXT.SendCheckBroadStart(this, "qslotBroadStartAPIResponse_Reconnect");
+		}
+		else
+		{
+			QString channelID = MAINFRAME->GetChannelID(m_pStreamOutput);
+			QString alertText = QTStr("Basic.StatusBar.ReconnectSuccessful");
+			qslotShowSystemAlert(channelID, alertText);
+		}
 	}
 }
 void AFStatusbarTemp::UpdateStatusBar() 
 {
-	if (streamOutput)
+	if (m_pStreamOutput)
 		UpdateStreamTime();
-	if (recordOutput)
+	if (m_pRecordOutput)
 		UpdateRecordTime();
 }
 
 void AFStatusbarTemp::UpdateCurrentFPS() {}
 void AFStatusbarTemp::UpdateIcons() {}
 
+void AFStatusbarTemp::qslotBroadStartAPIResponse_Reconnect(const QByteArray& responseData) {
+	bool result = false;
+
+	BroadStartAPI_s info = {};
+
+	std::string jsonString = responseData.toStdString();
+	std::string err = "";
+}
+
 void AFStatusbarTemp::qslotShowSystemAlert(QString channelID, QString alertText) {
-	App()->GetMainView()->ShowSystemAlert(alertText, channelID);
+	MAINFRAME->ShowSystemAlert(alertText, channelID);
 }

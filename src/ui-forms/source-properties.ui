@@ -57,7 +57,7 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QFrame" name="titleFrame">
+    <widget class="AFTransparentMouseEvents" name="titleWidget" native="true">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -72,12 +72,6 @@
      </property>
      <property name="styleSheet">
       <string notr="true"/>
-     </property>
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Raised</enum>
      </property>
      <layout class="QHBoxLayout" name="titleFrameLayout">
       <property name="leftMargin">
@@ -298,6 +292,12 @@
    <class>AFQTDisplay</class>
    <extends>QWidget</extends>
    <header>UIComponent/CQtDisplay.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>AFTransparentMouseEvents</class>
+   <extends>QWidget</extends>
+   <header>MainFrame/CTransparentMouseEvents.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

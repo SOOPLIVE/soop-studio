@@ -6,13 +6,13 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>998</width>
+    <width>646</width>
     <height>42</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>998</width>
+    <width>0</width>
     <height>42</height>
    </size>
   </property>
@@ -65,18 +65,15 @@
    </item>
    <item>
     <widget class="QWidget" name="widget_Container" native="true">
-     <layout class="QHBoxLayout" name="horizontalLayout_5">
+     <layout class="QHBoxLayout" name="horizontalLayout_6">
       <property name="spacing">
        <number>0</number>
-      </property>
-      <property name="leftMargin">
-       <number>9</number>
       </property>
       <property name="topMargin">
        <number>5</number>
       </property>
       <property name="rightMargin">
-       <number>16</number>
+       <number>23</number>
       </property>
       <property name="bottomMargin">
        <number>6</number>
@@ -94,7 +91,7 @@
         </property>
        </spacer>
       </item>
-      <item alignment="Qt::AlignVCenter">
+      <item>
        <widget class="QWidget" name="widget_ResourceCpu" native="true">
         <property name="minimumSize">
          <size>
@@ -143,7 +140,7 @@
              <number>0</number>
             </property>
             <property name="topMargin">
-             <number>4</number>
+             <number>5</number>
             </property>
             <property name="rightMargin">
              <number>0</number>
@@ -166,7 +163,7 @@
                </size>
               </property>
               <property name="styleSheet">
-               <string notr="true">image: url(&quot;../assets/stat/normal-ellipse.svg&quot;);</string>
+               <string notr="true"/>
               </property>
               <property name="text">
                <string/>
@@ -297,7 +294,7 @@
              <number>0</number>
             </property>
             <property name="topMargin">
-             <number>4</number>
+             <number>5</number>
             </property>
             <property name="rightMargin">
              <number>0</number>
@@ -320,7 +317,7 @@
                </size>
               </property>
               <property name="styleSheet">
-               <string notr="true">image: url(&quot;../assets/stat/normal-ellipse.svg&quot;);</string>
+               <string notr="true"/>
               </property>
               <property name="text">
                <string/>
@@ -377,7 +374,7 @@
         </layout>
        </widget>
       </item>
-      <item alignment="Qt::AlignVCenter">
+      <item>
        <widget class="Line" name="line_ExtensionDivider2">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
@@ -454,7 +451,7 @@
              <number>0</number>
             </property>
             <property name="topMargin">
-             <number>4</number>
+             <number>5</number>
             </property>
             <property name="rightMargin">
              <number>0</number>
@@ -477,7 +474,7 @@
                </size>
               </property>
               <property name="styleSheet">
-               <string notr="true">image: url(&quot;../assets/stat/normal-ellipse.svg&quot;);</string>
+               <string notr="true"/>
               </property>
               <property name="text">
                <string/>
@@ -559,7 +556,7 @@
         </property>
        </widget>
       </item>
-      <item alignment="Qt::AlignVCenter">
+      <item>
        <widget class="QWidget" name="widget_ResourceNetwork" native="true">
         <property name="minimumSize">
          <size>
@@ -611,7 +608,7 @@
              <number>0</number>
             </property>
             <property name="topMargin">
-             <number>4</number>
+             <number>5</number>
             </property>
             <property name="rightMargin">
              <number>0</number>
@@ -634,7 +631,7 @@
                </size>
               </property>
               <property name="styleSheet">
-               <string notr="true">image: url(&quot;../assets/stat/normal-ellipse.svg&quot;);</string>
+               <string notr="true"/>
               </property>
               <property name="text">
                <string/>
@@ -688,26 +685,183 @@
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QPushButton" name="pushButton_Stat">
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="Line" name="line_ExtensionDivider4">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>1</width>
+          <height>12</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>1</width>
+          <height>12</height>
+         </size>
+        </property>
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QWidget" name="widget_ResourceFPS" native="true">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>31</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>31</height>
+         </size>
+        </property>
+        <layout class="QHBoxLayout" name="horizontalLayout_5">
+         <property name="leftMargin">
+          <number>8</number>
+         </property>
+         <property name="topMargin">
+          <number>7</number>
+         </property>
+         <property name="rightMargin">
+          <number>8</number>
+         </property>
+         <property name="bottomMargin">
+          <number>7</number>
+         </property>
+         <item alignment="Qt::AlignVCenter">
+          <widget class="QWidget" name="widget_FPSIcon" native="true">
            <property name="minimumSize">
             <size>
-             <width>16</width>
+             <width>0</width>
              <height>16</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
-             <width>16</width>
-             <height>16</height>
+             <width>16777215</width>
+             <height>16777215</height>
             </size>
            </property>
+           <property name="styleSheet">
+            <string notr="true"/>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_6">
+            <property name="spacing">
+             <number>0</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>5</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item alignment="Qt::AlignVCenter">
+             <widget class="QLabel" name="label_FPSIcon">
+              <property name="minimumSize">
+               <size>
+                <width>6</width>
+                <height>6</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>6</width>
+                <height>6</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string notr="true"/>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item alignment="Qt::AlignVCenter">
+          <widget class="QLabel" name="label_FPSValue">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>17</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>17</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true"/>
+           </property>
            <property name="text">
-            <string/>
+            <string>60 / 60</string>
+           </property>
+          </widget>
+         </item>
+         <item alignment="Qt::AlignVCenter">
+          <widget class="QLabel" name="label_FPS">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>17</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>17</height>
+            </size>
+           </property>
+           <property name="styleSheet">
+            <string notr="true"/>
+           </property>
+           <property name="text">
+            <string>FPS</string>
            </property>
           </widget>
          </item>
         </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_Stat">
+        <property name="minimumSize">
+         <size>
+          <width>16</width>
+          <height>16</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16</width>
+          <height>16</height>
+         </size>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
        </widget>
       </item>
      </layout>

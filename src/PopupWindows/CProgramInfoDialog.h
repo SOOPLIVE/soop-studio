@@ -2,13 +2,13 @@
 
 #include <QDialog>
 
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 namespace Ui {
     class AFQProgramInfoDialog;
 }
 
-class AFQProgramInfoDialog : public AFQRoundedDialogBase
+class AFQProgramInfoDialog : public AFTTopBaseDialog
 {
 #pragma region QT Field, CTOR/DTOR
     Q_OBJECT
@@ -20,6 +20,7 @@ public:
 private slots:
     void qslotShowPrivacyPolicy();
     void qslotShowTermsConditions();
+    void qslotShowOpenSourceLisenceInfo();
 
 #pragma endregion QT Field, CTOR/DTOR
 

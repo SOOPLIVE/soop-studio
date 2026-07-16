@@ -5,17 +5,18 @@
 #include <QPointer>
 #include <QTimer>
 
-namespace Ui {
-class AFResourceExtension;
-}
+//#include "CoreModel/Statistics/CStatistics.h"
 
-class AFStatistics;
-enum class PCStatState;
+enum class PCStatState : int;
+
+namespace Ui {
+    class AFResourceExtension;
+}
 
 class AFResourceExtension : public QWidget
 {
-#pragma region QT Field
     Q_OBJECT
+
 public:
     explicit AFResourceExtension(QWidget* parent = nullptr);
     ~AFResourceExtension();
@@ -29,35 +30,23 @@ public slots:
     void qslotDiskState(PCStatState state);
     void qslotMemoryState(PCStatState state);
     void qslotNetworkState(PCStatState state);
+    void qslotFPSState(PCStatState state);
 
 signals:
     void qsignalStatWindowTriggered();
-    
-#pragma endregion QT Field
 
-#pragma region public func
 public:
     void ResourceExtensionInit();
-#pragma endregion public func
 
-#pragma region protected func
-protected:
-#pragma endregion protected func
-
-#pragma region private func
 private:
     void _RefreshCPUText();
     void _RefreshDiskText();
     void _RefreshMemoryText();
     void _RefreshNetworkText();
-#pragma endregion private func
+    void _RefreshFPSText();
 
-#pragma region private member var
 private:
-    Ui::AFResourceExtension* ui;
-
-    AFStatistics* m_Statistics = nullptr;
-#pragma endregion private member var
+    Ui::AFResourceExtension* ui = nullptr;
 };
 
 #endif // CRESOURCEEXTENSION_H

@@ -3,10 +3,14 @@
 
 #include "Application/CApplication.h"
 #include "Utils/CJsonController.h"
+#include "Utils/soop-crypt.hpp"
+#include "Utils/OverlayManager.h"
+#include "Utils/BreaktimeManager.h"
 
-#include <QPropertyAnimation>
+#include "Common/StudioDefine.h"
+
+#include <util/profiler.hpp>
 #include <QBoxLayout>
-#include <QUiLoader>
 #include <QFile>
 #include <QTextStream>
 #include <QIODevice>
@@ -19,12 +23,9 @@
 #include <QPainterPath>
 #include <QScreen>
 #include <QWindow>
-#include <QMessageBox>
 #include <QDialog>
 #include <QFontMetrics>
-#include <QGraphicsOpacityEffect>
 #include <QToolButton>
-#include <QWidgetAction>
 #include <QMimeData>
 #include <QUrlQuery>
 #include <QSettings>
@@ -32,64 +33,83 @@
 
 #include <fstream>
 #include <sstream>
-
 #include <iterator>
 
-#include "qt-wrapper.h"
+
+#ifdef __APPLE__
+#include <QFileOpenEvent>
+#include <CoreFoundation/CoreFoundation.h>
+#include <ApplicationServices/ApplicationServices.h>
+#endif
+
+#include "qt-wrappers.hpp"
 #include "util/dstr.hpp"
 #include "util/platform.h"
 #include "platform/platform.hpp"
+#include "Utils/soop-imageprinter.hpp"
 
 #include "Common/SettingsMiscDef.h"
+#include "Common/StringMiscUtils.h"
 
-#include "CUIValidation.h"
-#include "CMainFrameGuide.h"
-#include "MainPreview/CProgramView.h"
-#include "MainPreview/CVerticalProgramView.h"
+#include "ui-validation.hpp"
+#include "CLeftNavigationBar.h"
+#include "MainPreview/CProgramViewHorizontal.h"
+#include "MainPreview/CProgramViewVertical.h"
 
 #include "ViewModel/MainWindow/CMainWindowAccesser.h"
 #include "ViewModel/MainWindow/CMainWindowRenderModel.h"
 
-#include "ViewModel/Auth/Soop/auth-soop-global.h"
 #include "ViewModel/Auth/Soop/auth-soop.hpp"
 #include "ViewModel/Auth/Twitch/auth-twitch.h"
 
+#include "CoreModel/Profile/CProfile.h"
 #include "CoreModel/Auth/CAuthManager.h"
 #include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Config/CStateAppContext.h"
 #include "CoreModel/Graphics/CGraphicsContext.h"
 #include "CoreModel/OBSData/CInhibitSleepContext.h"
 #include "CoreModel/OBSData/CLoadSaveManager.h"
-#include "CoreModel/Source/CSource.h"
+#include "CoreModel/Statistics/CStatistics.h"
 #include "CoreModel/Service/CService.h"
-#include "CoreModel/Video/CVideo.h"
+#include "CoreModel/Action/CHotkeyContext.h"
+#include "CoreModel/OBSOutput/COutput.h"
 #include "CoreModel/Scene/CSceneContext.h"
 #include "CoreModel/Icon/CIconContext.h"
-#include "CoreModel/Action/CHotkeyContext.h"
+#include "CoreModel/OBSOutput/COBSOutputContext.h"
+#include "CoreModel/Video/CVideo.h"
+#include "CoreModel/Audio/CAudio.h"
+#include "CoreModel/SOOPSource/CSoopMediaSourceManager.h"
+#include "CoreModel/Encoder/CEncoder.h"
 
-#include "Blocks/SceneControlDock/CProjector.h"
 #include "Blocks/SceneSourceDock/CSourceListView.h"
-#include "Blocks/SceneSourceDock/CSceneSourceDockWidget.h"
+#include "Blocks/AdvanceControlsDock/CAdvanceControlsDockWidget.h"
+#include "Blocks/BroadInfoDock/CBroadInfoDockWidget.h"
+#include "Blocks/AudioMixerDock/CAudioAdvSettingWidget.h"
 
-#include "UIComponent/CSliderFrame.h"
+#include "UIComponent/CColorSelect.h"
 #include "UIComponent/CBasicPreview.h"
-#include "UIComponent/CCustomMenu.h"
-#include "UIComponent/CSceneBottomButton.h"
-#include "UIComponent/CMessageBox.h"
 #include "UIComponent/CBasicToggleButton.h"
+#include "UIComponent/CMessageAlert.h"
 
-#include "PopupWindows/CStatFrame.h"
 #include "PopupWindows/CBalloonWidget.h"
-#include "PopupWindows/SourceDialog/CSelectSourceDialog.h"
+#include "PopupWindows/CSceneTransitionsDialog.h"
 #include "PopupWindows/SourceDialog/CSourceProperties.h"
 #include "PopupWindows/SettingPopup/CStudioSettingDialog.h"
 #include "PopupWindows/SourceDialog/CSelectSourceButton.h"
 #include "PopupWindows/SourceDialog/CSceneSelectDialog.h"
-#include "PopupWindows/CCustomColorDialog.h"
 #include "PopupWindows/SettingPopup/CSettingUtils.h"
 #include "PopupWindows/CRemuxFrame.h"
 #include "PopupWindows/SettingPopup/CAddStreamWidget.h"
-
+#include "PopupWindows/CMissingFilesDialog.h"
+#include "PopupWindows/CBrowserInteractionDialog.h"
+#include "PopupWindows/CEndBroadDialog.h"
+#include "PopupWindows/CCateChangeDialog.h"
+#include "PopupWindows/CEmptyDialog.h"
+#include "PopupWindows/SourceDialog/SOOPBrowserSource/CVideoBalloonProperty.h"
+#include "PopupWindows/CSignaturePopup.h"
+#include "PopupWindows/CFreecshotUnInstallAlert.h"
+#include "PopupWindows/CStudioUpdateLogDialog.h"
+#include "PopupWindows/SourceDialog/SOOPDowoomiSource/CAquaSubtitleDialog.h"
 
 #include "ViewModel/Auth/COAuthLogin.hpp"
 #include "ViewModel/Auth/CAuth.h"
@@ -97,38 +117,201 @@
 #include "ViewModel/Auth/CAuthListener.hpp"
 #include "ViewModel/Auth/YouTube/auth-youtube.hpp"
 #include "ViewModel/Auth/YouTube/youtube-api-wrappers.hpp"
+
+// MainFrame Separation Class
+#include "DragDrop/CDragDrop.h"
+#include "Profile/CMainProfile.h"
+#include "SceneCollection/CMainSceneCollection.h"
+#include "Output/COutput.h"
+#include "AudioSource/CAudioSource.h"
+#include "Update/CMainUpdate.h"
+#include "SceneSource/CMainSceneSource.h"
+
+bool StudioConfig::isStaging = false;
 const QString SchedulDateAndTimeFormat = "yyyy-MM-dd'T'hh:mm:ss'Z'";
 
 Q_DECLARE_METATYPE(OBSScene);
 Q_DECLARE_METATYPE(OBSSceneItem);
 Q_DECLARE_METATYPE(OBSSource);
 
-inline void clearLayout(QLayout* layout) {
-    if (!layout) return;
+extern soop_frontend_callbacks* InitializeAPIInterface(AFMainFrame* main);
+static std::chrono::milliseconds g_loginDuration(0);
 
-    while (QLayoutItem* item = layout->takeAt(0)) {
-        if (QWidget* widget = item->widget()) {
-            widget->deleteLater();
+#define STARTUP_SEPARATOR "==== Startup complete ==============================================="
+#define SHUTDOWN_SEPARATOR "==== Shutting down =================================================="
+
+#define UNSUPPORTED_ERROR                                                     \
+	"Failed to initialize video:\n\nRequired graphics API functionality " \
+	"not found.  Your GPU may not be supported."
+
+#define UNKNOWN_ERROR                                                  \
+	"Failed to initialize video.  Your GPU may not be supported, " \
+	"or your graphics drivers may need to be updated."
+
+static inline void LogEncoders()
+{
+    constexpr uint32_t hide_flags = OBS_ENCODER_CAP_DEPRECATED | OBS_ENCODER_CAP_INTERNAL;
+
+    auto list_encoders = [](obs_encoder_type type) {
+        size_t idx = 0;
+        const char* encoder_type;
+
+        while(obs_enum_encoder_types(idx++, &encoder_type)) {
+            if(obs_get_encoder_caps(encoder_type) & hide_flags ||
+                obs_get_encoder_type(encoder_type) != type) {
+                continue;
+            }
+
+            blog(LOG_INFO, "\t- %s (%s)", encoder_type, obs_encoder_get_display_name(encoder_type));
         }
-        else if (QLayout* childLayout = item->layout()) {
-            clearLayout(childLayout);
-        }
-        delete item;
+    };
+
+    blog(LOG_INFO, "---------------------------------");
+    blog(LOG_INFO, "Available Encoders:");
+    blog(LOG_INFO, "  Video Encoders:");
+    list_encoders(OBS_ENCODER_VIDEO);
+    blog(LOG_INFO, "  Audio Encoders:");
+    list_encoders(OBS_ENCODER_AUDIO);
+}
+
+
+void AFMainFrame::OBSErrorMessageBox(const char* errorMsg, const char* defaultMsg, const char* errorLabel)
+{
+    QString error_reason;
+    if (errorMsg)
+        error_reason = QT_UTF8(errorMsg);
+    else
+        error_reason = QTStr(defaultMsg);
+    //
+    AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, DYNAMIC_COMPOSIT, "", errorMsg);
+}
+
+//MissingFileDialog shows on back of Mainframe on Startup if it opens in BlockManager
+//Need Change Move to BlockManager - Need to solve open in front of Mainframe when first execute
+void AFMainFrame::ShowMissingFilesDialog(obs_missing_files_t* files)
+{
+    if(obs_missing_files_count(files) > 0)
+    {
+        /* When loading the missing files dialog on launch, the
+        * window hasn't fully initialized by this point on macOS,
+        * so put this at the end of the current task queue. Fixes
+        * a bug where the window is behind OBS on startup. */
+        QTimer::singleShot(0, [this, files] {
+            m_missDialog = new AFQMissingFilesDialog(files, this);
+            m_missDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+            m_blockManager->ApplyMoveInAllArea(m_missDialog);
+            m_missDialog->show();
+            m_missDialog->raise();
+        });
+    } else {
+        obs_missing_files_destroy(files);
+
+        /* Only raise dialog if triggered manually */
+        if(LOADSAVE_CONTEXT.CheckDisableSaving() == false)
+            AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+                                       QT_UTF8(Str("MissingFiles.NoMissing.Title")),
+                                       QT_UTF8(Str("MissingFiles.NoMissing.Text")));
     }
 }
 
-AFMainFrame::AFMainFrame(QWidget *parent, Qt::WindowFlags flag) :
+void AFMainFrame::ApplyMoveArea()
+{
+    ui->widget_BottomControl->setProperty("MoveInAllArea", true);
+    ui->widget_Title->setProperty("MoveInAllArea", true);
+    ui->widget_TopControl->setProperty("MoveInAllArea", true);
+    ui->widget_TopMenu->setProperty("MoveInAllArea", true);
+    ui->label_SoopStudio->setProperty("MoveInAllArea", true);
 
-    AFCQMainBaseWidget(parent, flag),
+    QObjectList broadrecordchildren = ui->widget_BroadAndRecord->children();
+    foreach(QObject * object, broadrecordchildren)
+    {
+        if (QPushButton* button = dynamic_cast<QPushButton*>(object))
+            continue;
+        object->setProperty("MoveInAllArea", true);
+    }
+}
+
+bool AFMainFrame::CheckSplitVodByUI()
+{
+    return ui->label_BroadTime->IsSplitVodAvailable();
+}
+
+
+void AFMainFrame::ShowWindowCaptureArea(obs_source_t* source)
+{
+    WindowCaptureAreaWidget::launch(source, this);
+}
+
+#ifdef __APPLE__
+    bool handleOpenURL(const QUrl & url) {
+        if (url.scheme() == "soopstudio") {
+            QString path = url.path();
+            return true;
+        }
+        return false;
+    }
+
+    class URLHandler : public QObject {
+        bool eventFilter(QObject* obj, QEvent* event) override {
+            if (event->type() == QEvent::FileOpen) {
+                QUrl url = static_cast<QFileOpenEvent*>(event)->url();
+                return handleOpenURL(url);
+            }
+            return QObject::eventFilter(obj, event);
+        }
+    };
+#endif // __APPLE__
+
+AFMainFrame::AFMainFrame(QWidget *parent, Qt::WindowFlags flag, QString updatePath) :
+
+    AFTTopBaseWidget(parent, flag),
     ui(new Ui::AFMainFrame),
     m_undo_s(this),
-    m_bBlockAnimating(false),
-    m_bIsBlockPopup(true)
+    m_serviceManager(std::make_unique<AFServiceManager>()),
+    m_scene(std::make_unique<AFSceneContext>()),
+    m_outputContext(std::make_unique<AFOBSOutputContext>()),
+    m_graphicContext(std::make_unique<AFGraphicsContext>()),
+    m_breakTimeManager(std::make_unique<BreaktimeManager>()),
+    m_overlayManager(std::make_unique<OverlayManager>()),
+
+    m_soopSrcManager(std::make_unique<SOOPMediaSourceManager>()),
+    // Dynamic Composit
+    m_dynamicCompositMainWindow(new AFMainDynamicComposit),
+    m_leftNavigationBar(new AFQLeftNavigationBar(this)),
+    m_refreshVideoBallonTimer(new QTimer(this)),
+    // Manager
+    m_blockManager(new AFQBlockManager(this)),
+    m_pNetworkManager(new QNetworkAccessManager(this)),
+    // MainFrame Func Separation class
+    m_pMainDragDrop(new CMainDragDrop(this)),
+    m_mainProfile(new AFMainProfile(this)),
+    m_mainSceneCollection(new AFMainSceneCollection(this)),
+    m_pMainOutput(new CMainOutput(this)),
+    m_pMainAudioSource(new CMainAudioSource(this)),
+    m_pMainSceneSource(new CMainSceneSource(this)),
+    m_pMainUpdate(new CMainUpdate(this, m_pNetworkManager))
 {
     ui->setupUi(this);
-    setAttribute(Qt::WA_TranslucentBackground);
-    setAttribute(Qt::WA_NativeWindow);
+#ifdef __APPLE__
+    ui->widget_Top->hide();
+#endif
 
+    ui->label_BroadTime->SetPrefix("LIVE ");
+    ui->label_RecordTime->SetPrefix("REC ");
+
+    m_soopApiHandler = new SOOPApiHandler();
+
+    if (m_pMainUpdate)
+        m_pMainUpdate->SetUpdatePath(updatePath);
+
+#ifdef _WIN32
+    AddRegStartProcessWindows();
+#endif
+#ifdef __APPLE__
+    URLHandler* urlHandler = new URLHandler();
+    QCoreApplication::instance()->installEventFilter(urlHandler);   
+#endif
+    
     setAcceptDrops(true);
 
     qRegisterMetaType<OBSScene>("OBSScene");
@@ -139,41 +322,49 @@ AFMainFrame::AFMainFrame(QWidget *parent, Qt::WindowFlags flag) :
     ui->action_RemoveSource->setShortcut({ Qt::Key_Backspace });
 #endif
 
-
-    /*QFontMetrics fontMetrics(ui->label->font());
-    QString strElidedText = fontMetrics.elidedText(ui->label->text(), Qt::ElideRight, ui->label->width());
-    ui->label->setText(strElidedText);*/
-
+    //No Preview Margin Design Changed
     ui->widget_PreviewBottomColor->hide();
-    ui->label_NetworkValue->hide();
+    //No Preview Margin Design Changed
       
+    m_CheckBroadStartAPITimer = new QTimer(this);
+    m_CheckBroadStartAPITimer->setInterval(5000);
+    m_CheckBroadStartAPITimer->setSingleShot(true);
+    connect(m_CheckBroadStartAPITimer, &QTimer::timeout, [this]() {
+        m_checkBroadStartAPI = false; 
+        });
 }
 
 AFMainFrame::~AFMainFrame()
 {
-    _ClearAllStreamSignals();
-    ClearSceneBottomButtons();
+    m_breakTimeManager->Finalize();
 
-    m_DynamicCompositMainWindow = nullptr;
-    m_outputHandlers.clear();
-    m_ProgramGuideWidget->deleteLater();
-    m_VolumeSliderFrame->deleteLater();
-    m_MicSliderFrame->deleteLater();
-    m_StatFrame->deleteLater();
+#ifdef _WIN32
+    if (AUTH_CONTEXT.IsSoopRegistered() == true)
+        m_overlayManager->Finalize();
+#endif // _WIN32_
+    m_pMainOutput->ClearAllStreamSignals();
+    m_pMainSceneSource->ClearSceneBottomButtons();
 
-    m_ProgramGuideWidget = nullptr;
-    m_VolumeSliderFrame = nullptr;
-    m_MicSliderFrame = nullptr;
-    m_StatFrame = nullptr;
+    m_dynamicCompositMainWindow = nullptr;
 
-    m_SourceProperties = nullptr;
+    m_outputContext.reset();
+
+    m_pMainAudioSource->DestoryMainFrameAudioUI();
+
+    m_sourceProperties = nullptr;
     m_transformPopup = nullptr;
-    m_dialogFilters = nullptr;
-    m_ScreenshotData = nullptr;
+    m_sourceFilters = nullptr;
     m_programInfoDialog = nullptr;
+    m_sceneTransitionPopup = nullptr;
+    m_advAudioSettingPopup = nullptr;
+    m_signatureAIPopup = nullptr;
+
+    for (auto& [id, prop] : m_sourcePropsPtr) {
+        if (prop)
+            prop = nullptr;
+    }
 
     delete m_shortcutFilter;
-
     
     /* When shutting down, sometimes source references can get in to the
      * event queue, and if we don't forcibly process those events they
@@ -183,137 +374,301 @@ AFMainFrame::~AFMainFrame()
      * normal C++ behavior for your data to be freed in the order that you
      * expect or want it to. */
     QApplication::sendPostedEvents(nullptr);
-    
+
+    config_set_int(APPCONFIG, "General", "LastVersion", LIBOBS_API_VER);
+    config_save_safe(APPCONFIG, "tmp", nullptr);
+
     delete ui;
 }
 
-void AFMainFrame::AFMainFrameInit(bool bShow)
+bool AFMainFrame::AFMainFrameInit(bool bShow, std::string userID, std::string soopCookie, std::string Install_Type, std::string Freecshot_Type)  // type  국내:1 ,  글로벌:0 또는 빈값
 {
-    setWindowTitle("SOOP Studio");
-
-    ui->stackedWidget_Platform->setCurrentIndex(0);
-    // Register shortcuts for Undo/Redo
-    m_undo_s.m_actionMainUndo->setShortcut(Qt::CTRL | Qt::Key_Z);
-    m_undo_s.m_actionMainUndo->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(m_undo_s.m_actionMainUndo);
-    connect(m_undo_s.m_actionMainUndo, &QAction::triggered, this, &AFMainFrame::qSlotUndo);
-
-    QList<QKeySequence> shrt;
-    shrt << QKeySequence((Qt::CTRL | Qt::SHIFT) | Qt::Key_Z)
-        << QKeySequence(Qt::CTRL | Qt::Key_Y);
-    m_undo_s.m_actionMainRedo->setShortcuts(shrt);
-    m_undo_s.m_actionMainRedo->setShortcutContext(Qt::ApplicationShortcut);
-    addAction(m_undo_s.m_actionMainRedo);
-    connect(m_undo_s.m_actionMainRedo, &QAction::triggered, this, &AFMainFrame::qSlotRedo);
-
-
+    setWindowTitle(APPNAME);
     setAttribute(Qt::WA_DeleteOnClose, true);
-
     setFocusPolicy(Qt::FocusPolicy::StrongFocus);
 
-    const char* strGeometryConfig = config_get_string(GetGlobalConfig(),
-        "BasicWindow", "geometry");
-    // Restore Window
-    QByteArray byteArray =
-        QByteArray::fromBase64(QByteArray(strGeometryConfig));
-    if (strGeometryConfig != NULL) {
-        QByteArray byteArray =
-            QByteArray::fromBase64(QByteArray(strGeometryConfig));
-        restoreGeometry(byteArray);
-        auto& graphicsContext = AFGraphicsContext::GetSingletonInstance();
-        QRect rect = geometry();
-        graphicsContext.SetMainPreviewY(rect.height());
-        graphicsContext.SetMainPreviewCY(rect.y());
+    _RegisterUndoRedoShortCut();
 
-        QRect windowGeometry = normalGeometry();
-        if (!WindowPositionValid(windowGeometry)) {
-            QRect rect =
-                QGuiApplication::primaryScreen()->geometry();
-            setGeometry(QStyle::alignedRect(Qt::LeftToRight,
-                Qt::AlignCenter, size(),
-                rect));
+    m_pCurrentScreen = App()->screenAt(this->mapToGlobal(rect().center()));
+
+    m_freecshotType = Freecshot_Type;
+    m_installType = Install_Type;
+    _CreateTopMenu();
+    _SetMainFrameUI();
+
+    // 
+    m_soopSrcManager->InitContext();
+
+    api = InitializeAPIInterface(this);
+
+    /* Set up streaming connections */
+    connect(this, &AFMainFrame::StreamingStarting, this, [this] {
+        m_signalFlags.streamingStarting = true;
+    }, Qt::DirectConnection);
+    connect(this, &AFMainFrame::StreamingStarted, this, [this] {
+        m_signalFlags.streamingStarting = false;
+    }, Qt::DirectConnection);
+    connect(this, &AFMainFrame::StreamingStopped, this, [this] {
+        m_signalFlags.streamingStarting = false;
+    }, Qt::DirectConnection);
+
+    /* Set up recording connections */
+    connect(this, &AFMainFrame::RecordingStarted, this, [this]() {
+        m_signalFlags.recordingStarted = true; m_signalFlags.recordingPaused = false;
+    }, Qt::DirectConnection);
+    connect(this, &AFMainFrame::RecordingPaused, this, [this]() {
+        m_signalFlags.recordingPaused = true;
+    }, Qt::DirectConnection);
+    connect(this, &AFMainFrame::RecordingUnpaused, this, [this]() {
+        m_signalFlags.recordingPaused = false;
+    }, Qt::DirectConnection);
+    connect(this, &AFMainFrame::RecordingStopped, this, [this]() {
+        m_signalFlags.recordingStarted = false; m_signalFlags.recordingPaused = false;
+    }, Qt::DirectConnection);
+
+    // CoreModel Context Init
+    CONFIG_CONTEXT.InitBasic();
+
+    // Video & Audio Utils
+    int ret = AFVideoUtil::ResetVideo();
+
+    switch(ret) {
+        case OBS_VIDEO_MODULE_NOT_FOUND:
+            throw "Failed to initialize video:  Graphics module not found";
+        case OBS_VIDEO_NOT_SUPPORTED:
+            throw UNSUPPORTED_ERROR;
+        case OBS_VIDEO_INVALID_PARAM:
+            throw "Failed to initialize video:  Invalid parameters";
+        default:
+            if(ret != OBS_VIDEO_SUCCESS)
+                throw UNKNOWN_ERROR;
+    }
+
+    AFAudioUtil::ResetAudio();
+    AFAudioUtil::LoadAudioMonitoring();
+    
+    auto mute = config_get_bool(APPCONFIG, "Audio", "MainAudioMute");
+    soop_set_master_output_muted(mute);
+    mute = config_get_bool(APPCONFIG, "Audio", "MainMicMute");
+    soop_set_master_input_muted(mute); 
+
+    HOTKEY_CONTEXT.InitHotkeys();
+
+    // Context Init
+    ICON_CONTEXT.InitContext();
+    m_graphicContext->InitContext();
+    m_scene->InitContext();
+    m_scene->InitSourceSignalCallback();
+
+    /* hack to prevent elgato from loading its own QtNetwork that it tries
+     * to ship with */
+#if defined(_WIN32) && !defined(_DEBUG)
+    LoadLibraryW(L"Qt6Network");
+#endif
+    struct obs_module_failure_info mfi;
+
+    /* Modules can access frontend information (i.e. profile and scene collection data) during their initialization, and some modules (e.g. obs-websockets) are known to use the filesystem location of the current profile in their own code.
+
+     Thus the profile and scene collection discovery needs to happen before any access to that information (but after intializing global settings) to ensure legacy code gets valid path information.
+     */
+    m_mainSceneCollection->RefreshSceneCollections(true);
+
+#if __APPLE__
+    static bool bTestOnce = false;
+    if(bTestOnce == false) {
+        bTestOnce = true;
+#endif
+    //"---------------------------------"
+    obs_load_all_modules2(&mfi);
+    //"---------------------------------"
+    obs_log_loaded_modules();
+    // "---------------------------------"
+    obs_post_load_modules();
+    ///
+#if __APPLE__
+    }
+#endif
+    BPtr<char*> failed_modules = mfi.failed_modules;
+    //
+
+    OBSDataAutoRelease data = obs_get_private_data();
+    m_vcamEnabled = obs_data_get_bool(data, "vcamEnabled");
+    
+    //Locale setting for obs-browser
+    const char* currentLocale = LOCALE_CONTEXT.GetCurrentLocale();
+    obs_set_locale(currentLocale);
+
+    m_cefManager = std::make_unique<AFCefManager>();
+    m_cefManager->InitBrowserPanelSafeBlock();
+
+    auto& authManager = AUTH_CONTEXT;
+    //
+    authManager.LoadAllAuthed();
+    authManager.InitSoopBroadInfo();
+
+    m_blockManager->ApplyMoveInAllArea(this);
+
+#ifdef _WIN32
+    UpdaterKill();
+#endif
+
+    const bool soopLoginProcess = false;
+
+    connect(this, &AFMainFrame::qsignalMainShowEventTriggered,
+            this, &AFMainFrame::qslotShowFreecShotUnInstallAlert, Qt::QueuedConnection);
+
+    bool loginRetain = false;
+    if (soopLoginProcess) {
+        auto loginStart = std::chrono::steady_clock::now();
+        m_normalInit = CheckLoginSoopCookie(userID, soopCookie, loginRetain);
+        auto loginEnd = std::chrono::steady_clock::now();
+        g_loginDuration = std::chrono::duration_cast<std::chrono::milliseconds>(loginEnd - loginStart);
+    }
+
+    if (!m_normalInit)
+        return false;
+
+	if (soopLoginProcess)
+	{
+		AFQBroadInfo* broadInfo = AUTH_CONTEXT.GetSoopBroadInfo();
+		broadInfo->RequestCategoryListAPI();
+
+		connect(authManager.GetSoopBroadInfo(), &AFQBroadInfo::checkResolution, this, &AFMainFrame::setResolution);
+
+		authManager.RequestBroadInfoAPI(true);
+		if (loginRetain)
+			authManager.LoadSoopStreamerInfo();
+
+		BroadInfoTimerStart();
+        RefreshSoopCookiTimerStart();
+	}
+
+    //Remove GLOBAL
+    authManager.RemoveChannel("SOOP Global");
+
+    STATISTICS.InitializeValues();
+
+    //No Main Account Exception Needed
+    if (!m_leftNavigationBar->LeftNavigationBarInit())
+        blog(LOG_WARNING, "LeftNavigationBarInit Failed");
+
+    ui->horizontalLayout_LeftNavigationArea->insertWidget(0, m_leftNavigationBar);
+    
+    connect(m_leftNavigationBar, &AFQLeftNavigationBar::qsignalBlockButtonTriggered, this, &AFMainFrame::qslotShowDock);
+    connect(m_leftNavigationBar, &AFQLeftNavigationBar::qsignalBlockPopupButtonTriggered, this, &AFMainFrame::qslotShowBlock);
+    
+    connect(m_blockManager, &AFQBlockManager::qsignalBlockVisible, this, &AFMainFrame::qslotBlockClosedTriggered);
+    connect(m_blockManager, &AFQBlockManager::qsignalAddSource, m_pMainSceneSource, &CMainSceneSource::qslotAddSource);
+
+    connect(this, &AFMainFrame::qsignalBroadToggled, 
+        m_leftNavigationBar, &AFQLeftNavigationBar::RecieveBroadState);
+
+    connect(this, &AFMainFrame::qsignalCertainMinuteBroadToggled,
+        m_leftNavigationBar, &AFQLeftNavigationBar::CertainMinuteBroadToggled);
+
+    m_dynamicCompositMainWindow->setAttribute(Qt::WA_DeleteOnClose);
+    connect(m_dynamicCompositMainWindow, &AFMainDynamicComposit::PreviewShowRequested, this, &AFMainFrame::qslotTogglePreview);
+    m_dynamicCompositMainWindow->MainWindowInit();
+    //
+
+    bool PropertiesOn = config_get_bool(USERCONFIG, "BasicWindow", "ShowContextToolbars");
+    ui->action_ViewToggleProperties->setChecked(PropertiesOn);
+    qslotPropertiesToggled(PropertiesOn);
+
+    m_blockManager->InitPopups();
+
+    // Account Menu Sync
+    {
+        QString loginText = QTStr("Login");
+        AFChannelData* channelData;
+        if (AUTH_CONTEXT.GetMainChannelData(channelData)) {
+            QString channelID = QString::fromStdString(channelData->pAuthData->channelID);
+            int maxLen = 9;
+            if (channelID.length() > maxLen) {
+                channelID = channelID.left(maxLen) + "...";
+            }
+            loginText = QTStr("Logout.With.Account").arg(channelID);
         }
-
-        if (isMaximized())
-            changeWidgetBorder(true);
-    }
-    else {
-        /*QRect desktopRect =
-            QGuiApplication::primaryScreen()->geometry();
-        QSize adjSize = desktopRect.size() / 2 - size() / 2;*/
-        this->resize(minimumSize());
+        if (m_loginAction)
+            m_loginAction->setText(loginText);
     }
 
-    if (!m_qTopMenu)
-        _CreateTopMenu();
+    ui->widget_Basic->layout()->addWidget(m_dynamicCompositMainWindow);
 
-    currentScreen = App()->screenAt(this->mapToGlobal(rect().center()));
+    // Sutdio First Run Check
+    bool firstRun = false;
+    {
+        const char* sceneCollectionFile = config_get_string(USERCONFIG, "Basic", "SceneCollectionFile");
+        char savePath[1024];
+        char fileName[1024];
 
-    m_DynamicCompositMainWindow = new AFMainDynamicComposit(this);
+        if (!sceneCollectionFile)
+            throw "Failed to get scene collection name";
 
-    m_DynamicCompositMainWindow->setAttribute(Qt::WA_DeleteOnClose);
-    connect(m_DynamicCompositMainWindow, &AFMainDynamicComposit::qsignalBlockVisibleToggled,
-        this, &AFMainFrame::qslotBlockToggleTriggered);
-    connect(m_DynamicCompositMainWindow, &AFMainDynamicComposit::qsignalSelectSourcePopup,
-        this, &AFMainFrame::qslotShowSelectSourcePopup);
-    connect(m_DynamicCompositMainWindow, &AFMainDynamicComposit::qsignalShowPreview,
-        this, &AFMainFrame::qslotTogglePreview);
+        ret = snprintf(fileName, sizeof(fileName), (LOCAL_FOLDER_NAME + "/basic/scenes/%s").c_str(), sceneCollectionFile);
 
-    bool firstOpen = m_DynamicCompositMainWindow->MainWindowInit();
+        if (ret <= 0)
+            throw "Failed to create scene collection file name";
 
-    ui->widget_Basic->layout()->addWidget(m_DynamicCompositMainWindow);
+        ret = GetAppConfigPath(savePath, sizeof(savePath), fileName);
 
-    if (firstOpen)
-        qslotProgramGuideOpenTriggered();
-
-    AFStatistics* statistics = App()->GetStatistics();
-    if(statistics) {
-        connect(statistics, &AFStatistics::qsignalCheckDiskSpaceRemaining,
-                this, &AFMainFrame::qslotCheckDiskSpaceRemaining);
-        connect(statistics, &AFStatistics::qsignalMemoryError,
-                this, &AFMainFrame::qslotShowMemorySystemAlert);
-        connect(statistics, &AFStatistics::qsignalCPUError,
-            this, &AFMainFrame::qslotShowCPUSystemAlert);
-        connect(statistics, &AFStatistics::qsignalNetworkError,
-            this, &AFMainFrame::qslotShowNetworkSystemAlert);
-        connect(statistics, &AFStatistics::qsignalNetworkState,
-            this, &AFMainFrame::qslotNetworkState);
+        if (!os_file_exists(savePath)) {
+            firstRun = true;
+        }
     }
+    m_mainProfile->UpdateProfileEncoders();
+    if (firstRun) {
+        
+       //Show Guide After ShowEvent - UI fully set after show
+        connect(this, &AFMainFrame::qsignalMainShowEventTriggered, this, &AFMainFrame::qslotMainFrameTutorial);
+    }
+
+    setProperty("IsFirstRun", firstRun);
+    if(!firstRun)
+        connect(this, &AFMainFrame::qsignalMainShowEventTriggered, this, &AFMainFrame::qslotInitShowSoopChat);
+
+    if(!firstRun)
+        connect(this, &AFMainFrame::qsignalMainShowEventTriggered,
+                this, &AFMainFrame::qslotInitFreecShotPlusUpdateLog, Qt::QueuedConnection);
+
+	m_bFirstOpen = LOADSAVE_CONTEXT.InitLoadSave();
+
+    // audio mixer
+    ToggleMixerLayout(config_get_bool(USERCONFIG, "BasicWindow", "VerticalVolControl"));
+
+    // Add Preset Source
+    _AddBroadPreset();
+
+    _ConnectStatisticsSignals();
 
     // Init Network State Icon
-    qslotNetworkState(PCStatState::None);
+    qslotResourceState(PCStatState::None);
 
-    /*QVBoxLayout* qMainWindowLayout = new QVBoxLayout(this);
-
-    qMainWindowLayout->setContentsMargins(0, 0, 0, 0);
-    qMainWindowLayout->setSpacing(0);
-    qMainWindowLayout->addWidget(m_DynamicCompositMainWindow);
-    ui->widget_Basic->setLayout(qMainWindowLayout);*/
-
-    ///
-    SetButtons();
     
-    m_outputHandlers.reserve(5);
+    LogEncoders();
+    //
+    //
+    m_pMainOutput->ResetOutputs();
+    HOTKEY_CONTEXT.CreateHotkeys();
 
-    _SetupAccountUI();
-    if (!m_qTopMenu)
-    {
-        _CreateTopMenu();
-    }
-
-
-    ResetOutputs();
     // init service
-    if(!AFServiceManager::GetSingletonInstance().InitService()) {
+    if(!m_serviceManager->InitService()) {
         throw "Failed to initialize service";
     }
 
-    ui->widget_BroadTimer->setVisible(false);
-    ui->widget_RecordTimer->setVisible(false);
-    ui->line_Time->setVisible(false);
-
     EnablePreviewDisplay(true);
 
+#ifdef _WIN32
+    SetThreadExecutionState(ES_DISPLAY_REQUIRED | ES_CONTINUOUS);
+    int enabled = 0;
+    bool bRet = ::SystemParametersInfo(SPI_GETSCREENSAVEACTIVE, 0, &enabled, 0);
+    if (enabled)
+    {
+        bRet = ::SystemParametersInfo(SPI_SETSCREENSAVEACTIVE, 0, (PVOID)0, SPIF_SENDCHANGE);
+    }
+
+    _DeleteBroadInfoData();    
+#endif
     /*QList<QScreen*> screens = QGuiApplication::screens();
     for (int i = 0; i < screens.length(); i++)
     {
@@ -327,10 +682,8 @@ void AFMainFrame::AFMainFrameInit(bool bShow)
 
     /* Show the main window, unless the tray icon isn't available
      * or neither the setting nor flag for starting minimized is set. */
-    /*bool sysTrayEnabled = config_get_bool(configManager.GetGlobal(),
-        "BasicWindow", "SysTrayEnabled");
-    bool sysTrayWhenStarted = config_get_bool(configManager.GetGlobal(), 
-        "BasicWindow", "SysTrayWhenStarted");
+    /*bool sysTrayEnabled = config_get_bool(USERCONFIG, "BasicWindow", "SysTrayEnabled");
+    bool sysTrayWhenStarted = config_get_bool(USERCONFIG,  "BasicWindow", "SysTrayWhenStarted");
     bool hideWindowOnStart = QSystemTrayIcon::isSystemTrayAvailable() &&
         sysTrayEnabled &&
         (g_opt_minimize_tray || sysTrayWhenStarted);*/
@@ -338,111 +691,104 @@ void AFMainFrame::AFMainFrameInit(bool bShow)
 #ifdef _WIN32
     SetWin32DropStyle(this);
 
-    //if (!hideWindowOnStart)
-    if(bShow)
-        show();
 #endif
 
-    bool alwaysOnTop = config_get_bool(GetGlobalConfig(), "BasicWindow", "AlwaysOnTop");
-    if (alwaysOnTop || g_opt_always_on_top)
+    if (config_get_bool(ACTIVECONFIG, "General", "OpenStatsOnStartup"))
     {
-        SetAlwaysOnTop(this, true);
+        QTimer::singleShot(0, [this] {
+            AFQBorderPopupBaseWidget* popup = nullptr;
+            m_blockManager->MakePopup(ENUM_WINDOW_TYPE::StatPage, popup);
+            });
     }
 
     //System Tray Disable
     //SystemTray(true);
+
     _RegisterSourceControlAction();
 
-    UpdateEditMenu();
+    m_pMainSceneSource->UpdateEditMenu();
 
     _SetResourceCheckTimer();
-    connect(this, &AFMainFrame::qsignalRefreshTimerTick,
-        this, &AFMainFrame::qslotRefreshNetworkText);
+    connect(this, &AFMainFrame::qsignalRefreshTimerTick, this, &AFMainFrame::qslotRefreshMainResourceText);
 
     ReloadCustomBrowserMenu();
-}
 
-void AFMainFrame::SetButtons()
-{
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
+    ui->widget_TopMenu->setMinimumWidth(24);
+    ui->widget_TopMenu->setMaximumWidth(24);
+    ui->horizontalSpacer_Title->changeSize(8, 20, QSizePolicy::Fixed, QSizePolicy::Fixed);
+
+#ifdef _WIN32 
+    m_pMainUpdate->UpdaterCheck();
+#endif
+
+    RestoreGeometry(this->property("IsFirstRun").toBool());
+
+    connect(m_refreshVideoBallonTimer, &QTimer::timeout, this, &AFMainFrame::qslotRefreshVideoBalloonSource);
+
+#ifdef _WIN32
+    if (AUTH_CONTEXT.IsSoopRegistered() == true)
+        m_overlayManager->Initialize();
+#endif // _WIN32
+
+    m_breakTimeManager->Initialize();
+	{
+        int cntOfAccount = authManager.GetCntChannel();
+        for (int idx = 0; idx < cntOfAccount; idx++)
+        {
+            AFChannelData* tmpChannel = nullptr;
+            authManager.GetChannelData(idx, tmpChannel);
+
+            QPixmap* newObj = MakePixmapFromAuthData(tmpChannel->pAuthData);
+            if (newObj != nullptr) {
+                tmpChannel->pObjQtPixmap = newObj;
+            }
+        }
+
+        AFChannelData* tmpMainChannel = nullptr;
+        authManager.GetMainChannelData(tmpMainChannel);
+
+        if (tmpMainChannel != nullptr)
+        {
+            QPixmap* newObj = MakePixmapFromAuthData(tmpMainChannel->pAuthData);
+            if (newObj != nullptr) {
+                tmpMainChannel->pObjQtPixmap = newObj;
+            }
+        }
+    }
+
+    /* ------------------------------------------- */
+    /* display warning message for failed modules  */
+
+    if(mfi.count) {
+        QString failed_plugins;
+
+        char** plugin = mfi.failed_modules;
+        while(*plugin) {
+            failed_plugins += *plugin;
+            failed_plugins += "\n";
+            plugin++;
+        }
+
+        QString failed_msg = QTStr("PluginsFailedToLoad.Text").arg(failed_plugins);
+        QMessageBox::warning(this, QTStr("PluginsFailedToLoad.Title"), failed_msg);
+    }
+
+    InitLnbMenuItems();
     
-    connect(this, &AFCQMainBaseWidget::qsignalBaseWindowMouseRelease,
-            this, &AFMainFrame::qslotToggleBlockAreaByToggleButton);
-    connect(this, &AFCQMainBaseWidget::qsignalBaseWindowMaximized,
-            this, &AFMainFrame::qslotToggleBlockAreaByToggleButton);
-
-    ////Top Menu Buttons
-    connect(ui->pushButton_TopMenu, &QPushButton::clicked, this, &AFMainFrame::qslotTopMenuClicked);
-    connect(ui->pushButton_RaisePopup, &QPushButton::clicked, this, &AFMainFrame::qslotPopupBlockClicked);
-    ui->pushButton_RaisePopup->setToolTip(QT_UTF8(locale.Str("Basic.Main.RaisePopup")));
-    connect(ui->pushButton_MinimumWindow, &QPushButton::clicked, this, &AFMainFrame::qslotMinimizeWindow);
-    connect(ui->pushButton_MaximumWindow, &QPushButton::clicked, this, &AFMainFrame::qslotMaximizeWindow);
-    connect(ui->pushButton_Close, &QPushButton::clicked, this, &AFMainFrame::qslotCloseAllPopup);
-    ////Top Menu Buttons
-
-    connect(ui->frame_Top, &MainViewFrame::qsignalDoubleClicked, this, &AFMainFrame::qslotMaximizeWindow);
-
-    //Bottom Menu Buttons
-    //ui->pushButton_ShortcutSettings->setWhatsThis("4");
-    //connect(ui->pushButton_ShortcutSettings, &QPushButton::clicked,
-    //    this, &AFMainFrame::qslotShowStudioSettingWithButtonSender);
-
-    connect(ui->pushButton_Broad, &QPushButton::clicked, this, &AFMainFrame::qslotChangeBroadState);
-    connect(ui->pushButton_Broad, &AFQCustomPushbutton::qsignalButtonEnter, this, &AFMainFrame::qslotEnterBroadButton);
-    connect(ui->pushButton_Broad, &AFQCustomPushbutton::qsignalButtonLeave, this, &AFMainFrame::qslotLeaveBroadButton);
-    connect(ui->pushButton_Record, &QPushButton::clicked, this, &AFMainFrame::qslotChangeRecordState);
-    
-
-    m_VolumeSliderFrame = new AFQSliderFrame(this);
-    //m_VolumeSliderFrame->InitSliderFrame("assets/mainview/mousehover/soundvolume.svg", true, 4096, 4096);
-    m_VolumeSliderFrame->InitSliderFrame("assets/mainview/default/soundvolume.svg", true, 4096, 4096);
-    connect(m_VolumeSliderFrame, &AFQSliderFrame::qsignalMouseLeave, 
-        this, &AFMainFrame::qSlotCloseVolumeSlider);
-    connect(m_VolumeSliderFrame, &AFQSliderFrame::qsignalMouseEnterSlider, 
-        this, &AFMainFrame::qslotStopVolumeTimer);
-    connect(m_VolumeSliderFrame, &AFQSliderFrame::qsignalVolumeChanged,
-        this, &AFMainFrame::qslotMainAudioValueChanged);
-
-    m_MicSliderFrame = new AFQSliderFrame(this);
-    m_MicSliderFrame->setWindowFlag(Qt::WindowStaysOnTopHint);
-    //m_MicSliderFrame->InitSliderFrame("assets/mainview/mousehover/micvolume.svg", true, 4096, 4096);
-    m_MicSliderFrame->InitSliderFrame("assets/mainview/default/micvolume.svg", true, 4096, 4096);
-    connect(m_MicSliderFrame, &AFQSliderFrame::qsignalMouseLeave, 
-        this, &AFMainFrame::qSlotCloseMicSlider);
-    connect(m_MicSliderFrame, &AFQSliderFrame::qsignalMouseEnterSlider,
-        this, &AFMainFrame::qslotStopMicTimer);
-    connect(m_MicSliderFrame, &AFQSliderFrame::qsignalVolumeChanged,
-        this, &AFMainFrame::qslotMainMicValueChanged);
-
-    connect(ui->widget_Volume, &AFQHoverWidget::qsignalHoverEnter, this, &AFMainFrame::qslotShowVolumeSlider);
-    connect(ui->widget_Mic, &AFQHoverWidget::qsignalHoverEnter, this, &AFMainFrame::qslotShowMicSlider);
-    connect(m_VolumeSliderFrame, &AFQSliderFrame::qsignalMuteButtonClicked, this, &AFMainFrame::qslotSetVolumeMute);
-    connect(m_MicSliderFrame, &AFQSliderFrame::qsignalMuteButtonClicked, this, &AFMainFrame::qslotSetMicMute);
-    
-    App()->GetMainView()->GetMainWindow()->qslotSetMainAudioSource();
-
-    connect(ui->pushButton_ShortcutSettings, &QPushButton::clicked, this, &AFMainFrame::qslotShowStudioSettingPopup);
-
-    connect(ui->widget_ResourceNetwork, &AFQHoverWidget::qsignalMouseClick, this, &AFMainFrame::qslotExtendResource);
-
-    AFStatistics::InitializeValues();
-
-    //Bottom Menu Buttons
+    return true;
 }
 
 #ifdef _WIN32
 static inline void UpdateProcessPriority()
 {
-    const char* priority = config_get_string(AFConfigManager::GetSingletonInstance().GetGlobal(), "General",
-        "ProcessPriority");
+    const char* priority = config_get_string(APPCONFIG, "General", "ProcessPriority");
     if (priority && strcmp(priority, "Normal") != 0)
         SetProcessPriority(priority);
 }
 
 static inline void ClearProcessPriority()
 {
-    const char* priority = config_get_string(AFConfigManager::GetSingletonInstance().GetGlobal(), "General",
-        "ProcessPriority");
+    const char* priority = config_get_string(APPCONFIG, "General", "ProcessPriority");
     if (priority && strcmp(priority, "Normal") != 0)
         SetProcessPriority("Normal");
 }
@@ -457,14 +803,11 @@ static inline void ClearProcessPriority()
 
 void AFMainFrame::OnActivate(bool force)
 {
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-    AFQCustomMenu* profileMenu = _FindSubMenuByTitle(m_qTopMenu,
-                                             QT_UTF8(locale.Str("Basic.MainMenu.ProfileFix")));
-
+    AFQCustomMenu* profileMenu = _FindSubMenuByTitle(m_topMenu, QT_UTF8(Str("Basic.MainMenu.ProfileFix")));
     if (profileMenu->isEnabled() || force) {
         profileMenu->setEnabled(false);
         //ui->autoConfigure->setEnabled(false);
-        AFInhibitSleepContext::GetSingletonInstance().IncrementSleepInhibition();
+        INHIBITSLEEP_CONTEXT.IncrementSleepInhibition();
         UpdateProcessPriority();
 
         TaskbarOverlaySetStatus(TaskbarOverlayStatusActive);
@@ -484,18 +827,21 @@ void AFMainFrame::OnActivate(bool force)
 #endif
         }*/
     }
+    if (m_loginAction)
+    {
+        if (m_loginAction->isEnabled() || force) {
+            m_loginAction->setEnabled(false);
+        }
+    }
 }
 
 void AFMainFrame::OnDeactivate()
 {
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-    AFQCustomMenu* profileMenu = _FindSubMenuByTitle(m_qTopMenu,
-                                             QT_UTF8(locale.Str("Basic.MainMenu.ProfileFix")));
-
-    if (!IsActive() && !profileMenu->isEnabled()) {
+    AFQCustomMenu* profileMenu = _FindSubMenuByTitle(m_topMenu, QTStr("Basic.MainMenu.ProfileFix"));
+    if (!AFOutputUtil::IsActive() && !profileMenu->isEnabled()) {
         profileMenu->setEnabled(true);
         //ui->autoConfigure->setEnabled(true);
-        AFInhibitSleepContext::GetSingletonInstance().DecrementSleepInhibition();
+        INHIBITSLEEP_CONTEXT.DecrementSleepInhibition();
         ClearProcessPriority();
 
         TaskbarOverlaySetStatus(TaskbarOverlayStatusInactive);
@@ -542,51 +888,403 @@ void AFMainFrame::OnDeactivate()
             TaskbarOverlaySetStatus(TaskbarOverlayStatusActive);
         }*/
     }
+
+    if (m_loginAction)
+    {
+        if (!AFOutputUtil::IsActive() && !m_loginAction->isEnabled()) {
+            m_loginAction->setEnabled(true);
+        }
+    }
 }
+
+void AFMainFrame::ConnectSignalForScreen()
+{
+    if (m_leftNavigationBar)
+        m_leftNavigationBar->ConnectNavigationBarScreen();
+}
+
+QSize AFMainFrame::GetContentsArea()
+{
+    return ui->widget_MainArea->size();
+}
+int AFMainFrame::GetFrameBottomPosY()
+{
+    return ui->widget_MainArea->height() - ui->frame_Bottom->height();
+}
+
 
 void AFMainFrame::qslotSaveProject()
 {
-    auto& loaderSaver = AFLoadSaveManager::GetSingletonInstance();
-    
-    if (loaderSaver.CheckCanSaveProject())
-        QMetaObject::invokeMethod(this, "qslotSaveProjectDeferred",
-                                  Qt::QueuedConnection);
+    if (LOADSAVE_CONTEXT.CheckCanSaveProject())
+        QMetaObject::invokeMethod(this, "qslotSaveProjectDeferred", Qt::QueuedConnection);
 }
 
 void AFMainFrame::qslotSaveProjectDeferred()
 {
-    AFLoadSaveManager::GetSingletonInstance().SaveProjectDeferred();
+    LOADSAVE_CONTEXT.SaveProjectDeferred();
 }
 
-void AFMainFrame::CreatePropertiesPopup(obs_source_t* source)
+void AFMainFrame::RestoreMainWindow()
+{
+    const char* dockStateStr = config_get_string(USERCONFIG, "BasicWindow", "DockState");
+    if(!dockStateStr) {
+        ResetDockUI();
+    } else {
+        QByteArray dockState = QByteArray::fromBase64(QByteArray(dockStateStr));
+        if(!DYNAMIC_COMPOSIT->restoreState(dockState))
+            ResetDockUI();
+        else
+            m_blockManager->ShowAllCustomBrowser();
+    }
+}
+
+bool AFMainFrame::CreateSourceProperties(obs_source_t* source, bool fromDock)
+{
+    if (!source)
+        return false;
+
+    const char* id = obs_source_get_id(source);
+
+    bool closed = true;
+    closed = HideSourceProperties(source);
+
+    if (!closed)
+        return false;
+
+    bool basicProp = false;
+    int  sourceType = 0;
+
+    QDialog* prop = nullptr;
+    if (AFSourceUtil::IsSoopVodSource(id))
+    {
+        SOOP_VOD_TYPE type = m_soopSrcManager->GetSoopVodSourceType(id);
+        prop = m_sourcePropsPtr[id];
+        if (!prop)
+            prop = new AFQVodSourceDialog(this, source);
+        else {
+            AFQVodSourceDialog* vodDialog = qobject_cast<AFQVodSourceDialog*>(prop);
+
+            if (vodDialog) {
+                vodDialog->SetSource(source);
+                vodDialog->raise();
+                vodDialog->show();
+            }
+        }
+            prop->raise();
+    }
+    else if (0 == strcmp(id, "soop_directbroad_source")) {
+        prop = new AFQDirectBroadDialog(this, source);
+    }
+    else if (0 == strcmp(id, "soop_tv_cable_source")) {
+        prop = new AFQTvBroadDialog(this, source);
+    }
+    else if (nullptr != strstr(id, "soop_kbo_graphic_source_") ||
+        nullptr != strstr(id, "soop_commerce_source_")) {
+        prop = new AFQDowoomiDialog(this, source);
+    }
+    else if (nullptr != strstr(id, "soop_football_graphic_source_")) {
+        prop = new AFQDowoomiDialog(this, source);
+    }
+    else if (0 == strcmp(id, "soop_chat_source_score")) {
+        prop = new AFQDowoomiScoreDialog(this, source);
+    }
+    else if(nullptr != strstr(id, "soop_chat_source_mood_check"))
+    {
+        prop = new AFQDowoomiMoodCheckDialog(this, source);
+    }
+    else if(nullptr != strstr(id, "soop_chat_source_anmSubtitle")) {
+        prop = new AFQAquaSubtitleDialog(this, source);
+    }
+    else if (nullptr != strstr(id, "soop_chat_source_")) {
+        prop = new AFQDowoomiDialog(this, source);
+    }
+    else if (nullptr != strstr(id, "soop_particle_effect_source")) {
+        prop = new AFQParticleEffectDialog(this, source);
+    }
+    else if (nullptr != strstr(id, "soop_videoballoon_source")) {
+        prop = new AFQVideoBalloonProps(this, source);
+    }
+    else if (nullptr != strstr(id, "soop_mission_source_"))
+    {
+        int type = (0 == strcmp(id, "soop_mission_source_battle_joinusers") ? 1 :
+            0 == strcmp(id, "soop_mission_source_battle_fundingrank") ? 2 : -1);
+
+        prop = new AFQMissionDonationRankDialog(this, source, type);
+    }
+    else {
+        m_sourceProperties = new AFQSourceProperties(this, source);
+        prop = m_sourceProperties;
+        basicProp = true;
+    }
+
+    setCenterPositionNotUseParent(prop, this);
+    AFQBlockManager::ApplyMoveInAllArea(prop);
+    prop->setModal(false);
+    if (!AFSourceUtil::IsSoopVodSource(id)) {
+        prop->setAttribute(Qt::WA_DeleteOnClose, true);
+    }
+
+    int sourceX = this->x() + (this->width() / 2) - (prop->width() / 2);
+    int sourceY = this->y() + (this->height() / 2) - (prop->height() / 2);
+
+    QRect adjust;
+    QRect originRect = QRect(sourceX, sourceY, prop->width(), prop->height());
+    m_blockManager->AdjustPositionOutSideFullScreen(originRect, adjust);
+    prop->setGeometry(adjust);
+
+    prop->show();
+
+    prop->move(prop->x(), prop->y() - 1);
+
+    //Layout Minium Window Size
+
+    if (!basicProp)
+        m_sourcePropsPtr[id] = prop;
+
+    return true;
+}
+
+bool AFMainFrame::HideSourceProperties(obs_source_t* source)
+{
+    if(!source)
+        return false;
+
+    bool closed = true;
+    const char* sourceId = obs_source_get_id(source);
+
+    for(auto& [id, prop] : m_sourcePropsPtr) {
+        if(prop) {
+            if(!AFSourceUtil::IsSoopVodSource(id.c_str())) {
+                if(prop && prop->isVisible()) {
+                    bool _closed = prop->close();
+                    if(!_closed) {
+                        closed = false;
+                    }
+                }
+            } else {
+                prop->hide();
+                closed = true;
+            }
+        }
+    }
+
+    if(m_sourceProperties)
+        if(m_sourceProperties && m_sourceProperties->isVisible())
+            closed = m_sourceProperties->close();
+
+    return closed;
+}
+
+void AFMainFrame::CreateSceneTransitionPopup(OBSSource source, int duration)
 {
     bool closed = true;
-    if (m_SourceProperties)
-        closed = m_SourceProperties->close();
+    if (m_sceneTransitionPopup)
+        closed = m_sceneTransitionPopup->close();
 
     if (!closed)
         return;
 
-    m_SourceProperties = new AFQSourceProperties(this, source);
-    m_SourceProperties->setAttribute(Qt::WA_DeleteOnClose, true);
-    m_SourceProperties->setModal(false);
+    m_sceneTransitionPopup = new AFQSceneTransitionsDialog(this, source, duration);
+    m_sceneTransitionPopup->setAttribute(Qt::WA_DeleteOnClose);
+    m_sceneTransitionPopup->setModal(false);
 
-    setCenterPositionNotUseParent(m_SourceProperties, this);
-
-    m_SourceProperties->show();
+    m_blockManager->ApplyMoveInAllArea(m_sceneTransitionPopup);
+    m_sceneTransitionPopup->show();
+    EnableTransitionWidgets();
 }
-void AFMainFrame::CreatePropertiesWindow(obs_source_t* source)
+
+void AFMainFrame::CreateSignatureAIPopup(bool reactionAble)
 {
     bool closed = true;
-    if(m_SourceProperties)
-        closed = m_SourceProperties->close();
+	if (m_signatureAIPopup) {
+		if (m_signatureAIPopup->isVisible()) {
+			return;
+		}
+		else {
+			closed = m_signatureAIPopup->close();
+		}
+	}
 
-    if(!closed)
+    m_signatureAIPopup = new AFQSignaturePopup(reactionAble, this);
+    if(!reactionAble)
+        connect(m_signatureAIPopup, &AFQSignaturePopup::qsignalCloseSignature,
+                m_leftNavigationBar, &AFQLeftNavigationBar::qslotCloseSignature);
+
+    m_signatureAIPopup->setAttribute(Qt::WA_DeleteOnClose);
+    m_signatureAIPopup->setModal(false);
+    m_signatureAIPopup->show();
+}
+
+bool AFMainFrame::IsSmallResolution()
+{
+    QList<QScreen*> screens = QGuiApplication::screens();
+    for (QScreen* screen : screens)
+    {
+        QRect geom = screen->geometry();
+        if (geom.width() == 800 && geom.height() == 600)
+            return true;
+    }
+    return false;
+}
+
+int AFMainFrame::GetLeftNavigationBarWidth()
+{
+    int retVal = 0;
+    if (m_leftNavigationBar)
+        retVal = m_leftNavigationBar->width();
+    return retVal;
+}
+
+int AFMainFrame::GetTopAreaHeight()
+{
+    int retVal = 0;
+    if (ui->widget_Top && ui->widget_Top->isVisible())
+        retVal = ui->widget_Top->height();
+    return retVal;
+}
+
+int AFMainFrame::GetBottomAreaHeight()
+{
+    int retVal = 0;
+    if (ui->frame_Bottom && ui->frame_Bottom->isVisible())
+        retVal = ui->frame_Bottom->height();
+
+    return retVal;
+}
+
+void AFMainFrame::ResetDockUI()
+{
+    AFQBaseDockWidget* dock = nullptr;
+
+    QList<ENUM_WINDOW_TYPE> list = {
+        ENUM_WINDOW_TYPE::SceneSource,
+        ENUM_WINDOW_TYPE::Mission,
+        ENUM_WINDOW_TYPE::Vote,
+        ENUM_WINDOW_TYPE::Extensions,
+        ENUM_WINDOW_TYPE::AquaControl
+    };
+
+    if (!m_blockManager->GetDock(ENUM_WINDOW_TYPE::SoopChat, dock))
+        list.append(ENUM_WINDOW_TYPE::SoopChat);
+
+    list.append(ENUM_WINDOW_TYPE::BroadInfo);
+
+    m_blockManager->CloseAllBlocks(list);
+    m_blockManager->InitDefaultDock();
+    if (AUTH_CONTEXT.IsSoopRegistered())
+        m_leftNavigationBar->qslotBlockStatusChanged(false, ENUM_WINDOW_TYPE::AudioMixer, false);
+}
+
+int AFMainFrame::BottomControlHeight()
+{
+    int retHeight = 0;
+    if (ui->widget_BottomControl)
+        retHeight = ui->widget_BottomControl->height();
+    return retHeight;
+}
+
+int AFMainFrame::LNBWidth()
+{
+    int retWidth = 0;
+    if (m_leftNavigationBar)
+        retWidth = m_leftNavigationBar->width();
+    return retWidth;
+}
+
+void AFMainFrame::UpdateContextToolBarDeferred(bool force)
+{
+    QMetaObject::invokeMethod(this, "qslotUpdateContextToolBar",
+        Qt::QueuedConnection, Q_ARG(bool, force));
+}
+
+void AFMainFrame::ShowBrowserInteractionPopup(OBSSource source)
+{
+    if(!source)
         return;
 
-    m_SourceProperties = new AFQSourceProperties(this, source);
-    m_SourceProperties->show();
-    m_SourceProperties->setAttribute(Qt::WA_DeleteOnClose, true);
+    AFQBrowserInteraction* interaction = nullptr;
+
+    auto it = m_mapBrowserInteraction.find(source);
+    if (m_mapBrowserInteraction.end() == it)
+    {
+        interaction = new AFQBrowserInteraction(this, source);
+        interaction->setAttribute(Qt::WA_DeleteOnClose, true);
+        interaction->setModal(false);
+
+        m_blockManager->ApplyMoveInAllArea(interaction);
+
+        connect(interaction, &AFQBrowserInteraction::qsignalClearPopup,
+                this, &AFMainFrame::qslotClearBrowserInteractionPopup);
+
+        m_mapBrowserInteraction.insert(source, interaction);
+
+    } else {
+        interaction = (*it);
+    }
+
+    if(!interaction)
+        return;
+
+    if (!interaction->isVisible()) {
+        QRect targetRect = frameGeometry();
+        QSize newSize = interaction->size();
+
+        int newX = targetRect.x() + (targetRect.width() - newSize.width()) / 2;
+        int newY = targetRect.y() + (targetRect.height() - newSize.height()) / 2;
+
+        if (IsSmallResolution())
+            interaction->resize(780, 550);
+
+        QRect adjust;
+        QRect interactionRect = QRect(newX, newY,interaction->width(), interaction->height());
+        m_blockManager->AdjustPositionOutSideFullScreen(interactionRect, adjust);
+
+        interaction->setGeometry(adjust);
+
+        interaction->show();
+    }
+
+    interaction->raise();
+}
+
+void AFMainFrame::HideBrowserInteractionPopup(OBSSource source)
+{
+    MAP_BROWSER_INTERACTION::iterator it = m_mapBrowserInteraction.find(source);
+    if (m_mapBrowserInteraction.end() == it)
+        return;
+
+    AFQBrowserInteraction* interaction = (*it);
+    if (!interaction)
+        return;
+
+    interaction->close();
+    interaction = nullptr;
+
+    m_mapBrowserInteraction.remove(source);
+}
+
+void AFMainFrame::ApplyBroadInfoToUI()
+{
+    if (m_blockManager)
+        m_blockManager->ApplyBroadInfoToUI();
+}
+
+void AFMainFrame::RefreshBroadInfoDockUI(bool requestAPI)
+{
+    QWidget* outBlock = nullptr;
+    if (!m_blockManager->FindBlock(ENUM_WINDOW_TYPE::BroadInfo, outBlock))
+        return;
+
+    if(requestAPI)
+        AUTH_CONTEXT.RequestBroadInfoAPI();
+
+    AFBroadInfoDockWidget* broadInfoBlock = reinterpret_cast<AFBroadInfoDockWidget*>(outBlock);
+    broadInfoBlock->LoadBroadInfoUI();
+}
+
+void AFMainFrame::SplitVodSaved()
+{
+    ui->label_BroadTime->qslotVodSplitSaved();
 }
 
 void AFMainFrame::RecvRemovedSource(OBSSceneItem item)
@@ -594,23 +1292,28 @@ void AFMainFrame::RecvRemovedSource(OBSSceneItem item)
     if (!item)
         return;
 
-    // Check Hide Properties
-    if (m_SourceProperties && m_SourceProperties->isVisible()) {
+    OBSSource source = obs_sceneitem_get_source(item);
+    if (!source)
+        return;
 
-        OBSSource source = obs_sceneitem_get_source(item);
-        if (m_SourceProperties->GetOBSSource() == source) {
-            m_SourceProperties->close();
+    // Check Hide Properties
+    if (AFSourceUtil::IsSoopSource(source)) {
+
+        if (AFSourceUtil::IsSoopMediaSource(source)) {
+            // Detach SOOP Media Source
+            m_soopSrcManager->SetSoopMediaSource(nullptr, true);
+        }
+        HideSourceProperties(source);
+    }
+    else {
+        if (m_sourceProperties && m_sourceProperties->isVisible()) {
+            if (m_sourceProperties->GetOBSSource() == source) {
+                m_sourceProperties->close();
+            }
         }
     }
 
-    // Check Hide Source Context Popup
-    AFMainDynamicComposit* dynamicComposit = GetMainWindow();
-    if (!dynamicComposit)
-        return;
-
-    OBSSource source = obs_sceneitem_get_source(item);
-    dynamicComposit->HideSourceContextPopupFromRemoveSource(source);
-    dynamicComposit->HideBrowserInteractionPopupFromRemoveSource(source);
+    HideBrowserInteractionPopup(source);
 }
 
 void AFMainFrame::ShowSceneSourceSelectList()
@@ -624,1051 +1327,143 @@ void AFMainFrame::ShowSceneSourceSelectList()
 }
 //
 
-void AFMainFrame::ShowSystemAlert(QString channelID, QString alertText)
+void AFMainFrame::ShowSystemAlert(QString alertText, QString channelID, AFQSystemAlert::AlertIcon icon)
 {
+    if (m_systemAlert)
+        m_systemAlert->close();
+
+    int studioWidth = 400;
+
     bool isMainMinimized = this->isMinimized();
-    AFQSystemAlert* systemAlert = new AFQSystemAlert(nullptr, 
-                                                    channelID, 
-                                                    alertText, 
-                                                    isMainMinimized,
-                                                    this->width());
-    systemAlert->show();
-    _MoveSystemAlert(systemAlert, isMainMinimized);
-}
-
-void AFMainFrame::ResetOutputs()
-{
-    const char* mode = config_get_string(GetBasicConfig(), "Output", "Mode");
-    bool advOut = astrcmpi(mode, "Advanced") == 0;
-
-#define MAX_OUTPUT_STREAM 5
-    if (MAX_OUTPUT_STREAM != m_outputHandlers.size()) {
-        for (int i = 0; i < MAX_OUTPUT_STREAM; ++i) {
-            OBSService service = nullptr;
-            m_outputHandlers.emplace_back(service, 
-                                          advOut ? CreateAdvancedOutputHandler(this) : 
-                                                   CreateSimpleOutputHandler(this));
-        }        
+    if (isMainMinimized) {
+        QScreen* primaryScreen = QGuiApplication::primaryScreen();
+        if(primaryScreen)
+            studioWidth = primaryScreen->size().width() / 2;
     }
     else {
-        OUTPUT_HANDLER_LIST::iterator outputIter;
-        for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-            if (!outputIter->second->Active()) {
-                outputIter->second.reset(advOut ? CreateAdvancedOutputHandler(this) : 
-                                                  CreateSimpleOutputHandler(this));
-            }
-            else {
-                outputIter->second->Update();
-            }
-        }
+        studioWidth = this->width();
     }
 
-    OUTPUT_HANDLER_LIST::iterator outputIter = m_outputHandlers.begin();
-    m_statusbar.SetOutputHandler(outputIter->second.get());
-    App()->GetStatistics()->SetOutputHandler(outputIter->second.get());
-
-    // Register Hotkey
-    AFHotkeyContext& hotkey = AFHotkeyContext::GetSingletonInstance();
-
-    bool useReplayBuffer = false;
-    if (advOut)
-        useReplayBuffer = config_get_bool(GetBasicConfig(), "AdvOut", "RecRB");
-    else
-        useReplayBuffer = config_get_bool(GetBasicConfig(), "SimpleOutput", "RecRB");
-
-    if (useReplayBuffer)
-        hotkey.RegisterHotkeyReplayBufferSave(m_outputHandlers[0].second->replayBuffer);
-    else
-        hotkey.UnRegisterHotkeyReplayBufferSave();
+    m_systemAlert = new AFQSystemAlert(nullptr,
+                                        alertText,
+                                        channelID,
+                                        isMainMinimized,
+                                        studioWidth,
+                                        icon);
+    m_systemAlert->show();
+    _MoveSystemAlert(m_systemAlert, isMainMinimized);
 }
 
-void AFMainFrame::SetStreamingOutput()
+void AFMainFrame::EnableReplayBuffer(bool enable)
 {
-    int handlerIdx = 0;
-    auto & authManager = AFAuthManager::GetSingletonInstance();
-
-    AFChannelData* mainChannel = nullptr;
-    if (authManager.GetMainChannelData(mainChannel))
-        if (mainChannel != nullptr 
-            && !mainChannel->bIsStreaming)
-        {
-            if (IsStreamActive()) {
-                StopStreamingOutput((obs_service_t*)mainChannel->pObjOBSService);
-            }
-        }
-     
-    int cntOfAccount = authManager.GetCntChannel();
-    for (int idx = 0; idx < cntOfAccount; idx++)
+    QWidget* outBlock = nullptr;
+    if (m_blockManager->FindBlock(ENUM_WINDOW_TYPE::AdvanceControls, outBlock))
     {
-        AFChannelData* tmpChannel = nullptr;
-        authManager.GetChannelData(idx, tmpChannel);
-        if (!tmpChannel)
-            continue;
-
-        if (tmpChannel->bIsStreaming)
-        {
-            /*
-            if (!IsStartStreamingOutput((obs_service_t*)tmpChannel->pObjOBSService)) {
-                OBSDataAutoRelease settingData = obs_data_create();
-                obs_data_set_bool(settingData, "bwtest", false);
-                obs_data_set_string(settingData, "key", tmpChannel->pAuthData->strKeyRTMP.c_str());
-                obs_data_set_string(settingData, "server", tmpChannel->pAuthData->strUrlRTMP.c_str());
-                obs_data_set_bool(settingData, "use_auth", false);
-                // set service
-                obs_service_t* obsService = obs_service_create("rtmp_common", "default_service", settingData, nullptr);
-                tmpChannel->pObjOBSService = obsService;
-            }
-            if (os_atomic_load_bool(&m_streaming_active)) {
-                if (PrepareStreamingOutput(-1, (obs_service_t*)tmpChannel->pObjOBSService)) {
-                    if (!StartStreamingOutput((obs_service_t*)tmpChannel->pObjOBSService)) {
-                        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
-                            QTStr("Output.Streaming.Failed"),
-                            QTStr("Output.StartStreaming.Failed"));
-                    }
-                }
-                handlerIdx++;
-                if (tmpChannel->pObjOBSService != m_outputHandlers[handlerIdx].first) {
-                    OUTPUT_HANDLER_LIST::iterator outputIter;
-                    for (outputIter = m_outputHandlers.begin() + 1; outputIter != m_outputHandlers.end(); ++outputIter) {
-                        if (tmpChannel->pObjOBSService == outputIter->first) {
-                            std::iter_swap(outputIter, m_outputHandlers.begin() + handlerIdx);
-                        }
-                    }
-                }
-            }*/
-        }
-        else {
-            if (IsStreamActive()) {
-                StopStreamingOutput((obs_service_t*)tmpChannel->pObjOBSService);
-            }
-        }
+        AFAdvanceControlsWidget* advanceControl = reinterpret_cast<AFAdvanceControlsWidget*>(outBlock);
+        advanceControl->EnableReplayBuffer(enable);
     }
-
-
 }
 
-bool AFMainFrame::PrepareStreamingOutput(int index, obs_service_t* service)
+void AFMainFrame::SetReplayBufferStartStopMode(bool bufferStart)
 {
-    if (!service)
-        return false;
-
-    if (IsStartStreamingOutput(service))
-        return  false;
-
-    if (-1 == index) {
-        OUTPUT_HANDLER_LIST::iterator outputIter;
-        for (outputIter = m_outputHandlers.begin()+1; outputIter != m_outputHandlers.end(); ++outputIter) {
-            if (!outputIter->first) {
-                index = std::distance(m_outputHandlers.begin(), outputIter);
-                break;
-            }            
-        }
-    }
-
-    if (m_outputHandlers[index].first && m_outputHandlers[index].second->StreamingActive())
-        return false;
-
-    m_outputHandlers[index].first = service;
-    if (!m_outputHandlers[index].second->SetupStreaming(m_outputHandlers[index].first)) {
-        m_outputHandlers[index].first = nullptr;
-        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
-            QTStr("Output.Streaming.Failed"),
-            QTStr("Output.SetupStreaming.Failed"));
-        return false;
-    }
-    return true;
-}
-
-bool AFMainFrame::StartStreamingOutput(obs_service_t* service)
-{
-    if (!service)
-        return false;
-
-    OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-        if (service == outputIter->first) {
-            if (!outputIter->second->StartStreaming(outputIter->first)) {
-                return false;
-            }
-            return true;
-        }
-    }    
-    return false;
-}
-
-bool AFMainFrame::IsStartStreamingOutput(obs_service_t* service)
-{
-    OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-        if (service == outputIter->first) {
-            if (outputIter->second->StreamingActive())
-                return true;
-        }
-    }    
-    return false;
-}
-
-bool AFMainFrame::StopStreamingOutput(obs_service_t* service)
-{
-    OUTPUT_HANDLER_LIST::iterator outputIter;
-    bool currentStreamOutputStopped = false;
-
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-        if (service == outputIter->first) {
-            if (m_statusbar.GetOutputHandler() == outputIter->second.get())
-                currentStreamOutputStopped = true;
-
-            outputIter->second->StopStreaming(true);
-            obs_service_release(outputIter->first);
-            outputIter->first = nullptr;
-
-            if (currentStreamOutputStopped)
-                SetOutputHandler();
-            return true;
-        }
-    }
-    return false;
-}
-
-void AFMainFrame::SetOutputHandler()
-{
-    OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter)
+    QWidget* outBlock = nullptr;
+    if (m_blockManager->FindBlock(ENUM_WINDOW_TYPE::AdvanceControls, outBlock))
     {
-        if (outputIter->first != nullptr) {
-            App()->GetStatistics()->SetOutputHandler(outputIter->second.get());
-            m_statusbar.SetOutputHandler(outputIter->second.get());
-            return;
-        }
+        AFAdvanceControlsWidget* advanceControl = reinterpret_cast<AFAdvanceControlsWidget*>(outBlock);
+        SetReplayBufferReleased();
+        advanceControl->SetReplayBufferStartStopStyle(bufferStart);
     }
 }
+
+void AFMainFrame::SetReplayBufferStoppingMode()
+{
+    QWidget* outBlock = nullptr;
+    if (m_blockManager->FindBlock(ENUM_WINDOW_TYPE::AdvanceControls, outBlock))
+    {
+        AFAdvanceControlsWidget* advanceControl = reinterpret_cast<AFAdvanceControlsWidget*>(outBlock);
+        advanceControl->SetReplayBufferStoppingStyle();
+    }
+}
+
+void AFMainFrame::SetReplayBufferReleased()
+{
+    QWidget* outBlock = nullptr;
+    if (m_blockManager->FindBlock(ENUM_WINDOW_TYPE::AdvanceControls, outBlock))
+    {
+        AFAdvanceControlsWidget* advanceControl = reinterpret_cast<AFAdvanceControlsWidget*>(outBlock);
+        advanceControl->ReplayBufferReleased();
+    }
+}
+
+//Check if broadcast start routine is in progress (prevent duplicate call broad start button)
+void AFMainFrame::OffBroadStartAPICheck()
+{
+    m_checkBroadStartAPI = false;
+    m_CheckBroadStartAPITimer->stop();
+}
+
+void AFMainFrame::ShutDown()
+{
+    blog(LOG_INFO, "=== Shutdown Start =================");
+
+    if(AFOutputUtil::IsStreamActive())
+    {
+        if(AUTH_CONTEXT.IsSoopStreaming())
+        {
+            AFQBroadInfo* soopBroadInfo = AUTH_CONTEXT.GetSoopBroadInfo();
+            if(soopBroadInfo) {
+                QList<QVariant> values = {soopBroadInfo->BroadNumber(), 1, 10};
+
+                m_soopApiHandler->postAPIfromId(POST_KR_CLOSE_REQUEST, values);
+            }
+
+            if(m_breakTimeManager->IsActive()) {
+                m_breakTimeManager->Stop(true);
+            }
+        }
+        qslotStopStreaming();
+    }
+
+    blog(LOG_INFO, "=== Shutdown End =================");
+}
+
 //
+bool AFMainFrame::IsPreviewProgramMode()
+{
+    return STATEAPP.IsPreviewProgramMode();
+}
 void AFMainFrame::EnablePreviewDisplay(bool enable)
 {
-    AFBasicPreview* preview = GetMainWindow()->GetMainPreview();
-    obs_display_set_enabled(preview->GetDisplay(), enable);
-    preview->setVisible(enable);
-    GetMainWindow()->GetNotPreviewFrame()->setVisible(!enable);
+    obs_display_set_enabled(MAIN_PREVIEW->GetDisplay(), enable);
+    MAIN_PREVIEW->setVisible(enable);
+    m_dynamicCompositMainWindow->GetNotPreviewFrame()->setVisible(!enable);
 }
 
-void AFMainFrame::RefreshSceneUI()
+
+void AFMainFrame::SetStudioModeStatus(bool studioMode)
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    SceneItemVector& sceneItems = sceneContext.GetSceneItemVector();
-    if (sceneItems.empty())
-        return;
-
-    clearLayout(ui->sceneButtonLayout);
-
-    ClearSceneBottomButtons();
-
-    size_t sceneCount = sceneItems.size();
-    size_t visibleCount = sceneCount;
-    if (visibleCount > 4)
-        visibleCount = 4;
-
-	for (size_t i = 0; i < visibleCount; i++) {
-		OBSScene scene = sceneItems.at(i)->GetScene();
-		int index = sceneItems.at(i)->GetSceneIndex();
-		const char* name = sceneItems.at(i)->GetSceneName();
-
-		AFQSceneBottomButton* sceneButton = new AFQSceneBottomButton(this, scene, index, name);
-        sceneButton->setObjectName("AFQSceneBottomButton");
-
-        bool selected = (sceneContext.GetCurrOBSScene() == scene);
-        sceneButton->SetSelectedState(selected);
-
-		connect(sceneButton, &AFQSceneBottomButton::qsignalSceneButtonClicked,
-			    this, &AFMainFrame::qslotSceneButtonClicked);
-        connect(sceneButton, &AFQSceneBottomButton::qsignalSceneButtonDoubleClicked,
-            this, &AFMainFrame::qslotSceneButtonDoubleClicked);
-
-		ui->sceneButtonLayout->addWidget(sceneButton);
-
-        m_vSceneButton.emplace_back(sceneButton);
-	}
-
-    //if (sceneCount > 4) {
-        std::string absPath;
-        GetDataFilePath("assets", absPath);
-
-        QString iconPath = QString("%1/mainview/scene-button-dot.svg").
-                           arg(absPath.data());
-        QIcon icon = QIcon(iconPath);
-
-        //QString styleSheet = 
-        //            QString("border-image:url('%1/mainview/scene-button-dot.svg') 0 0 2 0 stretch;")
-        //            .arg(absPath.data());
-        QPushButton* dotButton = new QPushButton(this);
-        dotButton->setObjectName("bottomSceneDotButton");
-        dotButton->setFixedSize(29,30);
-        dotButton->setIcon(icon);
-        dotButton->setIconSize(QSize(14, 17));
-        //dotButton->setStyleSheet(styleSheet);
-
-        connect(dotButton, &QPushButton::clicked, 
-                this, &AFMainFrame::qslotSceneButtonDotClicked);
-
-        ui->sceneButtonLayout->addWidget(dotButton);
-    //}
-       
-    AFQProjector::UpdateMultiviewProjectors();
-}
-
-void AFMainFrame::CreateSourcePopupMenu(int idx, bool preview)
-{
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
-    AFQCustomMenu popup(this);
-    AFQCustomMenu order(locale.Str("Basic.MainMenu.Edit.Order"), this, true);
-    AFQCustomMenu colorMenu(locale.Str("ChangeBG"), this, true);
-    AFQCustomMenu transform(locale.Str("Basic.MainMenu.Edit.Transform"), this, true);
-
-    if (preview) {
-        QAction* action = popup.addAction(Str("Basic.Main.PreviewConextMenu.Enable"),
-                                          this, &AFMainFrame::qslotTogglePreview);
-        action->setCheckable(true);
-        action->setChecked(
-            obs_display_enabled(GetMainWindow()->GetMainPreview()->GetDisplay()));
-        if (0 /*IsPreviewProgramMode()*/)
-            action->setEnabled(false);
-
-        popup.addAction(ui->action_LockPreview);
-
-        AFQCustomMenu* scalingMenu = new AFQCustomMenu(this, true);
-        scalingMenu->setFixedWidth(200);
-
-        {
-            obs_video_info ovi;
-            obs_get_video_info(&ovi);
-
-            QAction *action = ui->action_ScaleCanvas;
-            QString text = QTStr("Basic.MainMenu.Edit.Scale.Canvas");
-            text = text.arg(QString::number(ovi.base_width),
-                    QString::number(ovi.base_height));
-            action->setText(text);
-
-            action = ui->action_ScaleOutput;
-            text = QTStr("Basic.MainMenu.Edit.Scale.Output");
-            text = text.arg(QString::number(ovi.output_width),
-                    QString::number(ovi.output_height));
-            action->setText(text);
-            action->setVisible(!(ovi.output_width == ovi.base_width &&
-                         ovi.output_height == ovi.base_height));
-            
-            {
-                bool fixedScaling = GetMainWindow()->GetMainPreview()->IsFixedScaling();
-                float scalingAmount = GetMainWindow()->GetMainPreview()->GetScalingAmount();
-                if (!fixedScaling)
-                {
-                    ui->action_ScaleWindow->setChecked(true);
-                    ui->action_ScaleCanvas->setChecked(false);
-                    ui->action_ScaleOutput->setChecked(false);
-                }
-                else
-                {
-                    obs_video_info ovi;
-                    obs_get_video_info(&ovi);
-                    
-                    ui->action_ScaleWindow->setChecked(false);
-                    ui->action_ScaleCanvas->setChecked(scalingAmount == 1.0f);
-                    ui->action_ScaleOutput->setChecked(scalingAmount ==
-                                                      float(ovi.output_width) /
-                                                      float(ovi.base_width));
-                }
-            }
-        }
-        
-        scalingMenu->addAction(ui->action_ScaleWindow);
-        scalingMenu->addAction(ui->action_ScaleCanvas);
-        scalingMenu->addAction(ui->action_ScaleOutput);
-
-        connect(ui->action_ScaleWindow, &QAction::triggered, this, &AFMainFrame::qslotActionScaleWindow);
-        connect(ui->action_ScaleCanvas, &QAction::triggered, this, &AFMainFrame::qslotActionScaleCanvas);
-        connect(ui->action_ScaleOutput, &QAction::triggered, this, &AFMainFrame::qslotActionScaleOutput);
-    
-        popup.addMenu(scalingMenu)->setText(QT_UTF8(locale.Str("Basic.MainMenu.Edit.Scale")));;
-        //
-        
-        popup.addSeparator();
-
-        popup.addAction(Str("AddSource"), this, &AFMainFrame::qslotShowSelectSourcePopup);
-    }
-    else {
-        QPointer<AFQCustomMenu> addSourceMenu = CreateAddSourcePopupMenu();
-        if (addSourceMenu)
-            popup.addMenu(addSourceMenu);
-    }
-
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    AFQSourceListView* sourceListView = sceneContext.GetSourceListViewPtr();
-
-    bool mulitple = true;
-    if (sourceListView->MultipleBaseSelected()) {
-        popup.addSeparator();
-        popup.addAction(locale.Str("Basic.Main.GroupItems"), sourceListView,
-            &AFQSourceListView::GroupSelectedItems);
-    }
-    else if (sourceListView->GroupsSelected()) {
-        popup.addSeparator();
-        popup.addAction(locale.Str("Basic.Main.Ungroup"), sourceListView,
-            &AFQSourceListView::UngroupSelectedGroups);
-    }
-
-    popup.addSeparator();
-    popup.addAction(ui->action_CopySource);
-    popup.addAction(ui->action_PasteSourceRef);
-    popup.addAction(ui->action_PasteSourceDuplicate);
-    popup.addSeparator();
-
-	popup.addSeparator();
-    if (idx != -1) {
-        popup.addAction(ui->action_Filters);
-    }
-	popup.addAction(ui->action_CopyFilters);
-	popup.addAction(ui->action_PasteFilters);
-	popup.addSeparator();
-
-    if (idx != -1)
-    {
-        OBSSceneItem sceneItem = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem(idx);
-        if (!sceneItem)
-            return;
-
-        obs_source_t* source = obs_sceneitem_get_source(sceneItem);
-        if (!source)
-            return;
-
-        uint32_t flags = obs_source_get_output_flags(source);
-        bool isAsyncVideo = (flags & OBS_SOURCE_ASYNC_VIDEO) ==
-            OBS_SOURCE_ASYNC_VIDEO;
-        bool hasAudio = (flags & OBS_SOURCE_AUDIO) == OBS_SOURCE_AUDIO;
-        bool hasVideo = (flags & OBS_SOURCE_VIDEO) == OBS_SOURCE_VIDEO;
-
-        popup.addSeparator();
-        {
-            m_widgetActionColor = new QWidgetAction(&colorMenu);
-            m_widgetColorSelect = new AFQColorSelect(&colorMenu);
-
-            popup.addMenu(AddBackgroundColorMenu(
-                &colorMenu, m_widgetActionColor, m_widgetColorSelect, sceneItem));
-            popup.addAction(ui->action_RenameSource);
-            popup.addAction(ui->action_RemoveSource);
-        }
-        popup.addSeparator();
-
-        popup.addSeparator();
-        {
-            order.addAction(ui->action_OrderMoveUp);
-            order.addAction(ui->action_OrderMoveDown);
-            order.addAction(ui->action_OrderMoveToTop);
-            order.addAction(ui->action_OrderMoveToBottom);
-        }
-        popup.addMenu(&order);
-        popup.addSeparator();
-
-        if (hasVideo) {
-            popup.addSeparator();
-            transform.addAction(ui->action_EditTransform);
-            transform.addAction(ui->action_CopyTransform);
-            transform.addAction(ui->action_PasteTransform);
-            transform.addAction(ui->action_ResetTransform);
-            transform.addSeparator();
-            transform.addAction(ui->action_Rotate90CW);
-            transform.addAction(ui->action_Rotate90CCW);
-            transform.addAction(ui->action_Rotate180);
-            transform.addSeparator();
-            transform.addAction(ui->action_FlipHorizontal);
-            transform.addAction(ui->action_FlipVertical);
-            transform.addSeparator();
-            transform.addAction(ui->action_FitToScreen);
-            transform.addAction(ui->action_StretchToScreen);
-            transform.addAction(ui->action_CenterToScreen);
-            transform.addAction(ui->action_VerticalCenter);
-            transform.addAction(ui->action_HorizontalCenter);
-            popup.addMenu(&transform);
-            popup.addSeparator();
-        }
-
-        if (hasAudio) {
-            //QAction* actionHideMixer =
-            //    popup.addAction(QTStr("HideMixer"), this,
-            //        &OBSBasic::ToggleHideMixer);
-            //actionHideMixer->setCheckable(true);
-            //actionHideMixer->setChecked(SourceMixerHidden(source));
-            //popup.addSeparator();
-        }
-
-        if (hasVideo) {
-            QAction* resizeOutput = popup.addAction(Str("ResizeOutputSizeOfSource"), 
-                                                    this, &AFMainFrame::qSlotResizeOutputSizeOfSource);
-
-            int width = obs_source_get_width(source);
-            int height = obs_source_get_height(source);
-
-            resizeOutput->setEnabled(!obs_video_active());
-
-            if (width < 32 || height < 32)
-                resizeOutput->setEnabled(false);
-
-            m_menuScaleFiltering = new AFQCustomMenu(Str("ScaleFiltering"), this, true);
-            popup.addMenu(_AddScaleFilteringMenu(m_menuScaleFiltering, sceneItem));
-
-            m_menuBlendingMode = new AFQCustomMenu(Str("BlendingMode"), this, true);
-            popup.addMenu(_AddBlendingModeMenu(m_menuBlendingMode, sceneItem));
-
-            m_menuBlendingMethodMode = new AFQCustomMenu(Str("BlendingMethod"), this, true);
-            popup.addMenu(_AddBlendingMethodMenu(m_menuBlendingMethodMode, sceneItem));
-
-
-            if (isAsyncVideo) {
-                m_menuDeinterlace = new AFQCustomMenu(Str("Deinterlacing"), this, true);
-                popup.addMenu(_AddDeinterlacingMenu(m_menuDeinterlace, source));
-            }
-
-            popup.addSeparator();
-
-            //popup.addMenu(CreateVisibilityTransitionMenu(true));
-            //popup.addMenu(CreateVisibilityTransitionMenu(false));
-            //popup.addSeparator();
-
-            //sourceProjector = new QMenu(QTStr("SourceProjector"));
-            //AddProjectorMenuMonitors(
-            //    sourceProjector, this,
-            //    &OBSBasic::OpenSourceProjector);
-            //popup.addMenu(sourceProjector);
-            //popup.addAction(QTStr("SourceWindow"), this,
-            //    &OBSBasic::OpenSourceWindow);
-
-            //popup.addAction(QTStr("Screenshot.Source"), this,
-            //    &OBSBasic::ScreenshotSelectedSource);
-        }
-
-        popup.addSeparator();
-        {
-            if (flags & OBS_SOURCE_INTERACTION)
-                popup.addAction(ui->action_ShowInteract);
-
-            popup.addAction(ui->action_ShowProperties);
-            ui->action_ShowProperties->setEnabled(obs_source_configurable(source));
-        }
-        popup.addSeparator();
-    }
-
-	popup.exec(QCursor::pos());
-}
-
-bool CheckEnableInputSource(const char* id)
-{
-    size_t idx = 0;
-    const char* unversioned_type;
-    const char* type;
-
-    while (obs_enum_input_types2(idx++, &type, &unversioned_type)) {
-        const char* name = obs_source_get_display_name(type);
-        uint32_t caps = obs_get_source_output_flags(type);
-
-        if ((caps & OBS_SOURCE_CAP_DISABLED) != 0)
-            continue;
-
-        if ((caps & OBS_SOURCE_DEPRECATED) == 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void AFMainFrame::AddSourceMenuButton(const char* id, QWidget* popup)
-{
-    AFIconContext& iconContext = AFIconContext::GetSingletonInstance();
-
-    const char* name = obs_source_get_display_name(id);
-    AFQAddSourceMenuButton* button = new AFQAddSourceMenuButton(id, popup);
-    button->setIconSize(QSize(24, 24));
-    button->setText(QT_UTF8(name));
-    button->setObjectName("addSourceMenuButton");
-    button->setIcon(iconContext.GetSourceIcon(id));
-
-    connect(button, &QPushButton::clicked,
-            this, &AFMainFrame::qslotAddSourceMenu);
-
-    QWidgetAction* popupItem = new QWidgetAction(popup);
-    popupItem->setDefaultWidget(button);
-    popup->addAction(popupItem);
-}
-
-AFQCustomMenu* AFMainFrame::CreateAddSourcePopupMenu()
-{
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-    AFIconContext& iconContext  = AFIconContext::GetSingletonInstance();
-
-    AFQCustomMenu* popup = new AFQCustomMenu(locale.Str("Add"), this, true);
-    AFQCustomMenu* deprecated = new AFQCustomMenu(locale.Str("Deprecated"), popup);
-
-    popup->setStyleSheet("QMenu::item { height:24px;}       \
-                          QPushButton { \
-                          text-align:left; \
-                          color:rgba(255, 255, 255, 80%); \
-                          font-size: 14px; \
-                          font-style: normal; \
-                          font-weight: 400;   \
-                          line-height: normal;    \
-                          padding:5px; \
-                          background-color:rgb(36, 39, 45); \
-                          border-radius: 6px; }  \
-                          QPushButton:hover{ background-color:rgba(255, 255, 255, 10%); }");
-
-    // Source Type Info From CSelectSourceDailog.h 
-    // [g_pszScreenSectionSource, g_pszAudioSectionSource, g_pszEtcSectionSource]
-    size_t arrSize = sizeof(g_pszScreenSectionSource) / sizeof(g_pszScreenSectionSource[0]);
-    for (int i = 0; i < arrSize; i++) {
-        const char* sourceid = g_pszScreenSectionSource[i];
-        if (CheckEnableInputSource(sourceid))
-            AddSourceMenuButton(sourceid, popup);
-    }
-
-    arrSize = sizeof(g_pszAudioSectionSource) / sizeof(g_pszAudioSectionSource[0]);
-    for (int i = 0; i < arrSize; i++) {
-        const char* sourceid = g_pszAudioSectionSource[i];
-        if (CheckEnableInputSource(sourceid))
-            AddSourceMenuButton(sourceid, popup);
-    }
-
-    arrSize = sizeof(g_pszEtcSectionSource) / sizeof(g_pszEtcSectionSource[0]);
-    for (int i = 0; i < arrSize; i++) {
-        const char* sourceid = g_pszEtcSectionSource[i];
-        if (CheckEnableInputSource(sourceid))
-            AddSourceMenuButton(sourceid, popup);
-    }
-
-    // Add Scene Menu
-    AFQAddSourceMenuButton* sceneButton = new AFQAddSourceMenuButton("scene", popup);
-    sceneButton->setIconSize(QSize(24, 24));
-    sceneButton->setText(QT_UTF8(locale.Str("Basic.Scene")));
-    sceneButton->setObjectName("addSourceMenuButton");
-    sceneButton->setIcon(iconContext.GetSceneIcon());
-    connect(sceneButton, &QPushButton::clicked,
-            this, &AFMainFrame::qslotAddSourceMenu);
-
-    QWidgetAction* popupSceneItem = new QWidgetAction(popup);
-    popupSceneItem->setDefaultWidget(sceneButton);
-    popup->addAction(popupSceneItem);
-
-    // Add Group Menu
-    popup->addSeparator();
-    AFQAddSourceMenuButton* groupButton = new AFQAddSourceMenuButton("group", popup);
-    groupButton->setIconSize(QSize(24, 24));
-    groupButton->setText(QT_UTF8(locale.Str("Group")));
-    groupButton->setObjectName("addSourceMenuButton");
-    groupButton->setIcon(iconContext.GetGroupIcon());
-
-    connect(groupButton, &QPushButton::clicked,
-            this, &AFMainFrame::qslotAddSourceMenu);
-
-    QWidgetAction* popupGroupItem = new QWidgetAction(popup);
-    popupGroupItem->setDefaultWidget(groupButton);
-    popup->addAction(popupGroupItem);
-
-    return popup;
-}
-
-AFQCustomMenu* AFMainFrame::AddBackgroundColorMenu(AFQCustomMenu* menu,
-                                           QWidgetAction* widgetAction,
-                                           AFQColorSelect* select,
-                                           obs_sceneitem_t* item)
-{
-    QAction* action;
-
-    menu->setStyleSheet(QString(
-        "*[bgColor=\"1\"]{background-color:rgba(255,68,68,33%);}"
-        "*[bgColor=\"2\"]{background-color:rgba(255,255,68,33%);}"
-        "*[bgColor=\"3\"]{background-color:rgba(68,255,68,33%);}"
-        "*[bgColor=\"4\"]{background-color:rgba(68,255,255,33%);}"
-        "*[bgColor=\"5\"]{background-color:rgba(68,68,255,33%);}"
-        "*[bgColor=\"6\"]{background-color:rgba(255,68,255,33%);}"
-        "*[bgColor=\"7\"]{background-color:rgba(68,68,68,33%);}"
-        "*[bgColor=\"8\"]{background-color:rgba(255,255,255,33%);}"));
-
-    obs_data_t* privData = obs_sceneitem_get_private_settings(item);
-    obs_data_release(privData);
-
-    obs_data_set_default_int(privData, "color-preset", 0);
-    int preset = obs_data_get_int(privData, "color-preset");
-
-    action = menu->addAction(QTStr("Clear"), this, &AFMainFrame::qSlotSourceListItemColorChange);
-    action->setCheckable(true);
-    action->setProperty("bgColor", 0);
-    action->setChecked(preset == 0);
-
-    action = menu->addAction(QTStr("CustomColor"), this,
-        &AFMainFrame::qSlotSourceListItemColorChange);
-    action->setCheckable(true);
-    action->setProperty("bgColor", 1);
-    action->setChecked(preset == 1);
-
-    menu->addSeparator();
-
-    widgetAction->setDefaultWidget(select);
-
-    for (int i = 1; i < 9; i++) {
-        std::stringstream button;
-        button << "preset" << i;
-
-        std::stringstream buttonFrame;
-        buttonFrame << "framePreset" << i;
-
-        QFrame* colorButtonFrame =
-            select->findChild<QFrame*>(buttonFrame.str().c_str());
-        if (preset == i + 1)
-            colorButtonFrame->setStyleSheet("QFrame { border: 1px solid #D9D9D9; border-radius:6px; }");
-
-        QPushButton* colorButton =
-            colorButtonFrame->findChild<QPushButton*>(button.str().c_str());
-
-        colorButton->setProperty("bgColor", i);
-        select->connect(colorButton, &QPushButton::released, this,
-            &AFMainFrame::qSlotSourceListItemColorChange);
-    }
-
-    menu->addAction(widgetAction);
-
-    return menu;
-}
-
-void AFMainFrame::CreateFiltersWindow(obs_source_t* source)
-{
-    bool closed = true;
-    if (m_dialogFilters)
-        closed = m_dialogFilters->close();
-
-    if (!closed)
-        return;
-
-    m_dialogFilters = new AFQBasicFilters(nullptr, source);
-
-    setCenterPositionNotUseParent(m_dialogFilters,this);
-
-    m_dialogFilters->show();
-    m_dialogFilters->setAttribute(Qt::WA_DeleteOnClose, true);
-}
-
-void AFMainFrame::CreateEditTransformPopup(obs_sceneitem_t* item)
-{
-    if (m_transformPopup)
-        m_transformPopup->close();
-
-    m_transformPopup = new AFQBasicTransform(item, this);
-    //connect(ui->scenes, &QListWidget::currentItemChanged, transformWindow,
-    //    &OBSBasicTransform::OnSceneChanged);
-
-    setCenterPositionNotUseParent(m_transformPopup, this);
-
-    m_transformPopup->show();
-    m_transformPopup->setAttribute(Qt::WA_DeleteOnClose, true);
-}
-
-void AFMainFrame::SetSceneBottomButtonStyleSheet(OBSSource scene)
-{
-    std::vector<AFQSceneBottomButton*>::iterator iter = m_vSceneButton.begin();
-    for (; iter != m_vSceneButton.end(); ++iter) {
-        AFQSceneBottomButton* button = (*iter);
-        if (!button || !button->GetObsScene())
-            continue;
-
-        const OBSSource source = OBSSource(obs_scene_get_source(button->GetObsScene()));
-
-        button->SetSelectedState(source == scene);
-    }
-}
-
-QAction* AFMainFrame::GetRemoveSourceAction()
-{
-    return ui->action_RemoveSource;
-}
-
-void AFMainFrame::UpdateEditMenu()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    AFQSourceListView* sourceListView = sceneContext.GetSourceListViewPtr();
-    if (!sourceListView)
-        return;
-
-    QModelIndexList items = sourceListView->selectionModel()->selectedIndexes();
-    int totalCount = items.count();
-    size_t filter_count = 0;
-
-    if (totalCount == 1) {
-        OBSSceneItem sceneItem =
-            sourceListView->Get(sourceListView->GetTopSelectedSourceItem());
-        OBSSource source = obs_sceneitem_get_source(sceneItem);
-        filter_count = obs_source_filter_count(source);
-    }
-
-    bool allowPastingDuplicate = !!m_clipboard.size();
-    for (size_t i = m_clipboard.size(); i > 0; i--) {
-        const size_t idx = i - 1;
-        OBSWeakSource& weak = m_clipboard[idx].weak_source;
-        if (obs_weak_source_expired(weak)) {
-            m_clipboard.erase(m_clipboard.begin() + idx);
-            continue;
-        }
-        OBSSourceAutoRelease strong =
-            obs_weak_source_get_source(weak.Get());
-        if (allowPastingDuplicate &&
-            obs_source_get_output_flags(strong) &
-            OBS_SOURCE_DO_NOT_DUPLICATE)
-            allowPastingDuplicate = false;
-    }
-
-    int videoCount = 0;
-    bool canTransformMultiple = false;
-    for (int i = 0; i < totalCount; i++) {
-        OBSSceneItem item = sourceListView->Get(items.value(i).row());
-        OBSSource source = obs_sceneitem_get_source(item);
-        const uint32_t flags = obs_source_get_output_flags(source);
-        const bool hasVideo = (flags & OBS_SOURCE_VIDEO) != 0;
-        if (hasVideo && !obs_sceneitem_locked(item))
-            canTransformMultiple = true;
-
-        if (hasVideo)
-            videoCount++;
-    }
-
-    const bool canTransformSingle = videoCount == 1 && totalCount == 1;
-
-    ui->action_CopySource->setEnabled(totalCount > 0);
-    ui->action_EditTransform->setEnabled(canTransformSingle);
-    ui->action_CopyTransform->setEnabled(canTransformSingle);
-    ui->action_PasteTransform->setEnabled(m_hasCopiedTransform &&
-        videoCount > 0);
-    ui->action_CopyFilters->setEnabled(filter_count > 0);
-    ui->action_PasteFilters->setEnabled(
-        !obs_weak_source_expired(sceneContext.m_obsCopyFiltersSource) && totalCount > 0);
-    ui->action_PasteSourceRef->setEnabled(!!m_clipboard.size());
-    ui->action_PasteSourceDuplicate->setEnabled(allowPastingDuplicate);
-
-    ui->action_OrderMoveUp->setEnabled(totalCount > 0);
-    ui->action_OrderMoveDown->setEnabled(totalCount > 0);
-    ui->action_OrderMoveToTop->setEnabled(totalCount > 0);
-    ui->action_OrderMoveToBottom->setEnabled(totalCount > 0);
-
-    ui->action_ResetTransform->setEnabled(canTransformMultiple);
-    ui->action_Rotate90CW->setEnabled(canTransformMultiple);
-    ui->action_Rotate90CCW->setEnabled(canTransformMultiple);
-    ui->action_Rotate180->setEnabled(canTransformMultiple);
-    ui->action_FlipHorizontal->setEnabled(canTransformMultiple);
-    ui->action_FlipVertical->setEnabled(canTransformMultiple);
-    ui->action_FitToScreen->setEnabled(canTransformMultiple);
-    ui->action_StretchToScreen->setEnabled(canTransformMultiple);
-    ui->action_CenterToScreen->setEnabled(canTransformMultiple);
-    ui->action_VerticalCenter->setEnabled(canTransformMultiple);
-    ui->action_HorizontalCenter->setEnabled(canTransformMultiple);
-}
-
-
-void AFMainFrame::Screenshot(OBSSource source)
-{
-    if (!!m_ScreenshotData) {
-        blog(LOG_WARNING, "Cannot take new screenshot, "
-                          "screenshot currently in progress");
-        return;
-    }
-
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    m_ScreenshotData = new AFQScreenShotObj(
-                       AFSceneUtil::CnvtToOBSSource(sceneContext.GetCurrOBSScene()));
-}
-
-void AFMainFrame::qslotTransitionScene()
-{
-    // exist : CProgramView.h -> void _qslotTransitionClicked();
-    auto& sceneContext = AFSceneContext::GetSingletonInstance();
-    AFSceneUtil::TransitionToScene(
-        AFSceneUtil::CnvtToOBSSource(sceneContext.GetCurrOBSScene()));
-}
-
-void AFMainFrame::SetAudioButtonEnabled(bool enabled) {
-    ui->widget_Volume->setEnabled(enabled);
-
-    if (enabled) {
-        QGraphicsOpacityEffect* effect = new QGraphicsOpacityEffect();
-        effect->setOpacity(1.0);
-        ui->widget_Volume->setGraphicsEffect(effect);
-    }
-    else {
-        QGraphicsOpacityEffect* effect = new QGraphicsOpacityEffect();
-        effect->setOpacity(0.3);
-        ui->widget_Volume->setGraphicsEffect(effect);
-    }
-}
-
-void AFMainFrame::SetMicButtonEnabled(bool enabled) {
-    ui->widget_Mic->setEnabled(enabled);
-
-    if (enabled) {
-        QGraphicsOpacityEffect* effect = new QGraphicsOpacityEffect();
-        effect->setOpacity(1.0);
-        ui->widget_Mic->setGraphicsEffect(effect);
-    }
-    else {
-        QGraphicsOpacityEffect* effect = new QGraphicsOpacityEffect();
-        effect->setOpacity(0.3);
-        ui->widget_Mic->setGraphicsEffect(effect);
-    }
-}
-
-void AFMainFrame::SetAudioVolume(int volume)
-{
-    if (m_VolumeSliderFrame)
-        m_VolumeSliderFrame->SetVolumeSize(volume);
-}
-
-void AFMainFrame::SetMicVolume(int volume)
-{
-    if (m_MicSliderFrame)
-        m_MicSliderFrame->SetVolumeSize(volume);
-}
-
-void AFMainFrame::SetAudioSliderEnabled(bool Enabled) 
-{
-    if (m_VolumeSliderFrame)
-        m_VolumeSliderFrame->SetVolumeSliderEnabled(Enabled);
-}
-
-void AFMainFrame::SetMicSliderEnabled(bool Enabled) 
-{
-    if (m_MicSliderFrame)
-        m_MicSliderFrame->SetVolumeSliderEnabled(Enabled);
-}
-
-void AFMainFrame::SetAudioVolumeSliderSignalsBlock(bool block) 
-{
-    if (m_VolumeSliderFrame)
-        m_VolumeSliderFrame->BlockSliderSignal(block);
-}
-
-void AFMainFrame::SetMicVolumeSliderSignalsBlock(bool block)
-{
-    if (m_MicSliderFrame)
-        m_MicSliderFrame->BlockSliderSignal(block);
-}
-
-void AFMainFrame::SetAudioMeter(float peak)
-{
-    if (!m_VolumeSliderFrame)
-        return;
-
-    if(m_VolumeSliderFrame->isVisible())
-        m_VolumeSliderFrame->SetVolumePeak(peak);
-}
-
-void AFMainFrame::SetMicMeter(float peak)
-{
-    if (!m_MicSliderFrame)
-        return;
-
-    if(m_MicSliderFrame->isVisible())
-        m_MicSliderFrame->SetVolumePeak(peak);
-}
-
-void AFMainFrame::SetAudioButtonMute(bool bMute)
-{
-    if (m_VolumeSliderFrame)
-    {
-        const char* imagepath;
-        if (bMute)
-        {
-            imagepath = "assets/mainview/default/soundvolume-mute.svg";
-            m_VolumeSliderFrame->SetButtonProperty("soundVolumeMute");
-        }
-        else
-        {
-            imagepath = "assets/mainview/default/soundvolume.svg";
-            m_VolumeSliderFrame->SetButtonProperty("soundVolume");
-        }
-
-        std::string absPath;
-        GetDataFilePath(imagepath, absPath);
-        QString qstrImgPath(absPath.data());
-        QString style = "image: url(%1) 0 0 0 0 stretch stretch;";
-        ui->widget_Volume->setStyleSheet(style.arg(qstrImgPath));
-    }
-}
-
-void AFMainFrame::SetAudioSliderMute(bool bMute) {
-    if (m_VolumeSliderFrame)
-        m_VolumeSliderFrame->SetVolumeMuted(bMute);
-}
-
-void AFMainFrame::SetMicButtonMute(bool bMute)
-{
-    if (m_MicSliderFrame)
-    {
-        const char* imagepath;
-        if (bMute)
-        {
-            imagepath = "assets/mainview/default/micvolume-mute.svg";
-            m_MicSliderFrame->SetButtonProperty("micVolumeMute");
-        }
-        else
-        {
-            imagepath = "assets/mainview/default/micvolume.svg)";
-            m_MicSliderFrame->SetButtonProperty("micVolume");
-        }
-
-        std::string absPath;
-        GetDataFilePath(imagepath, absPath);
-        QString qstrImgPath(absPath.data());
-        QString style = "image: url(%1) 0 0 0 0 stretch stretch;";
-        ui->widget_Mic->setStyleSheet(style.arg(qstrImgPath));
-    }
-}
-
-void AFMainFrame::SetMicSliderMute(bool bMute) {
-    if (m_MicSliderFrame)
-        m_MicSliderFrame->SetVolumeMuted(bMute);
-}
-
-bool AFMainFrame::IsAudioMuted() 
-{
-    if (m_VolumeSliderFrame)
-        return m_VolumeSliderFrame->IsVolumeMuted();
-    return true;
-}
-
-bool AFMainFrame::IsMicMuted() 
-{
-    if (m_MicSliderFrame)
-        return m_MicSliderFrame->IsVolumeMuted();
-    return true;
+    if (m_leftNavigationBar)
+        m_leftNavigationBar->qslotStudioModeStatusChanged(studioMode);
 }
 
 void AFMainFrame::SystemTray(bool firstStarted)
 {
-    auto& configMan = AFConfigManager::GetSingletonInstance();
-    auto& localeMan = AFLocaleTextManager::GetSingletonInstance();
-
     if (!QSystemTrayIcon::isSystemTrayAvailable())
         return;
-    if (!m_TrayIcon && !firstStarted)
+    if (!m_trayIcon && !firstStarted)
         return;
 
-    bool sysTrayWhenStarted = config_get_bool(configMan.GetGlobal(),
-        "BasicWindow", "SysTrayWhenStarted");
-    bool sysTrayEnabled = config_get_bool(configMan.GetGlobal(), 
-        "BasicWindow", "SysTrayEnabled");
+    bool sysTrayWhenStarted = config_get_bool(USERCONFIG, "BasicWindow", "SysTrayWhenStarted");
+    bool sysTrayEnabled = config_get_bool(USERCONFIG, "BasicWindow", "SysTrayEnabled");
 
     if (firstStarted)
         SystemTrayInit();
 
     if (!sysTrayEnabled) {
-        m_TrayIcon->hide();
+        m_trayIcon->hide();
     }
     else {
-        m_TrayIcon->show();
+        m_trayIcon->show();
         if (firstStarted && (sysTrayWhenStarted || g_opt_minimize_tray)) {
             EnablePreviewDisplay(false);
 #ifdef __APPLE__
@@ -1679,66 +1474,155 @@ void AFMainFrame::SystemTray(bool firstStarted)
     }
 
     if (isVisible())
-        m_qMainShowHideAction->setText(QT_UTF8(localeMan.Str(("Basic.SystemTray.Hide"))));
+        m_mainShowHideAction->setText(QTStr(("Basic.SystemTray.Hide")));
     else
-        m_qMainShowHideAction->setText(QT_UTF8(localeMan.Str(("Basic.SystemTray.Show"))));
+        m_mainShowHideAction->setText(QTStr(("Basic.SystemTray.Show")));
 }
 
 void AFMainFrame::SystemTrayInit()
 {
-    auto& localeMan = AFLocaleTextManager::GetSingletonInstance();
+    QIcon trayIconFile;
+    LoadIconFromABSPath("assets/platform/default/soopglobal.png", trayIconFile);
 
 #ifdef __APPLE__
-    QIcon trayIconFile = QIcon(":/image/resource/Platform/default/soop.png");
+    //QIcon trayIconFile = QIcon(":/image/resource/Platform/default/soop.png");
     trayIconFile.setIsMask(true);
 #else
-    QIcon trayIconFile = QIcon(":/image/resource/Platform/default/soop.png");
+    //QIcon trayIconFile = QIcon(":/image/resource/Platform/default/soop.png");
 #endif
-    m_TrayIcon.reset(new QSystemTrayIcon(
+    m_trayIcon.reset(new QSystemTrayIcon(
         QIcon::fromTheme("obs-tray", trayIconFile), this));
-    m_TrayIcon->setToolTip("OBS Studio");
+    m_trayIcon->setToolTip("OBS Studio");
 
-    m_qMainShowHideAction = new QAction(QT_UTF8(localeMan.Str("Basic.SystemTray.Show")), m_TrayIcon.data());
-    m_qSystemTrayStreamAction = new QAction(QT_UTF8(localeMan.Str("Basic.Main.StartStreaming")));
-    m_qSystemTrayRecordAction = new QAction(QT_UTF8(localeMan.Str("Basic.Main.StartRecording")));
-    m_qExitAction = new QAction(QT_UTF8(localeMan.Str("Exit")), m_TrayIcon.data());
+    m_mainShowHideAction = new QAction(QTStr("Basic.SystemTray.Show"), m_trayIcon.data());
+    m_systemTrayStreamAction = new QAction(QTStr("Basic.Main.StartStreaming"));
+        /*m_dynamicCompositMainWindow->StreamingActive() ? QT_UTF8(Str("Basic.Main.StopStreaming"))
+        : QT_UTF8(Str("Basic.Main.StartStreaming")),
+        m_TrayIcon.data());*/
+    m_systemTrayRecordAction = new QAction(QTStr("Basic.Main.StartRecording"));
+        /*m_dynamicCompositMainWindow->RecordingActive() ? QT_UTF8(Str("Basic.Main.StopRecording"))
+        : QT_UTF8(Str("Basic.Main.StartRecording")),
+        m_TrayIcon.data());*/
+    /*sysTrayReplayBuffer = new QAction(
+        ReplayBufferActive() ? QT_UTF8(Str("Basic.Main.StopReplayBuffer"))
+        : QT_UTF8(Str("Basic.Main.StartReplayBuffer")),
+        trayIcon.data());*/
+    /*sysTrayVCam = new QAction(
+        VCamActive() ? QTStr("Basic.Main.StopVCam")
+        : QTStr("Basic.Main.StartVCam"),
+        trayIcon.data());*/
+    m_exitAction = new QAction(QTStr("Exit"), m_trayIcon.data());
+    
+    m_trayMenu = new AFQCustomMenu(this);
+    m_trayMenu->setFixedWidth(300);
+    m_previewProjector = new AFQCustomMenu(QTStr("PreviewProjector"), m_trayMenu);
+    m_studioProgramProjector = new AFQCustomMenu(QTStr("StudioProgramProjector"), m_trayMenu);
+    /*AddProjectorMenuMonitors(previewProjector, this,
+        &OBSBasic::OpenPreviewProjector);
+    AddProjectorMenuMonitors(studioProgramProjector, this,
+        &OBSBasic::OpenStudioProgramProjector);*/
 
-    m_qTrayMenu = new AFQCustomMenu(this);
-    m_qTrayMenu->setFixedWidth(300);
-    m_qPreviewProjector = new AFQCustomMenu(QT_UTF8(localeMan.Str("PreviewProjector")), m_qTrayMenu);
-    m_qStudioProgramProjector = new AFQCustomMenu(QT_UTF8(localeMan.Str("StudioProgramProjector")), m_qTrayMenu);
-
-    m_qTrayMenu->addAction(m_qMainShowHideAction);
-    m_qTrayMenu->addSeparator();
-    m_qTrayMenu->addMenu(m_qPreviewProjector);
-    m_qTrayMenu->addMenu(m_qStudioProgramProjector);
-    m_qTrayMenu->addSeparator();
-    m_qTrayMenu->addAction(m_qSystemTrayStreamAction);
-    m_qTrayMenu->addAction(m_qSystemTrayRecordAction);
-    m_qTrayMenu->addAction(m_qSystemTrayReplayBufferAction);
-
-    m_qTrayMenu->addSeparator();
-    m_qTrayMenu->addAction(m_qExitAction);
-    m_TrayIcon->setContextMenu(m_qTrayMenu);
-    m_TrayIcon->show();
+    m_trayMenu->addAction(m_mainShowHideAction);
+    m_trayMenu->addSeparator();
+    m_trayMenu->addMenu(m_previewProjector);
+    m_trayMenu->addMenu(m_studioProgramProjector);
+    m_trayMenu->addSeparator();
+    m_trayMenu->addAction(m_systemTrayStreamAction);
+    m_trayMenu->addAction(m_systemTrayRecordAction);
+    m_trayMenu->addAction(m_systemTrayReplayBufferAction);
+    m_trayMenu->addSeparator();
+    m_trayMenu->addAction(m_exitAction);
+    m_trayIcon->setContextMenu(m_trayMenu);
+    m_trayIcon->show();
 
 
-    connect(m_TrayIcon.data(), &QSystemTrayIcon::activated, this,
-        &AFMainFrame::qslotIconActivated);
-    connect(m_qMainShowHideAction, &QAction::triggered, this, &AFMainFrame::qslotToggleShowHide);
-    connect(m_qSystemTrayStreamAction, &QAction::triggered, this,
-        &AFMainFrame::qslotChangeBroadState);
-    connect(m_qSystemTrayRecordAction, &QAction::triggered, this,
-        &AFMainFrame::qslotChangeRecordState);
-    /*connect(m_qSystemTrayReplayBufferAction, &QAction::triggered, this,
-        &AFMainFrame::ReplayBufferClicked);*/
-    /*connect(sysTrayVirtualCam.data(), &QAction::triggered, this,
-        &OBSBasic::VCamButtonClicked);*/
-    connect(m_qExitAction, &QAction::triggered, this, &AFMainFrame::close);
+    connect(m_trayIcon.data(), &QSystemTrayIcon::activated, this, &AFMainFrame::qslotIconActivated);
+    connect(m_mainShowHideAction, &QAction::triggered, this, &AFMainFrame::qslotToggleShowHide);
+    connect(m_systemTrayStreamAction, &QAction::triggered, this, &AFMainFrame::qslotCheckBroadAvailable);
+    connect(m_systemTrayRecordAction, &QAction::triggered, this, &AFMainFrame::qslotChangeRecordState);
+    connect(m_exitAction, &QAction::triggered, this, &AFMainFrame::close);
+}
+
+void AFMainFrame::RestoreGeometry(bool firstRun)
+{
+    if (!firstRun)
+    {
+        const char* strGeometry = config_get_string(USERCONFIG, "BasicWindow", "geometry");
+        if (strGeometry != NULL) {
+            QByteArray byteArray = QByteArray::fromBase64(QByteArray(strGeometry));
+            restoreGeometry(byteArray);
+
+            //Check Position
+            QString strPoint = QString(config_get_string(USERCONFIG, "BasicWindow", "MainframeCheckRect"));
+            QStringList parts = strPoint.split('.');
+
+            //double check rect
+            QRect checkRect;
+            if (parts.size() == 4) {
+                checkRect.setX(parts[0].toInt());
+                checkRect.setY(parts[1].toInt());
+                checkRect.setWidth(parts[2].toInt());
+                checkRect.setHeight(parts[3].toInt());
+
+                if (checkRect.x() != pos().x() || checkRect.y() != pos().y())
+                    move(checkRect.x(), checkRect.y());
+
+                if (checkRect.width() != size().width() || checkRect.height() != size().height())
+                    resize(checkRect.width(), checkRect.height());
+            }
+
+            QRect adjustRect = geometry();
+            m_blockManager->AdjustPositionOutSideFullScreen(geometry(), adjustRect);
+            this->setGeometry(adjustRect);
+
+            QRect rect = geometry();
+            m_graphicContext->SetMainPreviewY(rect.height());
+            m_graphicContext->SetMainPreviewCY(rect.y());
+
+            QRect windowGeometry = normalGeometry();
+            if (!WindowPositionValid(windowGeometry)) {
+                rect = QGuiApplication::primaryScreen()->geometry();
+                setGeometry(QStyle::alignedRect(Qt::LeftToRight, Qt::AlignCenter, size(), rect));
+            }
+
+            m_blockManager->RestoreMagnetPopup();
+
+            return;
+        }
+    }
+
+    // Init Studio Geometry
+    int initStudioWidth = 900;
+    int initStudioHeight = 860;
+
+    if (IsSmallResolution())
+    {
+        initStudioWidth = minimumWidth();
+        initStudioHeight = minimumHeight();
+    }
+
+    QRect screenGeometry = QApplication::screens().first()->geometry();
+    int x = (screenGeometry.width() - initStudioWidth) / 2;
+    int y = (screenGeometry.height() - initStudioHeight) / 2;
+
+    QRect adjustRect = QRect(x, y, initStudioWidth, initStudioHeight);
+    setGeometry(adjustRect);
 }
 
 void AFMainFrame::HotkeyTriggered(void* data, obs_hotkey_id id, bool pressed)
 {
+    QWidget* focusWidget = QApplication::focusWidget();
+    if(focusWidget) {
+        bool isTyping = qobject_cast<QLineEdit*>(focusWidget) ||
+            qobject_cast<QTextEdit*>(focusWidget) ||
+            qobject_cast<QPlainTextEdit*>(focusWidget) ||
+            qobject_cast<QAbstractSpinBox*>(focusWidget);
+
+        if(isTyping) {
+            return;
+        }
+    }
+
     AFMainFrame& mainFrame = *static_cast<AFMainFrame*>(data);
     QMetaObject::invokeMethod(&mainFrame, "qslotProcessHotkey",
                               Q_ARG(obs_hotkey_id, id),
@@ -1747,117 +1631,139 @@ void AFMainFrame::HotkeyTriggered(void* data, obs_hotkey_id id, bool pressed)
 
 void AFMainFrame::SetPCStateIconStyle(QLabel* label, PCStatState state)
 {
-    std::string absPath;
-    const char* imagePath;
-
     if (state == PCStatState::None)
-        imagePath = "assets/stat/normal-ellipse.svg";
+        label->setProperty("pcStat", "none");
     else if (state == PCStatState::Normal)
-        imagePath = "assets/stat/green-ellipse.svg";
-    //else if (state == PCStatState::Warning) 
-    //    imagePath = "assets/stat/normal-ellipse.svg";
+        label->setProperty("pcStat", "normal");
     else // Error
-        imagePath = "assets/stat/red-ellipse.svg";
+        label->setProperty("pcStat", "error");
 
-    GetDataFilePath(imagePath, absPath);
-    QString qstrImgPath(absPath.data());
-    QString style = "QLabel {image: url(%1);}";
-
-    label->setStyleSheet(style.arg(qstrImgPath));
-}
-
-#include "CoreModel/OBSOutput/COBSOutputContext.h"
-bool AFMainFrame::IsActive()
-{
-    bool isActive = false;
-    OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-        if (outputIter->second->Active()) {
-            isActive = true;
-            break;
-        }
-    }
-    return isActive;
-}
-
-bool AFMainFrame::IsStreamActive() 
-{
-    bool isActive = false;
-    OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
-        if (outputIter->first && outputIter->second->StreamingActive()) {
-            isActive = true;
-            break;
-        }
-    }
-    return isActive;
-}
-
-bool AFMainFrame::IsReplayBufferActive()
-{
-    if (m_outputHandlers[0].second && m_outputHandlers[0].second->ReplayBufferActive())
-        return true;
-    return false;
-}
-
-bool AFMainFrame::IsRecordingActive()
-{
-    if (m_outputHandlers[0].second && m_outputHandlers[0].second->RecordingActive())
-        return true;
-    return false;
+    PolishStyleSheet(label);
 }
 
 bool AFMainFrame::EnableStartStreaming()
 {
-    return (!IsStreamActive() && ui->pushButton_Broad->isEnabled());
-}
-
-bool AFMainFrame::IsPreviewProgramMode()
-{
-    auto& configManager = AFConfigManager::GetSingletonInstance();
-    return configManager.GetStates()->IsPreviewProgramMode();
+    return (!AFOutputUtil::IsStreamActive() && !m_signalFlags.streamingStarting);
 }
 
 bool AFMainFrame::EnableStopStreaming()
 {
-    //return (IsStreamActive() && ui->pushButton_Broad->isEnabled());
-    return true;
+    return (AFOutputUtil::IsStreamActive() && !m_signalFlags.streamingStarting);
 }
 
 bool AFMainFrame::EnableStartRecording()
 {
-    return (!IsRecordingActive() && ui->pushButton_Record->isEnabled());
+    return (!AFOutputUtil::IsRecordingActive() && !m_signalFlags.recordingStarted);
 }
 
 bool AFMainFrame::EnableStopRecording()
 {
-    return (IsRecordingActive() && ui->pushButton_Record->isEnabled());
+    return (AFOutputUtil::IsRecordingActive() && m_signalFlags.recordingStarted);
 }
 
 bool AFMainFrame::EnablePauseRecording()
 {
-    return true;
+    return (m_signalFlags.isRecordingPausable && !m_signalFlags.recordingPaused);
 }
 
 bool AFMainFrame::EnableUnPauseRecording()
 {
-    return true;
+    return (m_signalFlags.isRecordingPausable && m_signalFlags.recordingPaused);
+}
+
+void AFMainFrame::ChangeStreamStateUI(bool enable, bool checked, QString title, int width)
+{
+    ui->pushButton_Broad->setEnabled(enable);
+    ui->pushButton_Broad->setChecked(checked);
+    ui->pushButton_Broad->setText(title);
+    ui->pushButton_Broad->setFixedWidth(width);
+
+    ui->widget_BroadAndRecordButtons->adjustSize();
+
+    ui->pushButton_Broad->setProperty("IsLive", checked);
+    style()->unpolish(ui->pushButton_Broad);
+    style()->polish(ui->pushButton_Broad);
+}
+
+void AFMainFrame::ChangeRecordStateUI(bool enable, bool checked, QString title, int width)
+{
+    ui->pushButton_Record->setEnabled(enable);
+    ui->pushButton_Record->setChecked(checked);
+    ui->pushButton_Record->setFixedWidth(width);
+    ui->pushButton_Record->setText(title);
+
+    if (checked) 
+    {
+        ui->label_RecordTime->StartCount();
+        ui->widget_RecordTimer->setVisible(true);
+        if (ui->widget_BroadTimer->isVisible())
+            ui->line_Time->setVisible(true);
+    }
+    else 
+    {
+        ui->label_RecordTime->StopCount();
+        ui->widget_RecordTimer->setVisible(false);
+        ui->line_Time->setVisible(false);
+    }
+    ui->pushButton_Record->setProperty("IsRec", checked);
+    style()->unpolish(ui->pushButton_Record);
+    style()->polish(ui->pushButton_Record);
+}
+
+bool AFMainFrame::CheckSplitVodAvailable()
+{
+    if (CheckSplitVodByUI())
+    {
+        if (AUTH_CONTEXT.VodSaveAvailableFromAPI())
+        {
+            //Category Check
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void AFMainFrame::ToggleBroadTimerUI(bool start)
+{
+    if (start)
+    {
+        ui->label_BroadTime->StartCount();
+        connect(ui->label_BroadTime, &AFQTimerLabel::qsignalCertainMinuteBroad,
+                this, &AFMainFrame::qsignalCertainMinuteBroadToggled);
+    }
+    else
+    {
+        ui->label_BroadTime->StopCount();
+        disconnect(ui->label_BroadTime, &AFQTimerLabel::qsignalCertainMinuteBroad,
+                   this, &AFMainFrame::qsignalCertainMinuteBroadToggled);
+    }
+
+    ui->widget_BroadTimer->setVisible(start);
+    if (ui->widget_RecordTimer->isVisible())
+        ui->line_Time->setVisible(start);
+
+    _AccountButtonStreamingToggle(start);
+}
+
+QString AFMainFrame::GetBroadTimerUITime()
+{
+    return ui->label_BroadTime->GetHHMMSS();
 }
 
 void AFMainFrame::StartStreaming()
 {
-    qslotChangeBroadState(true);
+    qslotCheckBroadAvailable(true);
 }
 
 void AFMainFrame::StopStreaming()
 {
-    qslotChangeBroadState(false);
+    qslotCheckBroadAvailable(false);
 }
 
 void AFMainFrame::ForceStopStreaming()
 {
-    AFQMessageBox::ShowMessage(QDialogButtonBox::Ok,
-        this, QT_UTF8("방송 종료"), QT_UTF8("방송 종료"));
+    qslotForceStopStreaming();
 }
 
 void AFMainFrame::StartRecording()
@@ -1870,26 +1776,17 @@ void AFMainFrame::StopRecording()
     qslotChangeRecordState(false);
 }
 
-void AFMainFrame::PauseRecording()
-{
-    AFQMessageBox::ShowMessage(QDialogButtonBox::Ok,
-        this, QT_UTF8("녹화 중지"), QT_UTF8("녹화 중지"));
-}
-
-void AFMainFrame::UnPauseRecording()
-{
-    AFQMessageBox::ShowMessage(QDialogButtonBox::Ok,
-        this, QT_UTF8("녹화 재개?"), QT_UTF8("녹화 재개?"));
-}
+//void AFMainFrame::PauseRecording()
+//{
+//}
+//
+//void AFMainFrame::UnPauseRecording()
+//{
+//}
 
 void AFMainFrame::StartReplayBuffer()
 {
     qslotStartReplayBuffer();
-}
-
-void AFMainFrame::StopReplayBuffer()
-{
-    qslotStopReplayBuffer();
 }
 
 void AFMainFrame::EnablePreview()
@@ -1897,7 +1794,7 @@ void AFMainFrame::EnablePreview()
     if (IsPreviewProgramMode())
         return;
 
-    m_bPreviewEnabled = true;
+    m_previewEnabled = true;
     EnablePreviewDisplay(true);
 }
 
@@ -1906,69 +1803,165 @@ void AFMainFrame::DisablePreview()
     if (IsPreviewProgramMode())
         return;
 
-    m_bPreviewEnabled = false;
+    m_previewEnabled = false;
     EnablePreviewDisplay(false);
 }
 
 void AFMainFrame::EnablePreviewProgam()
 {
-    AFMainDynamicComposit* dynamicComposit = GetMainWindow();
-    if (dynamicComposit)
-        dynamicComposit->qslotToggleStudioModeBlock(true);
+    AFMainDynamicComposit* freecshotWindow = GetMainWindow();
+    if (freecshotWindow)
+        freecshotWindow->ToggleStudioModeBlock(true);
 }
 
 void AFMainFrame::DiablePreviewProgam()
 {
-    AFMainDynamicComposit* dynamicComposit = GetMainWindow();
-    if (dynamicComposit)
-        dynamicComposit->qslotToggleStudioModeBlock(false);
+    AFMainDynamicComposit* freecshotWindow = GetMainWindow();
+    if (freecshotWindow)
+        freecshotWindow->ToggleStudioModeBlock(false);
 }
 
-void AFMainFrame::RecvHotkeyTransition()
+void AFMainFrame::VerifyEmailBeforeBroad(std::string failMsg, std::string url)
 {
+    QPointer<AFMainFrame> self(this);
 
+    QString msg = QString::fromStdString(failMsg);
+    bool result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+        "", msg, false, true);
+
+    if (!self) return;
+
+    if (result == QDialog::Accepted)
+    {
+        const QByteArray urlUtf8 = QByteArray::fromStdString(url);
+        if (m_soopApiHandler)
+            m_soopApiHandler->getAPI("BS_EMAIL_CERTIFY", urlUtf8.constData(), this, "qslotEmailVerify", QList<int>());
+    }
 }
 
-void AFMainFrame::RecvHotkeyResetStats()
+void AFMainFrame::NavigateDefaultBrowser(QString Url)
 {
+    if (Url.isEmpty())
+        return;
 
-}
-
-void AFMainFrame::RecvHotkeyScreenShotSelectedSource()
-{
-
+    QDesktopServices::openUrl(Url);
+    return;
+    
 }
 
 void AFMainFrame::ReloadCustomBrowserMenu()
 {
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
-    AFQCustomMenu* addon = _FindSubMenuByTitle(m_qTopMenu, QT_UTF8(locale.Str("Basic.MainMenu.Addon")));
+    AFQCustomMenu* addon = _FindSubMenuByTitle(m_topMenu, QTStr("Basic.MainMenu.Addon"));
 
     if (addon)
     {
-        AFQCustomMenu* customMenu = _FindSubMenuByTitle(m_qTopMenu,
-            QT_UTF8(locale.Str("Basic.MainMenu.Addon.CustomBrowserDocks")));
+        AFQCustomMenu* customMenu = _FindSubMenuByTitle(m_topMenu,
+            QTStr("Basic.MainMenu.Addon.CustomBrowserDocks"));
 
         if (customMenu)
-        {
             addon->removeAction(customMenu->menuAction());
+        
+        if (!addon->actions().isEmpty()) {
+            auto first_action = addon->actions().first();
+            addon->insertMenu(first_action, CreateCustomBrowserMenu());
         }
+        else {
+            addon->addMenu(CreateCustomBrowserMenu());
+        }
+    }
 
-        addon->addMenu(m_DynamicCompositMainWindow->CreateCustomBrowserMenu());
+    AFQBorderPopupBaseWidget* browserCollection = nullptr;
+    if (m_blockManager->GetPopup(ENUM_WINDOW_TYPE::CustomBrowserCollection, browserCollection))
+        if (browserCollection)
+            browserCollection->raise();
+}
+
+AFQCustomMenu* AFMainFrame::CreateCustomBrowserMenu()
+{
+    AFQCustomMenu* customBrowserMenu = new AFQCustomMenu(Str("Basic.MainMenu.Addon.CustomBrowserDocks"), this, true);
+    customBrowserMenu->setFixedWidth(200);
+
+    QAction* browserList = new QAction(customBrowserMenu);
+    browserList->setText(Str("Basic.MainMenu.Addon.CustomBrowserList"));
+
+    browserList->setProperty("windowtype", ENUM_WINDOW_TYPE::CustomBrowserCollection);
+    connect(browserList, &QAction::triggered, this, &AFMainFrame::qslotShowBlockWithProperty);
+
+    customBrowserMenu->addAction(browserList);
+    customBrowserMenu->addSeparator();
+
+    m_blockManager->CreateCustomBrowserListMenu(customBrowserMenu);
+
+    return customBrowserMenu;
+}
+
+AFQCustomMenu* AFMainFrame::CreateFullScreenProjectorMenu()
+{
+    AFQCustomMenu* customBrowserMenu = new AFQCustomMenu(Str("SceneProjector"), this, true);
+    AFMainFrame::AddProjectorMenuMonitors(customBrowserMenu, this, &AFMainFrame::qslotShowProjector);
+
+    return customBrowserMenu;
+}
+
+template<typename Receiver, typename ...Args>
+void AFMainFrame::AddProjectorMenuMonitors(QMenu* parent, Receiver* target, void(Receiver::* slot)(Args...))
+{
+    auto projectors = GetProjectorMenuMonitorsFormatted();
+    for (int i = 0; i < projectors.size(); i++) {
+        QString str = projectors[i];
+        QAction* action = parent->addAction(str, target, slot);
+        action->setProperty("monitor", i);
     }
 }
 
-void AFMainFrame::CustomBrowserClosed(QString uuid)
+QList<QString> AFMainFrame::GetProjectorMenuMonitorsFormatted()
 {
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
+    QList<QString> projectorsFormatted;
+    QList<QScreen*> screens = QGuiApplication::screens();
+    for (int i = 0; i < screens.size(); i++) {
+        QScreen* screen = screens[i];
+        QRect screenGeometry = screen->geometry();
+        qreal ratio = screen->devicePixelRatio();
+        QString name = "";
+#if defined(_WIN32) && QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
+        QTextStream fullname(&name);
+        fullname << GetMonitorName(screen->name());
+        fullname << " (";
+        fullname << (i + 1);
+        fullname << ")";
+#elif defined(__APPLE__) || defined(_WIN32)
+        name = screen->name();
+#else
+        name = screen->model().simplified();
 
-    AFQCustomMenu* addon = _FindSubMenuByTitle(m_qTopMenu, QT_UTF8(locale.Str("Basic.MainMenu.Addon")));
+        if (name.length() > 1 && name.endsWith("-"))
+            name.chop(1);
+#endif
+        name = name.simplified();
+
+        if (name.length() == 0) {
+            name = QString("%1 %2")
+                .arg(QTStr("Display"))
+                .arg(QString::number(i + 1));
+        }
+        QString str = QString("%1: %2x%3 @ %4,%5")
+            .arg(name, QString::number(screenGeometry.width() * ratio),
+                 QString::number(screenGeometry.height() * ratio),
+                 QString::number(screenGeometry.x()),
+                 QString::number(screenGeometry.y()));
+        projectorsFormatted.push_back(str);
+    }
+    return projectorsFormatted;
+}
+
+void AFMainFrame::CustomBrowserStateChanged(QString uuid, bool isOpen)
+{
+    AFQCustomMenu* addon = _FindSubMenuByTitle(m_topMenu, QTStr("Basic.MainMenu.Addon"));
 
     if (addon)
     {
-        AFQCustomMenu* customMenu = _FindSubMenuByTitle(m_qTopMenu,
-            QT_UTF8(locale.Str("Basic.MainMenu.Addon.CustomBrowserDocks")));
+        AFQCustomMenu* customMenu = _FindSubMenuByTitle(m_topMenu,
+            QTStr("Basic.MainMenu.Addon.CustomBrowserDocks"));
 
         if (customMenu)
         {
@@ -1978,11 +1971,38 @@ void AFMainFrame::CustomBrowserClosed(QString uuid)
                 QString propertyuuid = actions[i]->property("uuid").toString();
                 if (propertyuuid == uuid)
                 {
-                    actions[i]->setChecked(false);
+                    actions[i]->setChecked(isOpen);
+                    m_blockManager->ChangeCustomBrowserOpenState(uuid, isOpen);
                 }
             }
         }
     }
+}
+
+void AFMainFrame::CustomBrowserStateAllChanged(bool isOpen)
+{
+    AFQCustomMenu* addon = _FindSubMenuByTitle(m_topMenu, QTStr("Basic.MainMenu.Addon"));
+    if (addon)
+    {
+        AFQCustomMenu* customMenu = _FindSubMenuByTitle(m_topMenu, QTStr("Basic.MainMenu.Addon.CustomBrowserDocks"));
+        if (customMenu)
+        {
+            QList<QAction*> actions = customMenu->actions();
+            for (int i = 0; i < actions.count(); i++)
+            {
+                actions[i]->setChecked(isOpen);
+            }
+
+            m_blockManager->ChangeAllCustomBrowserOpenState(isOpen);
+        }
+    }
+}
+
+void AFMainFrame::SetSceneCollectionEnabled(bool enable)
+{
+    AFQCustomMenu* customMenu = _FindSubMenuByTitle(m_topMenu, QTStr("Basic.MainMenu.SceneCollectionFix"));
+    if (customMenu)
+        customMenu->setEnabled(enable);
 }
 
 void AFMainFrame::SetDisplayAffinity(QWindow* window)
@@ -1990,12 +2010,7 @@ void AFMainFrame::SetDisplayAffinity(QWindow* window)
     if (!SetDisplayAffinitySupported())
         return;
 
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-
-    bool hideFromCapture = config_get_bool(confManager.GetGlobal(),
-        "BasicWindow",
-        "HideOBSWindowsFromCapture");
-
+    bool hideFromCapture = config_get_bool(USERCONFIG, "BasicWindow", "HideOBSWindowsFromCapture");
     // Don't hide projectors, those are designed to be visible / captured
     if (window->property("isOBSProjectorWindow") == true)
         return;
@@ -2020,240 +2035,90 @@ void AFMainFrame::SetDisplayAffinity(QWindow* window)
 
 void AFMainFrame::ResetStudioModeUI(bool changeLayout)
 {
-    config_t* configGlobalFile = AFConfigManager::GetSingletonInstance().GetGlobal();
-    bool studioPortraitLayout = config_get_bool(configGlobalFile, "BasicWindow", "StudioPortraitLayout");
+    bool studioPortraitLayout = config_get_bool(USERCONFIG, "BasicWindow", "StudioPortraitLayout");
 
     if (changeLayout)
     {
-        m_DynamicCompositMainWindow->SwitchStudioModeLayout(studioPortraitLayout);
+        m_dynamicCompositMainWindow->SwitchStudioModeLayout(studioPortraitLayout);
     }
 
-    bool studioModeLabels = config_get_bool(configGlobalFile, "BasicWindow", "StudioModeLabels");
-    m_DynamicCompositMainWindow->ToggleStudioModeLabels(studioPortraitLayout, studioModeLabels);
+    bool studioModeLabels = config_get_bool(USERCONFIG, "BasicWindow", "StudioModeLabels");
+    m_dynamicCompositMainWindow->ToggleStudioModeLabels(studioPortraitLayout, studioModeLabels);
 }
 
-void AFMainFrame::qslotChangeBroadState(bool BroadButtonOn)
+void AFMainFrame::qslotShowMigrationGuide()
 {
-    
+    AFQStudioUpdateLogDialog dialog(this);
+    dialog.setMode(1);
+    dialog.exec();
+}
+
+void AFMainFrame::qslotCheckBroadAvailable(bool BroadButtonOn)
+{
     if (BroadButtonOn) {
-        if (m_BroadStartTimer && m_BroadStartTimer->isActive())
+        if (m_broadStartTimer && m_broadStartTimer->isActive()) {
+            blog(LOG_ERROR, "change broad state - already broading");
+            ui->pushButton_Broad->setChecked(false);
             return;
-    }
-
-    if (m_MainGuideWidget)
-    {
-        m_MainGuideWidget->deleteLater();
-        m_MainGuideWidget = nullptr;
-    }
-
-    if (m_ProgramGuideWidget && m_ProgramGuideWidget->isWidgetType())
-        m_ProgramGuideWidget->NextMission(2);
-
-    QPushButton* BroadButton = reinterpret_cast<QPushButton*>(sender());
-    if (!BroadButton)
-        BroadButton = ui->pushButton_Broad;
-
-    auto& authManager = AFAuthManager::GetSingletonInstance();
-    int cntOfAccount = authManager.GetCntChannel();
-    bool existStream = false;
-
-    AFChannelData* mainChannel = nullptr;
-    if (authManager.GetMainChannelData(mainChannel))
-        existStream = mainChannel->bIsStreaming;
-    
-
-    for (int idx = 0; idx < cntOfAccount; idx++) {
-        AFChannelData* tmpChannel = nullptr;
-        authManager.GetChannelData(idx, tmpChannel);
-        if (tmpChannel->bIsStreaming) {
-            existStream = true;
-            break;
         }
-    }
 
-    if (!existStream) { 
-        ui->pushButton_Broad->setChecked(false);
-        int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
-            "",
-            AFLocaleTextManager::GetSingletonInstance().Str("Basic.Settings.Stream.MissingStreamKey"));
-
-        if (result == QDialog::Accepted)
+        //Check if broadcast start routine is in progress (prevent duplicate call broad start button)
+        if (m_checkBroadStartAPI)
         {
-            _ShowSettingPopup(1);
-        }
-
-        BroadButton->setChecked(false);
-        return;
-    }
-     
-    if (BroadButtonOn)
-    {
-        if(IsStreamActive())
+            AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this, "", QTStr("Broadcast.Starting"), false, true);
             return;
+        }
 
-        auto& authManager = AFAuthManager::GetSingletonInstance();
-        int cntOfAccount = authManager.GetCntChannel();
-        int handlerIdx = 0;
-        for (int idx = 0; idx < cntOfAccount; idx++) 
-        {
-            AFChannelData* tmpChannel = nullptr;
-            authManager.GetChannelData(idx, tmpChannel);
-            if (!tmpChannel || !tmpChannel->pAuthData)
-                continue;
+        m_checkBroadStartAPI = true;
+        m_CheckBroadStartAPITimer->start();
 
-            if (tmpChannel->pAuthData->strPlatform == "Youtube")
-            {
-                if (tmpChannel->bIsStreaming == true)
-                {
-                    AFBasicAuth* authData = tmpChannel->pAuthData;
-                    if (authData->bCheckedRTMPKey == false)
-                    {
-                        if (ShowPopupPageYoutubeChannel(authData) != QDialog::Accepted)
-                        {
-                            BroadButton->setChecked(false);
-                            return;
-                        }
-                    }
-                }
+        emit StreamingPreparing();
+
+        bool result = false;
+        do {
+            // PrePare Start Broad
+            // API CALL : qslotBroadStartAPIResponse -> qslotBroadStartSuccess
+            int ret = PrepareBroadStart();
+
+            if (BS_SUCCESS != ret) {
+                blog(LOG_ERROR, "prepare broad failed - err [%d]", ret);
+                break;
             }
+
+            qslotCheckVersionLimit();
+            result = true;
+        } while (false);
+        if (false == result) {
+            ui->pushButton_Broad->setChecked(false);
+            OffBroadStartAPICheck();
         }
-    
-        bool confirm = config_get_bool(GetGlobalConfig(), "BasicWindow", "WarnBeforeStartingStream");
-        bool recordWhenStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "RecordWhenStreaming");
-        bool replayWhileStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "ReplayBufferWhileStreaming");
-
-        if (confirm)
-        {
-            int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
-                AFLocaleTextManager::GetSingletonInstance().Str("ConfirmStart.Title"),
-                AFLocaleTextManager::GetSingletonInstance().Str("ConfirmStart.Text"));
-
-            if (result != 1)
-            {
-                BroadButton->setChecked(false);
-                return;
-            }
-        }
-
-        // delay start
-        m_BroadStartTimer = new QTimer(this);
-        m_iBroadTimerRemaining = 3;
-
-        /*m_qBroadCountDownWidget = new QWidget(this);
-        m_qBroadCountDownWidget->setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
-        m_qBroadCountDownWidget->setAttribute(Qt::WA_TranslucentBackground);
-        m_qBroadCountDownWidget->setAttribute(Qt::WA_DeleteOnClose);
-        m_qBroadCountDownWidget->setFixedSize(260, 260);
-
-        m_qBroadLabel = new QLabel(m_qBroadCountDownWidget);
-        m_qBroadLabel->setAlignment(Qt::AlignCenter);
-        m_qBroadLabel->setObjectName("label_Countdown");
-        m_qBroadLabel->setText(QString::number(m_iBroadTimerRemaining));
-
-        QWidget* broadCountWidget = new QWidget(m_qBroadCountDownWidget);
-        broadCountWidget->setObjectName("widget_BroadCountDown");
-        QVBoxLayout* countDownLayout = new QVBoxLayout(broadCountWidget);
-        countDownLayout->setContentsMargins(0, 0, 0, 0);
-        countDownLayout->setSpacing(0);
-        countDownLayout->addWidget(m_qBroadLabel);
-        broadCountWidget->setLayout(countDownLayout);
-
-        QVBoxLayout* countDownOuterLayout = new QVBoxLayout(m_qBroadCountDownWidget);
-        countDownOuterLayout->setContentsMargins(0, 0, 0, 0);
-        countDownOuterLayout->setSpacing(0);
-        countDownOuterLayout->addWidget(broadCountWidget);
-        m_qBroadCountDownWidget->setLayout(countDownOuterLayout);
-
-        int countDownWidth = x() + (width() / 2) - (m_qBroadCountDownWidget->width() / 2);
-        int height = y() + (m_DynamicCompositMainWindow->GetMainPreview()->height() / 2)
-            - (m_qBroadCountDownWidget->height() / 2) + ui->frame_Top->height();
-        m_qBroadCountDownWidget->move(countDownWidth, height);
-        m_qBroadCountDownWidget->show();*/
-        if (m_qBroadMovie == nullptr)
-        {
-            std::string absPath;
-            GetDataFilePath("assets", absPath);
-            QString gifPath = QString("%1/mainview/broad-spinner-black.gif").
-                arg(absPath.data());
-            m_qBroadMovie = new QMovie(gifPath, QByteArray(), this);
-        }
-        QSize s = ui->pushButton_Broad->rect().size();
-        connect(m_qBroadMovie, &QMovie::frameChanged, [=] {
-            ui->pushButton_Broad->setIcon(m_qBroadMovie->currentPixmap());
-            ui->pushButton_Broad->setIconSize(s);
-            });
-        m_qBroadMovie->start();
-        ui->pushButton_Broad->setText("");
-        connect(m_BroadStartTimer, &QTimer::timeout, this, &AFMainFrame::qslotStartCountDown);
-        m_BroadStartTimer->start(3000);
-
-        
-        // => qslotStartCountDown
-       
     }
     else
     {
-        bool confirm = config_get_bool(GetGlobalConfig(), "BasicWindow", "WarnBeforeStoppingStream");
-        bool recordWhenStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "RecordWhenStreaming");
-        bool keepRecordingWhenStreamStops = config_get_bool(GetGlobalConfig(), "BasicWindow", "KeepRecordingWhenStreamStops");
-        bool replayWhileStreaming = config_get_bool(GetGlobalConfig(), "BasicWindow", "ReplayBufferWhileStreaming");
-        bool keepReplayStreamStops = config_get_bool(GetGlobalConfig(), "BasicWindow", "KeepReplayBufferStreamStops");
-        
-        if (confirm)
+        if (AFOutputUtil::IsStreamActive() == true)
         {
-            int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
-                                                    AFLocaleTextManager::GetSingletonInstance().Str("ConfirmStop.Title"),
-                                                    AFLocaleTextManager::GetSingletonInstance().Str("ConfirmStop.Text"));
-            
-            if (result != 1)
-            {
-                BroadButton->setChecked(true);
-                return;
-            }
+            BroadCastEnd();
         }
-        
-        ui->pushButton_Broad->setText("LIVE");
-        ui->pushButton_Broad->setFixedWidth(77);
-        if (m_qBroadMovie != nullptr)
-        {
-            m_qBroadMovie->stop();
-            ui->pushButton_Broad->setIcon(QIcon());
-        }
-        
-        if (m_BroadStartTimer != nullptr)
-        {
-            if (m_BroadStartTimer->isActive())
-            {
-                m_BroadStartTimer->stop();
-                
-                /*if (m_qBroadCountDownWidget != nullptr)
-                    if (m_qBroadCountDownWidget->isVisible())
-                        m_qBroadCountDownWidget->close();*/
-            }
-        }
-        
-
-        // broad stop
-        qslotStopStreaming();
     }
-    
 }
-void AFMainFrame::qslotEnterBroadButton()
-{
-    if(!ui->pushButton_Broad->isChecked())
-        ui->pushButton_Broad->
-        setStyleSheet("#pushButton_Broad {background: #D1FF01;} #pushButton_Broad:checked {background-color: #FF2424;}");
 
-}
-void AFMainFrame::qslotLeaveBroadButton()
+void AFMainFrame::qslotSetButtonOpacity()
 {
-    if (!ui->pushButton_Broad->isChecked())
-        ui->pushButton_Broad->
-        setStyleSheet("#pushButton_Broad {background: qlineargradient( x1:0 y1:0, x2:1 y2:0, stop:0 #0EE3F1 , stop:1 #D1FF00);} #pushButton_Broad:checked {background-color: #FF2424;}");
+    QPushButton* broadButton = qobject_cast<QPushButton*>(sender());
+    if (broadButton->graphicsEffect())
+        broadButton->graphicsEffect()->setEnabled(true);
 }
+
+void AFMainFrame::qslotRemoveButtonOpacity()
+{
+    QPushButton* broadButton = qobject_cast<QPushButton*>(sender());
+    if (broadButton->graphicsEffect())
+        broadButton->graphicsEffect()->setEnabled(false);
+}
+
 bool AFMainFrame::qslotReplayBufferClicked()
 {
-    if(IsReplayBufferActive()) {
+    if(AFOutputUtil::IsReplayBufferActive()) {
         qslotStopReplayBuffer();
         qslotReplayBufferSave();
         return false;
@@ -2262,38 +2127,45 @@ bool AFMainFrame::qslotReplayBufferClicked()
         return true;
     }
 }
-void AFMainFrame::qslotPauseRecordingClicked()
+
+void AFMainFrame::qslotMaximizedChanged(bool maximized)
 {
-    if (!m_outputHandlers[0].second || !m_outputHandlers[0].second->fileOutput) {
-        return;
+    if (!maximized) {
+        ui->pushButton_MaximumWindow->setObjectName("pushButton_MaximumWindow");
+        m_blockManager->ChangeAllMagnet(true);
     }
-    obs_output_t* output_ = m_outputHandlers[0].second->fileOutput;
-    bool paused = obs_output_paused(output_);
-    if(paused) {
-        UnPauseRecording();
-    } else {
-        PauseRecording();
+    else {
+        ui->pushButton_MaximumWindow->setObjectName("pushButton_MaxedWindow");
+        m_blockManager->ChangeAllMagnet(false);
     }
-}
-void AFMainFrame::qslotStartCountDown()
-{
-    m_qBroadMovie->stop();
-    ui->pushButton_Broad->setIcon(QIcon());
-    m_BroadStartTimer->stop();
-    qslotStartStreaming();
+
+    PolishStyleSheet(ui->pushButton_MaximumWindow);
+
+    FinishAboutToMax();
 }
 
-void AFMainFrame::qslotUpdateCountDown()
+//void AFMainFrame::qslotPauseRecordingClicked()
+//{
+//    if(AFOutputUtil::PauseOutput())
+//        UnPauseRecording();
+//    else
+//        PauseRecording();
+//}
+
+void AFMainFrame::qslotStartCountDown()
 {
-    //ui->pushButton_Broad->setText(QString::number(m_iBroadTimerRemaining));
+    m_pBroadMovie->stop();
+    ui->pushButton_Broad->setIcon(QIcon());
+    m_broadStartTimer->stop();
+
+    qslotStartStreaming();
 }
 
 void AFMainFrame::qslotChangeRecordState(bool checked)
 {
-    // already recording start
-    if(IsRecordingActive())
+    if(AFOutputUtil::IsRecordingActive())
     {
-        bool confirm = config_get_bool(GetGlobalConfig(), "BasicWindow", "WarnBeforeStoppingRecord");
+        bool confirm = config_get_bool(USERCONFIG, "BasicWindow", "WarnBeforeStoppingRecord");
         if(confirm && isVisible()) {
             int result =  AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
                                                      QTStr("ConfirmStopRecord.Title"),
@@ -2309,7 +2181,7 @@ void AFMainFrame::qslotChangeRecordState(bool checked)
     }
     else
     {
-        if(!AFUIValidation::NoSourcesConfirmation(this)) {
+        if(!UIValidation::NoSourcesConfirmation(this)) {
             ui->pushButton_Record->setChecked(false);
             return;
         }
@@ -2318,246 +2190,108 @@ void AFMainFrame::qslotChangeRecordState(bool checked)
     }
 }
 
-static inline void SetEncoderName(obs_encoder_t* encoder, const char* name,
-    const char* defaultName)
-{
-    obs_encoder_set_name(encoder, (name && *name) ? name : defaultName);
-}
-
-void AFMainFrame::SetupAutoRemux(const char*& container)
-{
-    bool autoRemux = config_get_bool(GetBasicConfig(), "Video", "AutoRemux");
-    if (autoRemux && strcmp(container, "mp4") == 0)
-        container = "mkv";
-}
-
-std::string AFMainFrame::GetRecordingFilename(
-    const char* path, const char* container, bool noSpace, bool overwrite,
-    const char* format, bool ffmpeg)
-{
-    if (!ffmpeg)
-        SetupAutoRemux(container);
-
-    std::string dst = AFSettingUtilsA::GetOutputFilename(path, container, noSpace, overwrite, format);
-    lastRecordingPath = dst;
-    return dst;
-}
-
 void AFMainFrame::_ShowSettingPopup(int tabPage)
 {
-    if(m_BlockPopup != nullptr)
-        if(m_BlockPopup->isVisible())
-            _HideBlockArea(0);
-      
+    if (AUTH_CONTEXT.IsSoopRegistered())
+        AUTH_CONTEXT.LoadSoopStreamerInfo();
 
-    if(!m_StudioSettingPopup)
+    m_leftNavigationBar->ResetChannelSlide();
+
+    if(!m_studioSettingPopup)
     {
-        m_StudioSettingPopup = new AFQStudioSettingDialog(this);
-        m_StudioSettingPopup->AFQStudioSettingDialogInit(tabPage);
+        m_studioSettingPopup = new AFQStudioSettingDialog(this);
+        m_studioSettingPopup->AFQStudioSettingDialogInit(tabPage);
+        m_blockManager->ApplyMoveInAllArea(m_studioSettingPopup);
     }
 
-    m_StudioSettingPopup->exec();
+    BroadInfoTimerStop();
 
-    if (g_bRestart)
+    m_studioSettingPopup->exec();
+
+    if (!m_logOut)
     {
-        auto& localeTextManager = AFLocaleTextManager::GetSingletonInstance();
-        int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
-                                                "", QT_UTF8(localeTextManager.Str("NeedsRestart")));
+        _RestartApp();
 
-        if(result == QDialog::Accepted)
-        {
-            close();
-        } 
+        BroadInfoTimerStart();
+
+        if (AUTH_CONTEXT.IsSoopRegistered())
+            AUTH_CONTEXT.LoadSoopStreamerInfo();
         else
-        {
-            g_bRestart = false;
-        }
+            m_blockManager->qslotClosePopup(ENUM_WINDOW_TYPE::BroadInfo);
+
+        LoadAccounts();
+        ApplyBroadInfoToUI();
     }
-
-    LoadAccounts();
-
 }
 
-void AFMainFrame::_ShowSettingPopupWithID(QString id)
+void AFMainFrame::_DeleteBroadInfoData()
 {
-    if (m_BlockPopup != nullptr)
-        if (m_BlockPopup->isVisible())
-            _HideBlockArea(0);
+    char path[512];
+    GetAppConfigPath(path, sizeof(path), "SOOPStudio");
+    char file_path[512];
+    snprintf(file_path, sizeof(file_path), "%s\\broad_info", path);
+    os_unlink(file_path);
+}
 
+void AFMainFrame::_ShowSettingPopupWithID(QString id, QString platform)
+{
+    if (AUTH_CONTEXT.IsSoopRegistered())
+        AUTH_CONTEXT.LoadSoopStreamerInfo();
 
-    if (!m_StudioSettingPopup)
+    m_leftNavigationBar->ResetChannelSlide();
+
+    if (!m_studioSettingPopup)
     {
-        m_StudioSettingPopup = new AFQStudioSettingDialog(this);
-        m_StudioSettingPopup->AFQStudioSettingDialogInit(1);
-        m_StudioSettingPopup->SetID(id);
+        m_studioSettingPopup = new AFQStudioSettingDialog(this);
+        m_studioSettingPopup->AFQStudioSettingDialogInit(1);
+        m_studioSettingPopup->SetID(id, platform);
+        m_blockManager->ApplyMoveInAllArea(m_studioSettingPopup);
     }
 
-    m_StudioSettingPopup->exec();
 
-    if (g_bRestart)
+    BroadInfoTimerStop();
+
+    m_studioSettingPopup->exec();
+
+    if (!m_logOut)
     {
-        auto& localeTextManager = AFLocaleTextManager::GetSingletonInstance();
-        int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
-            "", QT_UTF8(localeTextManager.Str("NeedsRestart")));
+        _RestartApp();
 
-        if (result == QDialog::Accepted)
-        {
-            close();
-        }
+        BroadInfoTimerStart();
+
+        if (AUTH_CONTEXT.IsSoopRegistered())
+            AUTH_CONTEXT.LoadSoopStreamerInfo();
         else
-        {
-            g_bRestart = false;
-        }
-    }
+            m_blockManager->qslotClosePopup(ENUM_WINDOW_TYPE::BroadInfo);
 
-    LoadAccounts();
+        LoadAccounts();
+        ApplyBroadInfoToUI();
+    }
 }
 
-QString AFMainFrame::_AccountButtonsStyling(bool stream)
+void AFMainFrame::BroadStatusCheckTimerStart()
 {
-    return QString();
+    if (!m_BroadStatusCheckTimer)
+    {
+        m_BroadStatusCheckTimer = new QTimer(this);
+        connect(m_BroadStatusCheckTimer, &QTimer::timeout,
+            this, &AFMainFrame::qslotBroadCheckTimeout);
+        m_BroadStatusCheckTimer->setInterval(1000 * 30);
+        m_BroadStatusCheckTimer->start();
+
+    }
 }
 
-void AFMainFrame::_SetupAccountUI()
+void AFMainFrame::BroadStatusCheckTimerStop()
 {
-    //temp
-    ui->pushButton_Soop->SetMainAccount();
-    connect(ui->pushButton_Soop, &QPushButton::clicked, this, &AFMainFrame::qslotShowMainAuthMenu);
-
-    connect(ui->pushButton_Login, &QPushButton::clicked, this, &AFMainFrame::qslotShowLoginMenu);
-    
-    connect(ui->pushButton_AuthSettings, &QPushButton::clicked,
-            this, &AFMainFrame::qslotShowStudioSettingWithButtonSender);
-    ui->pushButton_AuthSettings->setProperty("type", "1");
-    // !!
-
-    auto& localeTextManager = AFLocaleTextManager::GetSingletonInstance();
-    //ui->pushButton_Login->setText(QTStr("Login"));
-    
-    
-    LoadAccounts();
-}
-
-bool AFMainFrame::LoadAccounts()
-{
-    auto& authManager = AFAuthManager::GetSingletonInstance();
-        
-
-    bool oneMoreStreaming = false;
-
-    AFChannelData* mainChannel = nullptr;
-    bool regMainAccount = authManager.GetMainChannelData(mainChannel);
-    bool mainAccountStreaming = false;
-    if (regMainAccount)
-        mainAccountStreaming = mainChannel->bIsStreaming;
-
-    bool regOtherAccount = authManager.GetCntChannel() > 0 ? true : false;
-    
-    std::vector<AFChannelData*> listStreamingChannel;
-    int cntOfAccount = authManager.GetCntChannel();
-
-    for (int idx = 0; idx < cntOfAccount; idx++)
+    if (m_BroadStatusCheckTimer)
     {
-        AFChannelData* tmpChannel = nullptr;
-        authManager.GetChannelData(idx, tmpChannel);
-        
-        if (tmpChannel->bIsStreaming)
-        {
-            oneMoreStreaming = true;
-            listStreamingChannel.emplace_back(tmpChannel);
-        }
+        m_BroadStatusCheckTimer->stop();
+        disconnect(m_BroadStatusCheckTimer, &QTimer::timeout, this, &AFMainFrame::qslotBroadCheckTimeout);
+
+        m_BroadStatusCheckTimer->deleteLater();
+        m_BroadStatusCheckTimer = nullptr;
     }
-
-    QList<AFMainAccountButton*> accountButtons = ui->widget_Platform->findChildren<AFMainAccountButton*>();
-   
-    for (auto& tb : accountButtons)
-    {
-        if (tb->IsMainAccount())
-            continue;
-
-        ui->widget_Platform->layout()->removeWidget(tb);
-        tb->close();
-        delete tb;
-    }
-
-    ui->pushButton_Soop->SetPlatformImage("SOOP Global", !regMainAccount);
-    ui->pushButton_Soop->SetStreaming(IsStreamActive(), mainAccountStreaming, !regMainAccount);
-    if (regMainAccount)
-    {
-        ui->pushButton_Soop->SetChannelData(mainChannel);
-        oneMoreStreaming = true;
-    }
-    
-    if (oneMoreStreaming)
-    {       
-        for (int i = 0; i < ui->widget_Platform->layout()->count(); ++i)
-        {
-            QLayoutItem* item = ui->widget_Platform->layout()->itemAt(i);
-            if (item->spacerItem())
-            {
-                ui->widget_Platform->layout()->takeAt(i);
-                delete item;
-                break;
-            }
-        }
-        
-        ui->widget_Platform->layout()->removeWidget(ui->pushButton_AuthSettings);
-        ui->widget_Platform->layout()->addWidget(ui->widget_PlatformLine);
-
-
-        for (auto& channel :
-             std::vector<AFChannelData*>(listStreamingChannel.rbegin(),
-                                         listStreamingChannel.rend()))
-        {
-            AFMainAccountButton* accountButton = new AFMainAccountButton(this);
-            accountButton->SetChannelData(channel);
-
-            if (!channel->pAuthData)
-                continue;
-
-            accountButton->SetPlatformImage(channel->pAuthData->strPlatform);
-            accountButton->SetStreaming(IsStreamActive());
-            connect(accountButton, &QPushButton::clicked, this, &AFMainFrame::qslotShowOtherAuthMenu);
-
-            ui->widget_Platform->layout()->addWidget(accountButton);
-
-        }
-
-
-        ui->widget_Platform->layout()->addWidget(ui->pushButton_AuthSettings);
-        QHBoxLayout* layout = reinterpret_cast<QHBoxLayout*>(ui->widget_Platform->layout());
-        layout->addSpacerItem(new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum));
-        
-        ui->stackedWidget_Platform->setCurrentIndex(1);
-
-        return true;
-    }
-    else if (regMainAccount == false && regOtherAccount == true &&
-             oneMoreStreaming == false)
-    {
-        ui->widget_Platform->layout()->removeWidget(ui->widget_PlatformLine);
-        
-        ui->widget_Login->layout()->addWidget(ui->widget_PlatformLine);
-        //
-        
-        ui->stackedWidget_Platform->setCurrentIndex(1);
-
-        return true;
-    }
-    else if (regMainAccount == false && regOtherAccount == false)
-    {
-        ui->widget_Platform->layout()->addWidget(ui->widget_PlatformLine);
-
-        if (oneMoreStreaming)
-        {
-            ui->widget_Platform->layout()->addWidget(ui->widget_PlatformLine);
-        }
-
-        ui->stackedWidget_Platform->setCurrentIndex(0);
-        return false;
-    }
-
-    return true;
 }
 
 QString AFMainFrame::GetChannelID(obs_output_t* output)
@@ -2567,29 +2301,28 @@ QString AFMainFrame::GetChannelID(obs_output_t* output)
         return channelID;
 
     AFChannelData* channelData = nullptr;
-    OUTPUT_HANDLER_LIST::iterator outputIter;
     
     // Main Output
-    if (output == m_outputHandlers[0].second.get()->streamOutput)
+    if (AFOutputUtil::IsMainStreamOutput(output))
     {
-        auto& authManager = AFAuthManager::GetSingletonInstance();
-        authManager.GetMainChannelData(channelData);
-        std::string strChannelID = channelData->pAuthData->strChannelID;
+        AUTH_CONTEXT.GetMainChannelData(channelData);
+        std::string strChannelID = channelData->pAuthData->channelID;
         if (!strChannelID.empty())
             channelID = QString::fromStdString(strChannelID);
         return channelID;
     }
 
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
+    OUTPUT_HANDLER_LIST::iterator outputIter;
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+    for (outputIter = outputHandlers.begin(); outputIter != outputHandlers.end(); ++outputIter) {
         if (!outputIter->second.get())
             continue;
         if (outputIter->second.get()->streamOutput == output) 
         {
-            auto& authManager = AFAuthManager::GetSingletonInstance();
-            authManager.GetChannelData(outputIter->first, channelData);
+            AUTH_CONTEXT.GetChannelData(outputIter->first, channelData);
             if (channelData) 
             {
-                std::string strChannelID = channelData->pAuthData->strChannelID;
+                std::string strChannelID = channelData->pAuthData->channelID;
                 if (!strChannelID.empty())
                     channelID = QString::fromStdString(strChannelID);
                 break;
@@ -2600,51 +2333,521 @@ QString AFMainFrame::GetChannelID(obs_output_t* output)
     return channelID;
 }
 
-void AFMainFrame::EnumDialogs()
+int AFMainFrame::PrepareBroadStart()
 {
+    auto& auth = AUTH_CONTEXT;
+    //
+	// Broadcast Channel Inspection
+	bool existStream = false;
+    bool customChannelStreamming = false;
+	int  cntOfAccount = auth.GetCntChannel();
 
-}
+	AFChannelData* mainChannel = nullptr;
+	if (auth.GetMainChannelData(mainChannel))
+		existStream = mainChannel->isStreaming;
 
-inline const char* GetCurrentOutputPath()
-{
-    const char* path = nullptr;
-    const char* mode = config_get_string(GetBasicConfig(), "Output", "Mode");
+	for (int idx = 0; idx < cntOfAccount; idx++) {
+		AFChannelData* tmpChannel = nullptr;
+        auth.GetChannelData(idx, tmpChannel);
+		if (tmpChannel->isStreaming) {
+			existStream = true;
+            customChannelStreamming = true;
+			break;
+		}
+	}
 
-    if(strcmp(mode, "Advanced") == 0)
-    {
-        const char* advanced_mode = config_get_string(GetBasicConfig(), "AdvOut", "RecType");
-        if(strcmp(advanced_mode, "FFmpeg") == 0) {
-            path = config_get_string(GetBasicConfig(), "AdvOut", "FFFilePath");
-        } else {
-            path = config_get_string(GetBasicConfig(), "AdvOut", "RecFilePath");
+	if (!existStream) {
+		int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+			"", Str("Basic.Settings.Stream.MissingStreamKey"));
+
+		if (result == QDialog::Accepted) {
+			_ShowSettingPopup(1);
+		}
+		return BS_NOT_EXIST_BROADCAST_CHANNEL;
+	}
+
+    if (AFOutputUtil::IsStreamActive())
+        return BS_STREAM_ACTIVE;
+
+    config_t* activeConfig = ACTIVECONFIG;
+    //
+    OBSData advEncorderData;
+    int outCx = config_get_uint(activeConfig, "Video", "OutputCX");
+    int outCy = config_get_uint(activeConfig, "Video", "OutputCY");
+    int baseCx = config_get_uint(activeConfig, "Video", "BaseCX");
+    int baseCy = config_get_uint(activeConfig, "Video", "BaseCY");
+    int vBitrate;
+    const char* simpleMode = config_get_string(activeConfig, "Output", "Mode");
+    std::string encoder;
+    if (0 == strcmp(simpleMode, "Simple")) {
+        vBitrate = config_get_uint(activeConfig, "SimpleOutput", "VBitrate");
+        encoder = config_get_string(activeConfig, "SimpleOutput", "StreamEncoder");
+    }
+    else {
+        advEncorderData = AFProfileUtil::GetDataFromJsonFile("streamEncoder.json");
+        vBitrate = (int)obs_data_get_int(advEncorderData, "bitrate");
+        encoder = config_get_string(activeConfig, "AdvOut", "Encoder");
+    }
+    // av1 valid check
+    bool isAV1Codec = AFEncoderUtil::isAV1Codec(encoder.c_str());
+    if(isAV1Codec) {
+        // resolution
+        bool changed = false;
+        if(av1Resolution.width != outCx || av1Resolution.height != outCy) {
+            changed = true;
+            outCx = baseCx = av1Resolution.width;
+            outCy = baseCy = av1Resolution.height;
+            //
+            config_set_uint(activeConfig, "Video", "OutputCX", outCx);
+            config_set_uint(activeConfig, "Video", "OutputCY", outCy);
+            config_set_uint(activeConfig, "Video", "BaseCX", outCx);
+            config_set_uint(activeConfig, "Video", "BaseCY", outCy);
         }
-    } else {
-        path = config_get_string(GetBasicConfig(), "SimpleOutput", "FilePath");
+        // bitrate
+        if(vBitrate <= 8000) {
+            changed = true;
+            vBitrate = 16000;
+            if(0 == strcmp(simpleMode, "Simple")) {
+                config_set_uint(activeConfig, "SimpleOutput", "VBitrate", vBitrate);
+            } else {
+                obs_data_set_int(advEncorderData, "bitrate", vBitrate);
+                AFProfileUtil::SetDataToJsonFile("streamEncoder.json", advEncorderData);
+            }
+        }
+        if(changed) {
+            config_save_safe(activeConfig, "tmp", nullptr);
+            AFVideoUtil::ResetVideo();
+        }
     }
 
-    return path;
+    bool validResolution = (outCx > 1920 || outCy > 1080) ? false : true;
+    if (!validResolution && outCx == 720 && outCy == 1280)
+        validResolution = true;
+
+    bool validBitrate = vBitrate > 8000 ? false : true;
+
+    if(!validResolution || !validBitrate)
+    {
+        AFQBroadInfo* broadInfo = auth.GetSoopBroadInfo();
+        if(broadInfo) {
+            if(broadInfo->Allow1440P()) {
+                validResolution = (outCx > 2560 || outCy > 1440) ? false : true;
+                validBitrate = vBitrate > 16000 ? false : true;
+                if(!validResolution || !validBitrate) {
+                    AFQMessagBoxAlert alert(this, QTStr("Basic.1440PResolution.Title"),
+                                            QTStr("Basic.1440PResolution.Info2"), QTStr("Change"));
+                    if(QDialog::Accepted == alert.exec())
+                    {
+                        if(!validResolution) {
+                            outCx = 2560;
+                            outCy = 1440;
+
+                            baseCx = 2560;
+                            baseCy = 1440;
+                            config_set_uint(activeConfig, "Video", "OutputCX", outCx);
+                            config_set_uint(activeConfig, "Video", "OutputCY", outCy);
+                                            
+                            config_set_uint(activeConfig, "Video", "BaseCX", baseCx);
+                            config_set_uint(activeConfig, "Video", "BaseCY", baseCy);
+                        }
+                        if(!validBitrate) {
+                            vBitrate = 16000;
+                            if(0 == strcmp(simpleMode, "Simple")) {
+                                config_set_uint(activeConfig, "SimpleOutput", "VBitrate", vBitrate);
+                            } else {
+                                obs_data_set_int(advEncorderData, "bitrate", vBitrate);
+                                AFProfileUtil::SetDataToJsonFile("streamEncoder.json", advEncorderData);
+                            }
+                        }
+                        config_save_safe(activeConfig, "tmp", nullptr);
+                        AFVideoUtil::ResetVideo();
+                    } else
+                        return BS_INVALID_RESOLUTION;
+                }
+            } else {
+                AFQMessagBoxAlert alert(this, QTStr("Basic.1440PResolution.Title"),
+                                        QTStr("Basic.1440PResolution.Info2"), QTStr("Change"));
+                if(QDialog::Accepted == alert.exec())
+                {
+                    if(!validResolution) {
+                        outCx = 1920;
+                        outCy = 1080;
+
+                        baseCx = 1920;
+                        baseCy = 1080;
+                        config_set_uint(activeConfig, "Video", "OutputCX", outCx);
+                        config_set_uint(activeConfig, "Video", "OutputCY", outCy);
+
+                        config_set_uint(activeConfig, "Video", "BaseCX", baseCx);
+                        config_set_uint(activeConfig, "Video", "BaseCY", baseCy);
+                    }
+                    if(!validBitrate) {
+                        vBitrate = 8000;
+                        if(0 == strcmp(simpleMode, "Simple")) {
+                            config_set_uint(activeConfig, "SimpleOutput", "VBitrate", vBitrate);
+                        } else {
+                            obs_data_set_int(advEncorderData, "bitrate", vBitrate);
+                            AFProfileUtil::SetDataToJsonFile("streamEncoder.json", advEncorderData);
+                        }
+                    }
+                    config_save_safe(activeConfig, "tmp", nullptr);
+                    AFVideoUtil::ResetVideo();
+                } else
+                    return BS_INVALID_RESOLUTION;
+            }
+        }
+    }
+
+    if (!m_pMainOutput->IsStreamingOnlySoop()) {
+        if (outCx == 2560 || outCy == 1440 ) {
+            AFQMessagBoxAlert alert(this,QTStr("Basic.1440PResolution.Title"), 
+                                         QTStr("Basic.1440PResolution.Info"),QTStr("Change"));
+            if (QDialog::Accepted == alert.exec())
+            {
+                config_set_uint(activeConfig, "Video", "OutputCX", 1920);
+                config_set_uint(activeConfig, "Video", "OutputCY", 1080);
+
+                config_set_uint(activeConfig, "Video", "BaseCX", 1920);
+                config_set_uint(activeConfig, "Video", "BaseCY", 1080);
+
+                if (vBitrate > 8000) {
+                    vBitrate = 8000;
+                    if (0 == strcmp(simpleMode, "Simple")) {
+                        config_set_uint(activeConfig, "SimpleOutput", "VBitrate", vBitrate);
+                    }
+                    else {
+                        obs_data_set_int(advEncorderData, "bitrate", vBitrate);
+                        AFProfileUtil::SetDataToJsonFile("streamEncoder.json", advEncorderData);
+                    }
+                }
+                config_save_safe(activeConfig, "tmp", nullptr);
+                AFVideoUtil::ResetVideo();
+            }
+            else
+                return BS_INVALID_RESOLUTION;
+        }
+
+        m_soopSrcManager->ForceStopSoopSource();
+    }
+
+    for (int idx = 0; idx < cntOfAccount; idx++) {
+        AFChannelData* tmpChannel = nullptr;
+        auth.GetChannelData(idx, tmpChannel);
+        if (!tmpChannel || !tmpChannel->pAuthData)
+            continue;
+
+        if (tmpChannel->pAuthData->platform == PLATFORM_YOUTUBE) {
+            if (tmpChannel->isStreaming == true) {
+                AFBasicAuth* authData = tmpChannel->pAuthData;
+                if (!m_broadcastReady) {
+                    if (ShowPopupPageYoutubeChannel(authData) != QDialog::Accepted) {
+                        if (authData->keyRTMP.empty() || authData->urlRTMP.empty())
+                            tmpChannel->isStreaming = false;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if (auth.IsSoopStreaming())
+    {
+        if (m_bFirstOpen) {
+            m_blockManager->ShowVodAutoUploadNotice();
+            m_bFirstOpen = false;
+        }
+
+        QString strcheckedDate = config_get_string(APPCONFIG, "BroadInfo", SOOP_BROADCAST_NOTICE_DATE_CHECK);
+        QDate checkDate   = QDate::fromString(strcheckedDate, "yyyy-MM-dd");
+        QDate currentDate = QDateTime::currentDateTime().date();
+        if (checkDate < currentDate) {
+            if (!m_blockManager->ShowBroadcastNotice()) {
+                return BS_BROADNOTICE_CANCEL;
+            }
+        }
+    }
+    else
+    {
+        bool confirm = config_get_bool(USERCONFIG, "BasicWindow", "WarnBeforeStartingStream");
+        if (confirm)
+        {
+            int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                this,
+                Str("ConfirmStart.Title"),
+                Str("ConfirmStart.Text"));
+
+            if (result != 1)
+            {
+                ui->pushButton_Broad->setChecked(false);
+                return BROADSTART_ERROR::BS_USER_REJECT;
+            }
+        }
+    }
+
+    // Check SOOP Media Source
+    OBSSource source = m_soopSrcManager->GetSoopMediaSource();
+    if (source)
+    {
+        int  allowed_category = 0;
+        bool is_adult_content = false;
+        std::list<int> allowedCategorys;
+        obs_media_state media_state = obs_source_media_get_state(source);
+        if (media_state == OBS_MEDIA_STATE_PLAYING ||
+            media_state == OBS_MEDIA_STATE_OPENING ||
+            media_state == OBS_MEDIA_STATE_BUFFERING ||
+            media_state == OBS_MEDIA_STATE_PAUSED)
+        {
+            const char* id = obs_source_get_id(source);
+
+            AFQBroadInfo* broadInfo = auth.GetSoopBroadInfo();
+            if (AFSourceUtil::IsSoopVodSource(source))
+            {
+                VodInfo_s curVodInfo = m_soopSrcManager->GetCurVodInfo(id);
+                allowed_category = curVodInfo.allowed_category;
+                is_adult_content = curVodInfo.is_adult;
+
+                allowedCategorys.push_back(allowed_category);
+            }
+            else
+            {
+                if (0 == strcmp(id, "soop_directbroad_source")) {
+                    allowedCategorys = m_soopSrcManager->GetDirectBroadArrowedCategorys();
+                }
+                else if (0 == strcmp(id, "soop_tv_cable_source")) {
+                    int tvCableCategory = 390000 + m_soopSrcManager->GetTvLiveCPNo();
+                    allowedCategorys.push_back(tvCableCategory);
+                }
+            }
+
+            bool categoryMatch = false;
+            for (auto it = allowedCategorys.begin(); it != allowedCategorys.end(); ++it) {
+                if (broadInfo->CategoryNumber() == (*it)) {
+                    categoryMatch = true;
+                    break;
+                }
+            }
+
+            bool adultOptionNotMatch = false;
+            if (!broadInfo->AdultOnly()) {
+                adultOptionNotMatch = (is_adult_content != broadInfo->AdultOnly());
+            } 
+
+            if (!categoryMatch || adultOptionNotMatch) {
+
+                AFQCateChangeDialog dlg(this, id);
+                if (is_adult_content) {
+                    dlg.AddAllowedAnimeAdultCategoryInfo(allowed_category);
+                }
+                else {
+                    dlg.AddAllowedCategoryInfo(allowedCategorys);
+                }
+
+                if (QDialog::Accepted != dlg.exec()) {
+                    ui->pushButton_Broad->setChecked(false);
+                    blog(LOG_ERROR, "prepare broadstart category check - not Accept Dialog");
+                    return BS_SOOP_MEDIA_SOURCE_CATEGORY_CANCEL;
+                }
+                int selectCategory = dlg.GetSelectedCategory();
+                broadInfo->SetAdultOnly(is_adult_content);
+                broadInfo->SetCategory(selectCategory);
+
+                RefreshBroadInfoDockUI(false);
+            }
+        }
+    }
+    return BS_SUCCESS;
+}
+
+bool AFMainFrame::BroadCastEnd(bool banStop)
+{
+    auto& auth = AUTH_CONTEXT;
+    //
+    int nBreaktimeCheck = 0;
+    if (m_breakTimeManager->IsActive())
+    {
+        nBreaktimeCheck = AFQMessageBox::ShowMessageWithButtonText(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                                                                   this, QT_UTF8(""),
+                                                                   QTStr("breaktime.broad.end"), QTStr("breaktime.broad.end.btn"));
+        if (nBreaktimeCheck != 1)
+        {
+            ui->pushButton_Broad->setChecked(true);
+            return false;
+        }
+    }
+
+    bool retVal = true;
+    if (!auth.IsSoopStreaming())
+    {
+        if (!banStop)
+        {
+            bool confirm = config_get_bool(USERCONFIG, "BasicWindow", "WarnBeforeStoppingStream");
+            if (confirm)
+            {
+                int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                    this,
+                    Str("ConfirmStop.Title"),
+                    Str("ConfirmStop.Text"));
+
+                if (result != 1)
+                {
+                    ui->pushButton_Broad->setChecked(true);
+                    return false;
+                }
+            }
+        }
+
+        ChangeStreamStateUI(true, false, "LIVE", 77);
+        if (m_pBroadMovie != nullptr)
+        {
+            m_pBroadMovie->stop();
+            ui->pushButton_Broad->setIcon(QIcon());
+        }
+
+        if (m_broadStartTimer != nullptr)
+        {
+            if (m_broadStartTimer->isActive())
+            {
+                m_broadStartTimer->stop();
+            }
+        }
+
+        qslotStopStreaming();
+        m_broadcastReady = false;
+    }
+    else
+    {
+        if (!banStop)
+        {
+            auth.RequestBroadInfoAPI();
+            //
+            AFQEndBroadDialog* endBroad = new AFQEndBroadDialog(this);
+            connect(auth.GetSoopBroadInfo(), &AFQBroadInfo::qsignalBroadInfoReceived,
+                    endBroad, &AFQEndBroadDialog::qslotRefreshWaitTime);
+
+            bool splitAvailable = CheckSplitVodAvailable();
+
+            endBroad->EndBroadInfoInit(CheckSplitVodAvailable());
+
+            if (endBroad->exec() == QDialog::Accepted)
+            {
+                if (nBreaktimeCheck) {
+                    QEventLoop loop;
+                    QMetaObject::Connection c1, c2;
+
+                    QTimer timer;
+                    timer.setSingleShot(true);
+                    timer.start(3000);
+
+                    c1 = connect(&BREAKTIME_MANAGER, &BreaktimeManager::signalStopApisDone, &loop, [&loop](bool) {
+                        loop.quit();
+                    });
+
+                    c2 = connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+
+                    m_breakTimeManager->Stop(true);
+
+                    loop.exec();
+
+                    disconnect(c1);
+                    disconnect(c2);
+                }
+
+                ChangeStreamStateUI(true, false, "LIVE", 77);
+                if (m_pBroadMovie != nullptr)
+                {
+                    m_pBroadMovie->stop();
+                    ui->pushButton_Broad->setIcon(QIcon());
+                }
+
+                if (m_broadStartTimer != nullptr)
+                {
+                    if (m_broadStartTimer->isActive())
+                    {
+                        m_broadStartTimer->stop();
+                    }
+                }
+
+                qslotStopStreaming();
+                m_broadcastReady = false;
+            }
+            else
+            {
+                ui->pushButton_Broad->setChecked(true);
+                retVal = false;
+            }
+
+            endBroad->close();
+            endBroad->deleteLater();
+        }
+        else
+        {
+            ChangeStreamStateUI(true, false, "LIVE", 77);
+            if (m_pBroadMovie != nullptr)
+            {
+                m_pBroadMovie->stop();
+                ui->pushButton_Broad->setIcon(QIcon());
+            }
+
+            if (m_broadStartTimer != nullptr)
+            {
+                if (m_broadStartTimer->isActive())
+                {
+                    m_broadStartTimer->stop();
+                }
+            }
+
+            qslotStopStreaming();
+            m_broadcastReady = false;
+        }
+        
+    }
+
+    m_breakTimeManager->Stop(true);
+
+    return retVal;
+}
+
+bool AFMainFrame::CheckSoopBroadStatus(const QByteArray& responseData)
+{
+    if (responseData == "[]")
+        return true;
+    
+    BroadStartAPI_s info = {};
+
+    std::string jsonString = responseData.toStdString();
+    std::string err = "";
+    QString broadingStop = QTStr("Output.ConnectFail.Disconnected");
+
+    BroadStatusCheckTimerStop();
+    BroadCastEnd(true);
+
+    QString failMsg = "[BROADING FAIL]: " + broadingStop;
+    blog(LOG_INFO, failMsg.toUtf8().constData());
+    AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this, "", broadingStop, false, true);
+    return false;
 }
 
 bool AFMainFrame::_OutputPathValid()
 {
-    const char* mode = config_get_string(GetBasicConfig(), "Output", "Mode");
+    config_t* activeConfig = ACTIVECONFIG;
+    //
+    const char* mode = config_get_string(activeConfig, "Output", "Mode");
     if(strcmp(mode, "Advanced") == 0) {
-        const char* advanced_mode = config_get_string(GetBasicConfig(), "AdvOut", "RecType");
+        const char* advanced_mode = config_get_string(activeConfig, "AdvOut", "RecType");
         if(strcmp(advanced_mode, "FFmpeg") == 0) {
-            bool is_local = config_get_bool(GetBasicConfig(), "AdvOut", "FFOutputToFile");
+            bool is_local = config_get_bool(activeConfig, "AdvOut", "FFOutputToFile");
             if(!is_local)
                 return true;
         }
     }
 
-    const char* path = GetCurrentOutputPath();
+    const char* path = AFOutputUtil::GetCurrentOutputPath();
     return path && *path && QDir(path).exists();
 }
 void AFMainFrame::_OutputPathInvalidMessage()
 {
     blog(LOG_ERROR, "Recording stopped because of bad output path");
 
-    // AFCMessageBox::critical(this, QTStr("Output.BadPath.Title"), QTStr("Output.BadPath.Text"));
     AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
                                QTStr("Output.BadPath.Title"),
                                QTStr("Output.BadPath.Text"));
@@ -2652,19 +2855,21 @@ void AFMainFrame::_OutputPathInvalidMessage()
 
 void AFMainFrame::_SetResourceCheckTimer(int time)
 {
-    m_ResourceRefreshTimer = new QTimer(this);
+    m_resourceRefreshTimer = new QTimer(this);
 
-    connect(m_ResourceRefreshTimer, &QTimer::timeout, 
+    connect(m_resourceRefreshTimer, &QTimer::timeout, 
         this, &AFMainFrame::qsignalRefreshTimerTick);
 
-    m_ResourceRefreshTimer->start(time);
+    qslotRefreshMainResourceText();
+
+    m_resourceRefreshTimer->start(time);
 }
 
 bool AFMainFrame::_LowDiskSpace()
 {
     const char* path;
 
-    path = GetCurrentOutputPath();
+    path = AFOutputUtil::GetCurrentOutputPath();
     if(!path)
         return false;
 
@@ -2688,322 +2893,105 @@ void AFMainFrame::_DiskSpaceMessage()
                                QTStr("Output.RecordNoSpace.Msg"));
 }
 
-QColor AFMainFrame::_GetSourceListBackgroundColor(int preset)
-{
-    QColor color;
-    switch (preset) {
-    case 1: color.setRgb(255, 68, 68, 84); break;
-    case 2: color.setRgb(255, 255, 68, 84); break;
-    case 3: color.setRgb(68, 255, 68, 84); break;
-    case 4: color.setRgb(68, 255, 255, 84); break;
-    case 5: color.setRgb(68, 68, 255, 84); break;
-    case 6: color.setRgb(255, 68, 255, 84); break;
-    case 7: color.setRgb(68, 68, 68, 84); break;
-    case 8: color.setRgb(255, 255, 255, 84); break;
-    default:
-        break;
-    }
-
-    return color;
-}
-
-void AFMainFrame::ClearSceneBottomButtons()
-{
-    auto it = m_vSceneButton.begin();
-    for (; it != m_vSceneButton.end(); it++) {
-        AFQSceneBottomButton* button = (*it);
-        if (button) {
-            button->close();
-            delete button;
-        }
-    }
-    m_vSceneButton.clear();
-}
-
-AFQCustomMenu* AFMainFrame::_AddScaleFilteringMenu(AFQCustomMenu* menu, obs_sceneitem_t* item)
-{
-    obs_scale_type scaleFilter = obs_sceneitem_get_scale_filter(item);
-    QAction* action;
-
-#define ADD_MODE(name, mode)                                 \
-	action = menu->addAction(Str("" name), this,             \
-				 &AFMainFrame::qSlotSetScaleFilter);         \
-	action->setProperty("mode", (int)mode);                  \
-	action->setCheckable(true);                              \
-	action->setChecked(scaleFilter == mode);
-
-    ADD_MODE("Disable", OBS_SCALE_DISABLE);
-    ADD_MODE("ScaleFiltering.Point", OBS_SCALE_POINT);
-    ADD_MODE("ScaleFiltering.Bilinear", OBS_SCALE_BILINEAR);
-    ADD_MODE("ScaleFiltering.Bicubic", OBS_SCALE_BICUBIC);
-    ADD_MODE("ScaleFiltering.Lanczos", OBS_SCALE_LANCZOS);
-    ADD_MODE("ScaleFiltering.Area", OBS_SCALE_AREA);
-#undef ADD_MODE
-
-    return menu;
-}
-
-AFQCustomMenu* AFMainFrame::_AddBlendingModeMenu(AFQCustomMenu* menu, obs_sceneitem_t* item)
-{
-    obs_blending_type blendingMode = obs_sceneitem_get_blending_mode(item);
-    QAction* action;
-
-#define ADD_MODE(name, mode)                                    \
-	action = menu->addAction(Str("" name), this,                \
-				 &AFMainFrame::qSlotBlendingMode);              \
-	action->setProperty("mode", (int)mode);                     \
-	action->setCheckable(true);                                 \
-	action->setChecked(blendingMode == mode);
-
-    ADD_MODE("BlendingMode.Normal", OBS_BLEND_NORMAL);
-    ADD_MODE("BlendingMode.Additive", OBS_BLEND_ADDITIVE);
-    ADD_MODE("BlendingMode.Subtract", OBS_BLEND_SUBTRACT);
-    ADD_MODE("BlendingMode.Screen", OBS_BLEND_SCREEN);
-    ADD_MODE("BlendingMode.Multiply", OBS_BLEND_MULTIPLY);
-    ADD_MODE("BlendingMode.Lighten", OBS_BLEND_LIGHTEN);
-    ADD_MODE("BlendingMode.Darken", OBS_BLEND_DARKEN);
-#undef ADD_MODE
-
-    return menu;
-}
-
-AFQCustomMenu* AFMainFrame::_AddBlendingMethodMenu(AFQCustomMenu* menu, obs_sceneitem_t* item)
-{
-    obs_blending_method blendingMethod =
-        obs_sceneitem_get_blending_method(item);
-    QAction* action;
-    
-#define ADD_MODE(name, method)                                  \
-	action = menu->addAction(Str("" name), this,                \
-				 &AFMainFrame::qSlotBlendingMethod);            \
-	action->setProperty("method", (int)method);                 \
-	action->setCheckable(true);                                 \
-	action->setChecked(blendingMethod == method);
-
-    ADD_MODE("BlendingMethod.Default", OBS_BLEND_METHOD_DEFAULT);
-    ADD_MODE("BlendingMethod.SrgbOff", OBS_BLEND_METHOD_SRGB_OFF);
-#undef ADD_MODE
-
-    return menu;
-}
-
-AFQCustomMenu* AFMainFrame::_AddDeinterlacingMenu(AFQCustomMenu* menu, obs_source_t* source)
-{
-    obs_deinterlace_mode deinterlaceMode =
-        obs_source_get_deinterlace_mode(source);
-    obs_deinterlace_field_order deinterlaceOrder =
-        obs_source_get_deinterlace_field_order(source);
-    QAction* action;
-
-#define ADD_MODE(name, mode)                                        \
-	action = menu->addAction(Str("" name), this,                    \
-				 &AFMainFrame::qSlotSetDeinterlaceingMode);         \
-	action->setProperty("mode", (int)mode);                         \
-	action->setCheckable(true);                                     \
-	action->setChecked(deinterlaceMode == mode);
-
-    ADD_MODE("Disable", OBS_DEINTERLACE_MODE_DISABLE);
-    ADD_MODE("Deinterlacing.Discard", OBS_DEINTERLACE_MODE_DISCARD);
-    ADD_MODE("Deinterlacing.Retro", OBS_DEINTERLACE_MODE_RETRO);
-    ADD_MODE("Deinterlacing.Blend", OBS_DEINTERLACE_MODE_BLEND);
-    ADD_MODE("Deinterlacing.Blend2x", OBS_DEINTERLACE_MODE_BLEND_2X);
-    ADD_MODE("Deinterlacing.Linear", OBS_DEINTERLACE_MODE_LINEAR);
-    ADD_MODE("Deinterlacing.Linear2x", OBS_DEINTERLACE_MODE_LINEAR_2X);
-    ADD_MODE("Deinterlacing.Yadif", OBS_DEINTERLACE_MODE_YADIF);
-    ADD_MODE("Deinterlacing.Yadif2x", OBS_DEINTERLACE_MODE_YADIF_2X);
-#undef ADD_MODE
-
-    menu->addSeparator();
-
-#define ADD_ORDER(name, order)                                      \
-	action = menu->addAction(QTStr("Deinterlacing." name), this,    \
-				 &AFMainFrame::qSlotSetDeinterlacingOrder);         \
-	action->setProperty("order", (int)order);                       \
-	action->setCheckable(true);                                     \
-	action->setChecked(deinterlaceOrder == order);
-
-    ADD_ORDER("TopFieldFirst", OBS_DEINTERLACE_FIELD_ORDER_TOP);
-    ADD_ORDER("BottomFieldFirst", OBS_DEINTERLACE_FIELD_ORDER_BOTTOM);
-#undef ADD_ORDER
-
-    return menu;
-}
-
 
 template<typename SlotFunc>
 void AFMainFrame::_connectAndAddAction(QAction* sender,
-     const typename QtPrivate::FunctionPointer<SlotFunc>::Object* receiver, 
-     SlotFunc slot)
+                                       const typename QtPrivate::FunctionPointer<SlotFunc>::Object* receiver,
+                                       SlotFunc slot, bool addActionToMain)
 {
     QObject::connect(sender, &QAction::triggered, receiver, slot);
-    addAction(sender);
+    if(addActionToMain)
+        addAction(sender);
 }
 void AFMainFrame::_RegisterSourceControlAction()
 {
+    QWidget* outBlock = nullptr;
+    if (!m_blockManager->FindBlock(ENUM_WINDOW_TYPE::SceneSource, outBlock))
+        return;
+
+    AFSceneSourceWidget* scenesourceBlock = reinterpret_cast<AFSceneSourceWidget*>(outBlock);
+    if (!scenesourceBlock)
+        return;
+
     _connectAndAddAction(ui->action_LockPreview, this, &AFMainFrame::qslotLockPreview);
 
-    _connectAndAddAction(ui->action_CopySource, this, &AFMainFrame::qSlotActionCopySource);
-    _connectAndAddAction(ui->action_PasteSourceRef, this, &AFMainFrame::qSlotActionPasteRefSource);
-    _connectAndAddAction(ui->action_PasteSourceDuplicate, this, &AFMainFrame::qSlotActionPasteDupSource);
+    _connectAndAddAction(ui->action_CopySource, m_pMainSceneSource, &CMainSceneSource::qslotActionCopySource);
+    _connectAndAddAction(ui->action_PasteSource, m_pMainSceneSource, &CMainSceneSource::qslotActionPasteSource);
 
-    _connectAndAddAction(ui->action_Filters, this, &AFMainFrame::qSlotOpenSourceFilters);
-    _connectAndAddAction(ui->action_CopyFilters, this, &AFMainFrame::qSlotCopySourceFilters);
-    _connectAndAddAction(ui->action_PasteFilters, this, &AFMainFrame::qSlotPasteSourceFilters);
+    //_connectAndAddAction(ui->action_PasteSourceRef, m_pMainSceneSource, &CMainSceneSource::qslotActionPasteRefSource);
+    //_connectAndAddAction(ui->action_PasteSourceDuplicate, m_pMainSceneSource, &CMainSceneSource::qslotActionPasteDupSource);
 
-    _connectAndAddAction(ui->action_RenameSource, this, &AFMainFrame::qSlotActionRenameSource);
-    _connectAndAddAction(ui->action_RemoveSource, this, &AFMainFrame::qSlotActionRemoveSource);
+    _connectAndAddAction(ui->action_Filters, m_pMainSceneSource, &CMainSceneSource::qslotOpenSourceFilters);
+    _connectAndAddAction(ui->action_CopyFilters, m_pMainSceneSource, &CMainSceneSource::qslotCopySourceFilters);
+    _connectAndAddAction(ui->action_PasteFilters, m_pMainSceneSource, &CMainSceneSource::qslotPasteSourceFilters);
+    _connectAndAddAction(ui->action_SplitEffect, m_pMainSceneSource, &CMainSceneSource::qslotSetSplitEffectFilter);
 
-    _connectAndAddAction(ui->action_EditTransform, this, &AFMainFrame::qSlotActionEditTransform);
-    _connectAndAddAction(ui->action_CopyTransform, this, &AFMainFrame::qSlotActionCopyTransform);
-    _connectAndAddAction(ui->action_PasteTransform, this, &AFMainFrame::qSlotActionPasteTransform);
-    _connectAndAddAction(ui->action_ResetTransform, this, &AFMainFrame::qSlotActionResetTransform);
+    _connectAndAddAction(ui->action_EditTransform, m_pMainSceneSource, &CMainSceneSource::qslotActionEditTransform);
+    _connectAndAddAction(ui->action_CopyTransform, m_pMainSceneSource, &CMainSceneSource::qslotActionCopyTransform);
+    _connectAndAddAction(ui->action_PasteTransform, m_pMainSceneSource, &CMainSceneSource::qslotActionPasteTransform);
+    _connectAndAddAction(ui->action_ResetTransform, m_pMainSceneSource, &CMainSceneSource::qslotActionResetTransform);
 
-    _connectAndAddAction(ui->action_Rotate90CW, this, &AFMainFrame::qSlotActionRotate90CW);
-    _connectAndAddAction(ui->action_Rotate90CCW, this, &AFMainFrame::qSlotActionRotate90CCW);
-    _connectAndAddAction(ui->action_Rotate180, this, &AFMainFrame::qSlotActionRotate180);
+    _connectAndAddAction(ui->action_Rotate90CW, m_pMainSceneSource, &CMainSceneSource::qslotActionRotate90CW);
+    _connectAndAddAction(ui->action_Rotate90CCW, m_pMainSceneSource, &CMainSceneSource::qslotActionRotate90CCW);
+    _connectAndAddAction(ui->action_Rotate180, m_pMainSceneSource, &CMainSceneSource::qslotActionRotate180);
 
-    _connectAndAddAction(ui->action_FlipHorizontal, this, &AFMainFrame::qSlotFlipHorizontal);
-    _connectAndAddAction(ui->action_FlipVertical, this, &AFMainFrame::qSlotFlipVertical);
+    _connectAndAddAction(ui->action_FlipHorizontal, m_pMainSceneSource, &CMainSceneSource::qslotFlipHorizontal);
+    _connectAndAddAction(ui->action_FlipVertical, m_pMainSceneSource, &CMainSceneSource::qslotFlipVertical);
 
-    _connectAndAddAction(ui->action_FitToScreen, this, &AFMainFrame::qSlotFitToScreen);
-    _connectAndAddAction(ui->action_StretchToScreen, this, &AFMainFrame::qSlotStretchToScreen);
-    _connectAndAddAction(ui->action_CenterToScreen, this, &AFMainFrame::qSlotCenterToScreen);
-    _connectAndAddAction(ui->action_VerticalCenter, this, &AFMainFrame::qSlotVerticalCenter);
-    _connectAndAddAction(ui->action_HorizontalCenter, this, &AFMainFrame::qSlotHorizontalCenter);
+    _connectAndAddAction(ui->action_FitToScreen, m_pMainSceneSource, &CMainSceneSource::qslotFitToScreen);
+    _connectAndAddAction(ui->action_StretchToScreen, m_pMainSceneSource, &CMainSceneSource::qslotStretchToScreen);
+    _connectAndAddAction(ui->action_CenterToScreen, m_pMainSceneSource, &CMainSceneSource::qslotCenterToScreen);
+    _connectAndAddAction(ui->action_VerticalCenter, m_pMainSceneSource, &CMainSceneSource::qslotVerticalCenter);
+    _connectAndAddAction(ui->action_HorizontalCenter, m_pMainSceneSource, &CMainSceneSource::qslotHorizontalCenter);
 
-    _connectAndAddAction(ui->action_OrderMoveUp, GetMainWindow()->GetSceneSourceDock(), &AFSceneSourceDockWidget::qSlotMoveUpSourceTrigger);
-    _connectAndAddAction(ui->action_OrderMoveDown, GetMainWindow()->GetSceneSourceDock(), &AFSceneSourceDockWidget::qSlotMoveDownSourceTrigger);
-    _connectAndAddAction(ui->action_OrderMoveToTop, GetMainWindow()->GetSceneSourceDock(), &AFSceneSourceDockWidget::qSlotMoveToTopSourceTrigger);
-    _connectAndAddAction(ui->action_OrderMoveToBottom, GetMainWindow()->GetSceneSourceDock(), &AFSceneSourceDockWidget::qSlotMoveToBottomSourceTrigger);
+    _connectAndAddAction(ui->action_OrderMoveUp, scenesourceBlock, &AFSceneSourceWidget::qslotMoveUpSourceTrigger);
+    _connectAndAddAction(ui->action_OrderMoveDown, scenesourceBlock, &AFSceneSourceWidget::qslotMoveDownSourceTrigger);
+    _connectAndAddAction(ui->action_OrderMoveToTop, scenesourceBlock, &AFSceneSourceWidget::qslotMoveToTopSourceTrigger);
+    _connectAndAddAction(ui->action_OrderMoveToBottom, scenesourceBlock, &AFSceneSourceWidget::qslotMoveToBottomSourceTrigger);
 
-    _connectAndAddAction(ui->action_ShowInteract, this, &AFMainFrame::qSlotActionShowInteractionPopup);
-    _connectAndAddAction(ui->action_ShowProperties, this, &AFMainFrame::qSlotActionShowProperties);
+    _connectAndAddAction(ui->action_ShowInteract, m_pMainSceneSource, &CMainSceneSource::qslotActionShowInteractionPopup);
+    _connectAndAddAction(ui->action_ShowProperties, m_pMainSceneSource, &CMainSceneSource::qslotActionShowProperties);
 
-    GetMainWindow()->GetMainPreview()->RegisterShortCutAction(ui->action_RemoveSource);
-    GetMainWindow()->GetMainPreview()->RegisterShortCutAction(ui->action_CopySource);
-    GetMainWindow()->GetMainPreview()->RegisterShortCutAction(ui->action_PasteSourceRef);
+    _connectAndAddAction(ui->action_RemoveScene, m_pMainSceneSource, &CMainSceneSource::qslotActionRemoveScene, false);
+    _connectAndAddAction(ui->action_RenameScene, m_pMainSceneSource, &CMainSceneSource::qslotActionRenameScene, false);
 
-    GetMainWindow()->GetSceneSourceDock()->RegisterShortCut(ui->action_RemoveSource);
-    GetMainWindow()->GetSceneSourceDock()->RegisterShortCut(ui->action_CopySource);
-    GetMainWindow()->GetSceneSourceDock()->RegisterShortCut(ui->action_PasteSourceRef);
-    GetMainWindow()->GetSceneSourceDock()->RegisterShortCut(ui->action_RenameSource);
-}
+    _connectAndAddAction(ui->action_RenameSource, m_pMainSceneSource, &CMainSceneSource::qslotActionRenameSource, false);
+    _connectAndAddAction(ui->action_RemoveSource, m_pMainSceneSource, &CMainSceneSource::qslotActionRemoveSource, false);
 
-void AFMainFrame::_ChangeStreamState(bool enable, bool checked, QString title, int width)
-{
-
-    ui->pushButton_Broad->setEnabled(enable);
-    ui->pushButton_Broad->setChecked(checked);
-    ui->pushButton_Broad->setText(title);
-    ui->pushButton_Broad->setFixedWidth(width);
-}
-
-void AFMainFrame::_ToggleBroadTimer(bool start)
-{
-    if (start)
-    {
-        ui->label_BroadTime->StartCount();
-    }
-    else
-    {
-        ui->label_BroadTime->StopCount();
+    // preview add action
+    CBasicPreview* preview = GetMainWindow()->GetMainPreview();
+    if(preview) {
+        preview->addAction(ui->action_RemoveSource);
+        preview->addAction(ui->action_CopySource);
+        preview->addAction(ui->action_PasteSource);
+        //preview->addAction(ui->action_PasteSourceRef);
     }
 
-    ui->widget_BroadTimer->setVisible(start);
-    if (ui->widget_RecordTimer->isVisible())
-    {
-        ui->line_Time->setVisible(start);
+    QWidget* sceneListFrame = scenesourceBlock->GetSceneListFrame();
+    if(sceneListFrame) {
+        sceneListFrame->addAction(ui->action_RemoveScene);
+        sceneListFrame->addAction(ui->action_RenameScene);
     }
-    _AccountButtonStreamingToggle(start);
-}
 
-void AFMainFrame::_ChangeRecordState(bool check)
-{
-    ui->pushButton_Record->setChecked(check);
-    if(check) {
-        // start recording
-        ui->pushButton_Record->setFixedWidth(87);
-        ui->pushButton_Record->setText("STOP REC");
-        ui->label_RecordTime->StartCount();
-
-        ui->widget_RecordTimer->setVisible(true);
-        if(ui->widget_BroadTimer->isVisible()) {
-            ui->line_Time->setVisible(true);
-        }
-    } else {
-        // stop recording
-        ui->pushButton_Record->setFixedWidth(48);
-        ui->pushButton_Record->setText("REC");
-        ui->label_RecordTime->StopCount();
-
-        ui->widget_RecordTimer->setVisible(false);
-        ui->line_Time->setVisible(false);
+    QWidget* sourceListView = scenesourceBlock->GetSourceListView();
+    if(sourceListView) {
+        sourceListView->addAction(ui->action_RemoveSource);
+        sourceListView->addAction(ui->action_CopySource);
+        sourceListView->addAction(ui->action_PasteSource);
+        //sourceListView->addAction(ui->action_PasteSourceRef);
+        sourceListView->addAction(ui->action_RenameSource);
     }
 }
-
-void AFMainFrame::_StopRecording(bool force)
-{
-    if(!m_outputHandlers[0].second) {
-        return;
-    }
-
-    //SaveProject();
-    QMetaObject::invokeMethod(this, "SaveProjectDeferred", Qt::QueuedConnection);
-
-    if(IsRecordingActive()) {
-        m_outputHandlers[0].second->StopRecording(force);
-    }
-
-    OnDeactivate();
-}
-
-
 
 void AFMainFrame::qslotTopMenuClicked()
 {
+    emit qsignalTopMenuClicked();
     _ToggleTopMenu();
 }
 
 void AFMainFrame::qslotPopupBlockClicked()
 {
-    m_DynamicCompositMainWindow->RaiseBlocks();
-    if (m_GlobalSoopChatWidget && m_GlobalSoopChatWidget->isVisible())
-        m_GlobalSoopChatWidget->raise();
-    if (m_GlobalSoopNewsfeedWidget && m_GlobalSoopNewsfeedWidget->isVisible())
-        m_GlobalSoopNewsfeedWidget->raise();
-
-}
-
-void AFMainFrame::qslotStatsOpenTriggered()
-{
-    if (m_StatFrame == nullptr)
-        m_StatFrame = new AFQStatWidget(nullptr);
-
-    QRect adjustRect;
-    QRect position = QRect(x() - m_StatFrame->width(), y(), m_StatFrame->width(), m_StatFrame->height());
-    m_DynamicCompositMainWindow->AdjustPositionOutSideScreen(position, adjustRect);
-    m_StatFrame->setGeometry(adjustRect);
-
-    m_StatFrame->show();
-    m_StatFrame->activateWindow();
-    m_StatFrame->raise();
-}
-
-void AFMainFrame::qslotProgramGuideOpenTriggered()
-{
-    if (!m_ProgramGuideWidget)
-    {
-        m_ProgramGuideWidget = new AFQProgramGuideWidget(nullptr);
-        connect(m_ProgramGuideWidget, &AFQProgramGuideWidget::qsignalMissionTrigger,
-            this, &AFMainFrame::qslotGuideTriggered);
-   }
-
-   m_ProgramGuideWidget->show();
-   _MoveProgramGuide();
-   QRect adjustRect;
-   m_DynamicCompositMainWindow->AdjustPositionOutSideScreen(m_ProgramGuideWidget->geometry(), adjustRect);
-   m_ProgramGuideWidget->setGeometry(adjustRect);
-   m_ProgramGuideWidget->raise();
+    m_blockManager->RaiseAllPopup();
 }
 
 void AFMainFrame::qslotProgamInfoOpenTriggered()
@@ -3017,192 +3005,329 @@ void AFMainFrame::qslotProgamInfoOpenTriggered()
 
     m_programInfoDialog = new AFQProgramInfoDialog(this);
     m_programInfoDialog->setAttribute(Qt::WA_DeleteOnClose);
+    m_blockManager->ApplyMoveInAllArea(m_programInfoDialog);
     m_programInfoDialog->show();
 }
 
-void AFMainFrame::qslotGuideTriggered(int guideNum)
+void AFMainFrame::qslotMainFrameTutorial()
 {
+    disconnect(this, &AFMainFrame::qsignalMainShowEventTriggered, this, &AFMainFrame::qslotMainFrameTutorial);
+
+
+        if (m_freecshotType != "2" && m_freecshotType != "3")
+        {
+            int nFreecShotSetting = qslotShowImportGuide();
+            if (nFreecShotSetting == 1)
+            {
+                config_set_bool(APPCONFIG, "General", "MigrationUser", true);
+                config_save_safe(APPCONFIG, "tmp", nullptr);                
+            }
+        }
+        else if (m_freecshotType == "3")
+        {
+            AFQImportGuide importGuide(nullptr);
+            importGuide.LoadFromStudio2Json();
+        }
+
+        m_blockManager->InitDefaultDock();
+
+        m_mainSceneCollection->RefreshSceneCollections(true);
+        MAIN_PROFILE->RefreshProfiles();        
+
     raise();
 
-    if (!m_MainGuideWidget)
+    if (!m_mainGuideWidget)
     {
-        m_MainGuideWidget = new QWidget(this);
-        
+        m_mainGuideWidget = new QWidget(this);
+
 #if defined(_WIN32)
-        m_MainGuideWidget->setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
+        m_mainGuideWidget->setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
 #elif defined(__APPLE__)
-        m_MainGuideWidget->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
+        m_mainGuideWidget->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
 #endif
-        m_MainGuideWidget->setAttribute(Qt::WA_TranslucentBackground);
-        m_MainGuideWidget->setAttribute(Qt::WA_DeleteOnClose);
+        m_mainGuideWidget->setAttribute(Qt::WA_TranslucentBackground);
+        m_mainGuideWidget->setAttribute(Qt::WA_DeleteOnClose);
 
-        AFMainFrameGuide* guideWidgetContents = new AFMainFrameGuide(m_MainGuideWidget);
-        connect(guideWidgetContents, &AFQHoverWidget::qsignalMouseClick, this, &AFMainFrame::qslotGuideClosed);
-
-        if (guideNum == 1)
-        {
-            if (!m_BlockPopup->isVisible())
-            {
-                _MoveBlocks();
-                m_BlockPopup->show();
-            }
-
-            int buttonx = m_BlockPopup->pos().x() - pos().x() + 22;
-            int buttony = m_BlockPopup->pos().y() - pos().y() + 12;
-            int buttonwidth = 0;
-            int buttonheight = 0;
-            guideWidgetContents->SceneSourceGuide(QRect(buttonx, buttony, buttonwidth, buttonheight));
-
-            connect(guideWidgetContents, &AFMainFrameGuide::qsignalSceneSourceTriggered, 
-                this, &AFMainFrame::qslotToggleBlockFromBlockArea);
-            
-        }
-        else if (guideNum == 2)
-        {
-            int buttonx = 15;
-            int buttony = ui->frame_Top->height() + ui->widget_Middle->height() + 10;
-            int buttonwidth = ui->pushButton_Login->width() + 5;
-            int buttonheight = ui->pushButton_Login->height() + 5;
-            guideWidgetContents->LoginGuide(QRect(buttonx, buttony, buttonwidth, buttonheight));
-            connect(guideWidgetContents, &AFMainFrameGuide::qsignalLoginTrigger, 
-                this, &AFMainFrame::qslotShowLoginMenu);
-        }
-        else if (guideNum == 3)
-        {
-            int buttonx = ui->widget_BroadAndRecord->pos().x() + ui->widget_BroadAndRecordButtons->pos().x() - 1;
-            int buttony = ui->frame_Top->height() + ui->widget_Middle->height() + 8;
-            int buttonwidth = ui->pushButton_Broad->width();
-            int buttonheight = ui->pushButton_Broad->height();
-            guideWidgetContents->BroadGuide(QRect(buttonx, buttony, buttonwidth, buttonheight));
-            connect(guideWidgetContents, &AFMainFrameGuide::qsignalBroadTriggered,
-                ui->pushButton_Broad, &QPushButton::click);
-        }
-
+        m_mainTutorialContents = new AFMainFrameGuide(m_mainGuideWidget);
 
         QHBoxLayout* layout = new QHBoxLayout();
         layout->setContentsMargins(0, 0, 0, 0);
-        layout->addWidget(guideWidgetContents);
-        guideWidgetContents->setStyleSheet("QWidget{background-color:rgba(0,0,0,50%); border-radius:10px}");
+        layout->addWidget(m_mainTutorialContents);
+        m_mainTutorialContents->setStyleSheet("QWidget{background-color:rgba(0,0,0,30%);}");
 
-        m_MainGuideWidget->setLayout(layout);
-        m_MainGuideWidget->setGeometry(geometry());
-        m_MainGuideWidget->show();
+        m_mainGuideWidget->setLayout(layout);
+        m_mainGuideWidget->setGeometry(x(), y(), width(), height());
+
+        connect(this, &AFMainFrame::qsignalmovedOrResized, this, &AFMainFrame::qslotMainFrameTutorialClose);
+        connect(m_mainTutorialContents, &AFMainFrameGuide::qsignalCloseGuide, this, &AFMainFrame::qslotMainFrameTutorialClose);
+
+        m_mainTutorialContents->TutorialInit(m_mainGuideWidget->geometry());
+
+        qslotTutorialPosition();
+        m_mainGuideWidget->show();
+    }
+}
+
+void AFMainFrame::qslotTutorialPosition()
+{
+    if (m_mainGuideWidget)
+    {
+        m_mainGuideWidget->setGeometry(geometry());
+
+        QSize gnb, channel, broad, button;
+
+        const char* localeChar = LOCALE_CONTEXT.GetCurrentLocale();
+        QString locale = QString(localeChar);
+
+        if (this->height() < 601)
+        {
+            if (locale == "ko-KR")
+            {
+                gnb = QSize(202, 46);
+                channel = QSize(250, 97);
+                broad = QSize(157, 156);
+                button = QSize(258, 132);
+            }
+            else if (locale == "en-US")
+            {
+                gnb = QSize(219, 46);
+                channel = QSize(261, 97);
+                broad = QSize(217, 156);
+                button = QSize(291, 132);
+            }
+            else if (locale == "th-TH")
+            {
+                gnb = QSize(199, 46);
+                channel = QSize(256, 97);
+                broad = QSize(230, 156);
+                button = QSize(260, 132);
+            }
+            else if (locale == "zh-TW")
+            {
+                gnb = QSize(207, 46);
+                channel = QSize(255, 97);
+                broad = QSize(179, 156);
+                button = QSize(263, 132);
+            }
+            else if (locale == "zh-CN")
+            {
+                gnb = QSize(207, 46);
+                channel = QSize(255, 97);
+                broad = QSize(179, 156);
+                button = QSize(263, 132);
+            }
+        }
+        else
+        {
+            if (locale == "ko-KR")
+            {
+                gnb = QSize(461, 85);
+                channel = QSize(444, 203);
+                broad = QSize(271, 267);
+                button = QSize(523, 192);
+            }
+            else if (locale == "en-US")
+            {
+                gnb = QSize(625, 85);
+                channel = QSize(688, 182);
+                broad = QSize(383, 267);
+                button = QSize(514, 192);
+            }
+            else if (locale == "th-TH")
+            {
+                gnb = QSize(538, 85);
+                channel = QSize(593, 182);
+                broad = QSize(293, 267);
+                button = QSize(478, 192);
+            }
+            else if (locale == "zh-TW")
+            {
+                gnb = QSize(480, 85);
+                channel = QSize(545, 182);
+                broad = QSize(213, 267);
+                button = QSize(454, 192);
+            }
+            else if (locale == "zh-CN")
+            {
+                gnb = QSize(480, 85);
+                channel = QSize(545, 182);
+                broad = QSize(213, 267);
+                button = QSize(445, 192);
+            }
+        }
+
+        if (m_mainTutorialContents)
+        {    
+            //GNB Position
+            QRect gnbRect = QRect(ui->pushButton_TopMenu->geometry().x() + 6, 
+                ui->pushButton_TopMenu->geometry().y(), gnb.width(), gnb.height());
+
+            //Channel Position
+            QRect channelRect = QRect(0, ui->widget_Top->height(), channel.width(), channel.height());
+
+            //Broad Position
+            QRect broadRect = QRect(width() - broad.width() - 16,
+                height() - broad.height() - ui->widget_BottomControl->height() - 10,
+                broad.width(), broad.height());
+
+            //Button Position
+            QRect buttonRect = QRect(11, height() - button.height() - 9, button.width(), button.height());
+
+            m_mainTutorialContents->TutorialPosition(gnbRect, channelRect, broadRect, buttonRect);
+        }
+    }
+}
+
+void AFMainFrame::qslotMainFrameTutorialClose()
+{
+    disconnect(this, &AFMainFrame::qsignalMainResized, this, &AFMainFrame::qslotTutorialPosition);
+
+    if (m_mainTutorialContents)
+    {
+        disconnect(m_mainTutorialContents, &AFMainFrameGuide::qsignalCloseGuide, this, &AFMainFrame::qslotMainFrameTutorialClose);
+        m_mainTutorialContents->close();
+
+        bool isFirstOpen = this->property("IsFirstRun").toBool();
+        if (isFirstOpen) {
+            qslotInitShowSoopChat();
+            qslotInitFreecShotPlusUpdateLog();
+            this->setProperty("IsFirstRun", false);
+
+            emit firstTutorialClosedEvent();
+        }
+
+        delete m_mainTutorialContents;
+        m_mainTutorialContents = nullptr;
+    }
+
+    if (m_mainGuideWidget)
+    {
+        m_mainGuideWidget->close();
+        delete m_mainGuideWidget;
+        m_mainGuideWidget = nullptr;
     }
 }
 
 void AFMainFrame::qslotGuideClosed()
 {
-    if (m_MainGuideWidget)
+    if (m_mainGuideWidget)
     {
-        m_MainGuideWidget->close();
-        m_MainGuideWidget->deleteLater();
-        m_MainGuideWidget = nullptr;
+        m_mainGuideWidget->close();
+        m_mainGuideWidget->deleteLater();
+        m_mainGuideWidget = nullptr;
     }
 }
 
-void AFMainFrame::qslotStatsCloseTriggered()
+void AFMainFrame::qslotNavigateSoopServiceNoticePage()
 {
-    m_StatFrame->hide();
+    NavigateDefaultBrowser(QString::fromStdString(SOOP_SERVICE_NOTICE_URL));
 }
 
-void AFMainFrame::qslotStatsMouseLeave()
+void AFMainFrame::qslotNavigateSoopServiceFeedBackPage()
 {
-    ui->widget_ResourceNetwork->setStyleSheet("");
+    NavigateDefaultBrowser(QString::fromStdString(SOOP_FREECSHOT_COMMNET_URL));
 }
 
-void AFMainFrame::qslotFocusChanged(QWidget* old, QWidget* now)
+void AFMainFrame::qslotNavigateStreamerSuppportPage()
 {
-    qDebug() << "focused Changed";
-    if (old == nullptr)
-    {
-        qDebug() << "old null";
+    NavigateDefaultBrowser(QString::fromStdString(SOOP_STREAMER_SUPPORT_URL));
+}
+
+void AFMainFrame::qslotNavigateSoopliveKrPage()
+{
+    NavigateDefaultBrowser(QString::fromStdString(SOOPLIVE_KR_URL));
+}
+
+void AFMainFrame::qslotShowStudioUpdatePage()
+{
+    bool closed = true;
+    if (m_updateLogPopup)
+        closed = m_updateLogPopup->close();
+
+    if (!closed)
+        return;
+
+    m_updateLogPopup = new AFQStudioUpdateLogDialog(this);
+    m_updateLogPopup->setMode(0);
+    m_updateLogPopup->setAttribute(Qt::WA_DeleteOnClose);
+    m_updateLogPopup->show();
+}
+
+bool AFMainFrame::IsInEventPeriod(const EventTime& start, const EventTime& end) const
+{
+    auto toTimeT = [](const EventTime& t) -> std::time_t {
+        std::tm tmTime = {};
+        tmTime.tm_year = t.year - 1900;
+        tmTime.tm_mon = t.month - 1;
+        tmTime.tm_mday = t.day;
+        tmTime.tm_hour = t.hour;
+        tmTime.tm_min = t.minute;
+        tmTime.tm_sec = t.second;
+        tmTime.tm_isdst = -1;
+        return std::mktime(&tmTime);
+    };
+
+    std::time_t now = static_cast<std::time_t>(AUTH_CONTEXT.GetServerTime());
+    if (now <= 0) 
+        now = std::time(nullptr);
+
+    const std::time_t startT = toTimeT(start);
+    const std::time_t endT = toTimeT(end);
+
+    if (startT == static_cast<std::time_t>(-1) ||
+        endT == static_cast<std::time_t>(-1) ||
+        startT > endT) {
+        return false;
     }
-    else
-    {
-        qDebug() << "old: " << old->objectName();
-    }
 
-    if (now == nullptr)
-    {
-        qDebug() << "now null";
-    }
-    else
-    {
-        qDebug() << "now: " << now->objectName();
-    }
+    return (now >= startT && now <= endT);
 }
 
-void AFMainFrame::qslotSetDpiHundred()
+void AFMainFrame::qslotEventButtonClicked() 
 {
-    AFJsonController dpiJson;
-    dpiJson.WriteDpiSample("1.0");
+    NavigateDefaultBrowser(QString::fromStdString(LINK_EVENT));
 }
 
-void AFMainFrame::qslotSetDpiHundredFifty()
+
+void AFMainFrame::qslotPropertiesToggled(bool show)
 {
-    AFJsonController dpiJson;
-    dpiJson.WriteDpiSample("1.5");
+    config_set_bool(USERCONFIG, "BasicWindow", "ShowContextToolbars", ui->action_ViewToggleProperties->isChecked());
+    m_dynamicCompositMainWindow->SetVisibleSourceToolBar(show);
 }
 
-void AFMainFrame::qslotSetDpiTwoHundred()
+void AFMainFrame::qslotAlwaysOnTopToggled(bool onTop)
 {
-    AFJsonController dpiJson;
-    dpiJson.WriteDpiSample("2.0");
+    config_set_bool(USERCONFIG, "General", "AlwaysOnTop", ui->action_ViewToggleOnTop->isChecked());
+    SetAlwaysOnTop(this, onTop);
 }
 
-void AFMainFrame::qslotCloseAllPopup()
+void AFMainFrame::qslotUIResetTriggered()
 {
-    
-    this->close();
-}
-
-void AFMainFrame::qslotToggleBlockArea(bool show)
-{
-    if (show)
-    {
-        _ShowBlockArea();
-    }
-    else
-    {
-        _HideBlockArea();
+    AFQMessagBoxAlert dlg(this, QTStr("Basic.ResetUI.Title"), QTStr("Basic.ResetUI.Info"), QTStr("Reset"));
+    if (QDialog::Accepted == dlg.exec()) {
+        ResetDockUI();
     }
 }
 
-void AFMainFrame::qslotToggleBlockAreaByToggleButton()
+void AFMainFrame::qslotSceneControlTriggered(bool show)
 {
-    if (ui->pushButton_BlockToggle->isChecked())
-    {
-        _ShowBlockArea(0);
-    }
-    else
-    {
-        _HideBlockArea(0);
-    }
+    QAction* sceneControlAction = reinterpret_cast<QAction*>(sender());
+
+    sceneControlAction->setChecked(true);
+    m_blockManager->qslotShowSceneControlDockTriggered();
 }
 
-void AFMainFrame::qslotPreviewResizeTriggered()
+void AFMainFrame::qslotBlockClosedTriggered(bool used, int checkType, bool enableFavoriteMenu)
 {
-    _MoveBlocks();
+    UNUSED_PARAMETER(enableFavoriteMenu);
+
+    if(checkType == ENUM_WINDOW_TYPE::SceneControl)
+        ui->action_ViewSceneControl->setChecked(used);
 }
 
-void AFMainFrame::qslotToggleBlockFromBlockArea(bool show, int key)
+void AFMainFrame::qslotCloseAllBlocks()
 {
-    _PopupRequest(show, key);
-
-    m_MainGuideWidget->deleteLater();
-    m_MainGuideWidget = nullptr;
-}
-
-void AFMainFrame::qslotToggleBlockFromMenu(bool show)
-{
-    QAction* action = reinterpret_cast<QAction*>(sender());
-    QString whatsThisAction = action->whatsThis();
-    std::string str = whatsThisAction.toStdString();
-     
-    QMetaEnum BlockTypeEnum = QMetaEnum::fromType<ENUM_BLOCK_TYPE>();
-    int blockType = BlockTypeEnum.keyToValue(str.c_str());
-
-    _PopupRequest(true, blockType);
+    m_blockManager->CloseAllBlocks();
 }
 
 void AFMainFrame::qslotShowStudioSettingPopup(bool show)
@@ -3212,9 +3337,7 @@ void AFMainFrame::qslotShowStudioSettingPopup(bool show)
 
 void AFMainFrame::qslotShowStudioSettingWithButtonSender()
 {
-    m_DynamicCompositMainWindow->qslotText();
-
-    QPushButton* pushButtonSender = reinterpret_cast<QPushButton*>(sender());
+    QObject* pushButtonSender = reinterpret_cast<QObject*>(sender());
 
     bool ok;
     int settingPage = pushButtonSender->property("type").toInt(&ok);
@@ -3225,7 +3348,8 @@ void AFMainFrame::qslotShowStudioSettingWithButtonSender()
     if (settingPage == 1)
     {
         QString id = pushButtonSender->property("channelID").toString();
-        _ShowSettingPopupWithID(id);
+        QString platformName = pushButtonSender->property("platformName").toString();
+        _ShowSettingPopupWithID(id, platformName);
     }
     else
     {
@@ -3234,33 +3358,149 @@ void AFMainFrame::qslotShowStudioSettingWithButtonSender()
 
 }
 
-void AFMainFrame::qslotBlockToggleTriggered(bool show, int blockType)
+void AFMainFrame::qslotShowBlockWithProperty()
 {
-    if (m_BlockPopup) {
-        m_BlockPopup->BlockButtonToggled(show, blockType);
+    bool ok = false;
+    int type = sender()->property("windowtype").toInt(&ok);
+    if (ok)
+    {
+        AFQBorderPopupBaseWidget* popup = nullptr;
+        m_blockManager->MakePopup(type, popup);
+    }
+}
+
+void AFMainFrame::qslotShowBlock(bool visible, int type)
+{
+    Q_UNUSED(visible);
+
+    AFQBorderPopupBaseWidget* popup = nullptr;
+    m_blockManager->MakePopup(type, popup);
+}
+
+void AFMainFrame::qslotInitShowSoopChat()
+{
+    disconnect(this, &AFMainFrame::qsignalMainShowEventTriggered, this, &AFMainFrame::qslotInitShowSoopChat);
+
+    RestoreMainWindow();
+
+    bool sideDockOn = config_get_bool(USERCONFIG, "BasicWindow", "SideDocks");
+
+    DYNAMIC_COMPOSIT->SetSideDock(sideDockOn);
+
+    bool skipReset = false;
+
+    m_blockManager->DoubleCheckPosition(ENUM_WINDOW_TYPE::TwitchChat);
+    m_blockManager->ResetMagnet(ENUM_WINDOW_TYPE::TwitchChat);
+    m_blockManager->DoubleCheckPosition(ENUM_WINDOW_TYPE::YoutubeChat);
+    m_blockManager->ResetMagnet(ENUM_WINDOW_TYPE::YoutubeChat);
+
+    AFQBorderPopupBaseWidget* popup = nullptr;
+    m_blockManager->MakePopup(ENUM_WINDOW_TYPE::SoopChat, popup);
+    if (popup)
+    {
+
+        if (!this->property("IsFirstRun").toBool())
+        {
+            QMetaEnum BlockTypeEnum = QMetaEnum::fromType<ENUM_WINDOW_TYPE>();
+            const char* key = BlockTypeEnum.valueToKey(ENUM_WINDOW_TYPE::SoopChat);
+
+            const char* PopupPosition = config_get_string(USERCONFIG, "BasicWindow", key);
+            if ((PopupPosition != nullptr) && (PopupPosition[0] != '\0'))
+            {
+                m_blockManager->DoubleCheckPosition(ENUM_WINDOW_TYPE::SoopChat);
+                skipReset = true;
+            }
+            if(!skipReset)
+                popup->setGeometry(frameGeometry().x() + frameGeometry().width(), frameGeometry().y(), 420, this->height());
+        }
+
+        m_blockManager->ResetMagnet(ENUM_WINDOW_TYPE::SoopChat);
+
+        QTimer::singleShot(10, this, [popup] {
+            popup->raise();
+            popup->activateWindow(); });
     }
 
-    switch (blockType)
-    {
-    case ENUM_BLOCK_TYPE::SceneSource:
-        ui->action_SceneSource->setChecked(show);
-        break;
-    case ENUM_BLOCK_TYPE::AudioMixer:
-        ui->action_AudioMixer->setChecked(show);
-        break;
-    case ENUM_BLOCK_TYPE::Chat:
-        ui->action_Chat->setChecked(show);
-        if(m_BlockPopup)
-            m_BlockPopup->BlockButtonToggled(show, blockType);
-        break;
-    case ENUM_BLOCK_TYPE::Dashboard:
-        ui->action_Dashboard->setChecked(show);
-        if(m_BlockPopup)
-            m_BlockPopup->BlockButtonToggled(show, blockType);
-        break;
-    default:
-        break;
+}
+
+void AFMainFrame::qslotInitFreecShotPlusUpdateLog()
+{
+	disconnect(this, &AFMainFrame::qsignalMainShowEventTriggered, this, &AFMainFrame::qslotInitFreecShotPlusUpdateLog);
+
+    m_soopApiHandler->getAPIfromId(SOOP_API_KEY::GET_FREECSHOTPLUS_UPDATELOG_VERSION, {},
+        this, "qslotResponseFreecShotPlusUpdateLog");
+}
+
+void AFMainFrame::qslotResponseFreecShotPlusUpdateLog(const QByteArray& responseData)
+{
+}
+
+void AFMainFrame::qslotShowFreecShotUnInstallAlert()
+{
+    disconnect(this, &AFMainFrame::qsignalMainShowEventTriggered, this, &AFMainFrame::qslotShowFreecShotUnInstallAlert);
+
+    config_t* appConfig = APPCONFIG;
+    //
+    bool isAlreadyRun = config_get_bool(appConfig, "General", "AlreadyRun");
+    if (!isAlreadyRun) {
+        config_set_bool(appConfig, "General", "AlreadyRun", true);
+        config_save_safe(appConfig, "tmp", nullptr);
+        return;
     }
+
+	if (!RegKeyExists(CurrentUserRegKey, "SOFTWARE\\soop\\Studio2"))
+		return;
+
+	QDate today = QDate::currentDate();
+	const char* lastStr = config_get_string(appConfig, "General", "FsUninstallPopupDate");
+   
+    bool needWeeklyPopup = false;
+    if (nullptr == lastStr) {
+        needWeeklyPopup = true;
+    }
+    else {
+        QDate last = QDate::fromString(QString::fromStdString(lastStr), "yyyyMMdd");
+        if ((last.daysTo(today) >= 7)) {
+            needWeeklyPopup = true;
+        }
+    }
+
+	if (!needWeeklyPopup) {
+		config_save_safe(appConfig, "tmp", nullptr);
+		return;
+	}
+
+	ShowUninstallFreecShotAlert();
+
+	const QString todayStr = today.toString("yyyyMMdd");
+	config_set_string(appConfig, "General", "FsUninstallPopupDate", todayStr.toStdString().c_str());
+	config_save_safe(appConfig, "tmp", nullptr);
+}
+
+void AFMainFrame::qslotShowDockWithProperty()
+{
+    bool ok = false;
+    int type = sender()->property("windowtype").toInt(&ok);
+    if (ok)
+    {
+        ENUM_WINDOW_TYPE enumType = static_cast<ENUM_WINDOW_TYPE>(type);
+        AFQBaseDockWidget* dock = nullptr;
+        m_blockManager->MakeDock(enumType, dock, true);
+    }
+}
+
+void AFMainFrame::qslotShowDock(bool visible, int type)
+{
+    ENUM_WINDOW_TYPE enumType = static_cast<ENUM_WINDOW_TYPE>(type);
+    AFQBaseDockWidget* dock = nullptr;
+    m_blockManager->MakeDock(enumType, dock, visible);
+}
+
+void AFMainFrame::qslotShowProjector()
+{
+    QObject* senderMonitor = reinterpret_cast<QObject*>(sender());
+    int monitorNum = senderMonitor->property("monitor").toInt();
+    m_blockManager->MakeProjector(monitorNum);
 }
 
 void AFMainFrame::qslotShowCPUSystemAlert()
@@ -3288,8 +3528,397 @@ void AFMainFrame::qslotCheckDiskSpaceRemaining()
     }
 }
 
+void AFMainFrame::qslotCategoryCheckAPIResponse(const QByteArray& responseData)
+{
+    AFQBroadInfo* broadInfo = AUTH_CONTEXT.GetSoopBroadInfo();
+    if(broadInfo) {
+        broadInfo->RefreshCategoryList(responseData);
+    }
+
+    m_soopApiHandler->getAPIfromId(GET_BROAD_GEO_BLOCK, {}, this, "qslotGeoBlockCheckAPIResponse");
+}
+
+void AFMainFrame::qslotGeoBlockCheckAPIResponse(const QByteArray& responseData)
+{
+    BOOL bGeoBlock = false;
+
+    std::string jsonString = responseData.toStdString();
+    std::string err;
+
+    AFQBroadInfo* broadInfo = AUTH_CONTEXT.GetSoopBroadInfo();
+    if(!broadInfo) {
+        return;
+    }
+
+    if(bGeoBlock) {
+
+        ui->pushButton_Broad->setChecked(false);
+        OffBroadStartAPICheck();
+
+        QString msg = QTStr("Basic.GeoBlock.CategoryBlocked");
+        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this, "", msg, false, true, "", 0, 0, "type1");
+
+        return;
+    } else
+    {
+        QString GetNation = broadInfo->GetUserNation();
+
+        bool isKorea =
+            (GetNation == "kr") ||
+            (GetNation == "ko_kr") ||
+            (GetNation == "ko");
+
+        if(!isKorea)
+        {
+            static const char* kSoopKboSectionSources[] = {
+                "soop_kbo_graphic_source_all",
+                "soop_kbo_graphic_source_score",
+                "soop_kbo_graphic_source_stadium",
+                "soop_kbo_graphic_source_player",
+                "soop_kbo_graphic_source_livetext",
+                "soop_football_graphic_source_all",
+                "soop_football_graphic_source_player",                
+                "soop_football_graphic_source_change",
+                "soop_football_graphic_source_score",
+                "soop_football_graphic_source_livetext",
+            };
+
+            bool bKboSource = false;
+
+            obs_source_t* currentSceneSource = obs_frontend_get_current_scene();
+            if(currentSceneSource) {
+                obs_scene_t* scene = obs_scene_from_source(currentSceneSource);
+                if(scene) {
+
+                    bool foundKbo = false;
+
+                    auto enumFunc = [](obs_scene_t*, obs_sceneitem_t* item, void* param) -> bool {
+                        bool* found = reinterpret_cast<bool*>(param);
+                        if(*found)
+                            return false;
+
+                        obs_source_t* src = obs_sceneitem_get_source(item);
+                        if(!src)
+                            return true;
+
+                        const char* id = obs_source_get_unversioned_id(src);
+                        const char* name = obs_source_get_name(src);
+
+                        for(const char* kboId : kSoopKboSectionSources) {
+                            if((id && strcmp(id, kboId) == 0) ||
+                                (name && strcmp(name, kboId) == 0)) {
+                                *found = true;
+                                return false; 
+                            }
+                        }
+
+                        return true;
+                    };
+
+                    obs_scene_enum_items(scene, enumFunc, &foundKbo);
+                    bKboSource = foundKbo;
+                }
+
+                obs_source_release(currentSceneSource);
+            }
+
+            if(bKboSource)
+            {
+                QString msg = QTStr("Basic.GeoBlock.Blocked");
+                AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this, "", msg, false, true, "", 0, 0, "type1");
+                return;
+            }
+        }
+        if(broadInfo) {
+            std::string categoryString;
+            bool findCategory = broadInfo->ReceiveCategoryString(broadInfo->CategoryNumber(), categoryString);
+            if(!findCategory) {
+                AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this, QT_UTF8(""), QTStr("Basic.CheckAllowedCategoryMsg"));
+                AFChannelData* channelData = nullptr;
+                AUTH_CONTEXT.GetMainChannelData(channelData);
+                if(channelData && channelData->pAuthData->platform == PLATFORM_SOOP) {
+                    ui->pushButton_Broad->setChecked(false);
+                }
+                return;
+            }
+        }
+
+        AUTH_CONTEXT.SendCheckBroadStart(this, "qslotBroadStartAPIResponse");
+    }
+}
+
+void AFMainFrame::qslotBroadStartAPIResponse(const QByteArray& responseData)
+{
+    bool result = false;
+
+    BroadStartAPI_s info = {};
+
+    std::string jsonString = responseData.toStdString();
+    std::string err = "";
+
+    if(jsonString.empty())
+        LogoutMainAccount(true);
+}
+
+void AFMainFrame::qslotBroadStartSuccess(bool success, BroadStartAPI_s info_)
+{
+    auto& authManager = AUTH_CONTEXT;
+    //
+    int ret = BS_NONE;
+    BroadStartAPI_s info = info_;
+    do {
+        if (!success) {
+            switch (info.code)
+            {
+            case -9999://COMMON
+                ret = BS_UNDER_MAINTENANCE;
+                break;
+            case 401:
+                ret = BS_NEED_LOGIN;
+                break;
+            case -1504:
+                ret = BS_ACCOUNT_RESIGNED;
+                break;
+            case -1200:
+            case -1203:
+            case -1204:
+            case -1205:
+            case -1206:
+            case -1207:
+                ret = BS_ADMINBLACK_CASE;
+                break;
+            case -1505:
+                ret = BS_ACCOUNT_NO_INFO;
+                break;
+            case -1506:
+                ret = BS_EMAIL_CERTIFY;
+                break;
+            case -1501:
+                ret = BS_NEED_REALNAME_AUTH;
+                break;
+            case -1342:
+                ret = BS_NEED_MINOR_CERTIFY;
+                break;
+            case -1340:
+                ret = BS_LIMIT_DUPLICATE_BROADING;
+                break;
+            case -1341:
+                ret = BS_LIMIT_DUPLICATE_BROAD;
+                break;
+            case -1300:
+                ret = BS_ALREADY_BROADCASTING;
+                break;
+            case -1347:
+                ret = BS_SUBSCRIBE_NOTSAME;
+                break;
+            default:
+                ret = BS_BROADSTART_API_JSON_INVALID;
+                break;
+            }
+            break;
+        }
+        
+        ret = BS_SUCCESS;
+
+        if (info.streamNo.empty()) {
+            ret = BS_INVALID_STREAMKEY;
+        }
+
+    } while (false);
+    if (BS_SUCCESS == ret)
+    {
+        AFChannelData* pSoopChannel = nullptr;
+        authManager.GetChannelData(PLATFORM_SOOP, pSoopChannel);
+        if (pSoopChannel)
+        {
+            pSoopChannel->pAuthData->keyRTMP = pSoopChannel->pAuthData->channelID + "-" + info.streamNo;
+        }
+
+        if (!m_broadStartTimer)
+        {
+            m_broadStartTimer = new QTimer(this);
+            connect(m_broadStartTimer, &QTimer::timeout, this, &AFMainFrame::qslotStartCountDown);
+        }
+
+        if (m_pBroadMovie == nullptr)
+        {
+            std::string absPath;
+            GetDataFilePath("assets", absPath);
+            QString gifPath = QString("%1/mainview/broad-spinner-black.gif").
+                arg(absPath.data());
+            m_pBroadMovie = new QMovie(gifPath, QByteArray(), this);
+        }
+        QSize s = ui->pushButton_Broad->rect().size();
+        connect(m_pBroadMovie, &QMovie::frameChanged, [=] {
+            ui->pushButton_Broad->setIcon(m_pBroadMovie->currentPixmap());
+            ui->pushButton_Broad->setIconSize(s);
+            });
+        
+        m_pBroadMovie->start();
+        ui->pushButton_Broad->setText("");
+
+        bool sendSubscribe = false;
+        QString outMessage = "";
+
+        authManager.SendSoopBroadInfoSetting(sendSubscribe);
+        
+        m_broadStartTimer->start(1000);
+    }
+    else {
+        ui->pushButton_Broad->setChecked(false);
+
+        BroadStatusCheckTimerStop();
+
+        blog(LOG_ERROR, "soop broadstart api err : [%d]", ret);
+
+        bool    showMessageBox = true;
+        QString broadStartFailMsg;
+
+        int messageBoxFixedWidth = 0;
+        int messageBoxFixedHeight = 0;
+        QString failTopMsg = "";
+
+        if (BS_UNDER_MAINTENANCE == ret) {
+            broadStartFailMsg = QString::fromStdString(info.broadMsg);
+        }
+        else if (BS_ADMINBLACK_CASE == ret) {
+            blog(LOG_ERROR, "soop admin black case : [%d]", info.code);
+            if ((info.code > -1206) && (info.code < -1200)) {
+                broadStartFailMsg = QTStr("Popup.AdminRestrict");
+                if (info.code == -1201)
+                    broadStartFailMsg += "10";
+                else if (info.code == -1202)
+                    broadStartFailMsg += "30";
+                else if (info.code == -1203)
+                    broadStartFailMsg += "60";
+                else if (info.code == -1204)
+                    broadStartFailMsg += "12";
+                else if (info.code == -1205)
+                    broadStartFailMsg += "24";
+
+                if ((info.code >= -1203) && (info.code <= -1201))
+                    broadStartFailMsg += QTStr("Minutes");
+                else
+                    broadStartFailMsg += QTStr("Hours");
+
+                broadStartFailMsg += QTStr("Popup.AdminRestrict.Time");
+            }
+            else {
+                std::string tcURL = ADMIN_BLACK_POPUP_URL;
+                AFChannelData* pSoopChannelData = nullptr;
+                authManager.GetChannelData(PLATFORM_SOOP, pSoopChannelData);
+                std::string tcKey = pSoopChannelData->pAuthData->channelID;
+                tcKey += "|";
+                tcKey += std::to_string(time(nullptr));
+                char szOut[2048] = { 0, };
+                if (soop_crypt_encrypt((char*)tcKey.c_str(), szOut, 2048) <= 0)
+                    tcURL += tcKey;
+                else
+                    tcURL += szOut;
+
+                QCefWidget* cefWidget = CEFMANAGER.createWidget(nullptr, tcURL.c_str());
+                if (cefWidget) {
+
+                    AFQEmptyDialog dialog(this);
+
+                    connect(cefWidget, SIGNAL(cefQueryRequest(const QCefQuery&)),
+                            &dialog, SLOT(qslotQueryRecieved(const QCefQuery&)));
+
+                    dialog.setTitle(QTStr("Popup.AdminBlackInfo"));
+                    dialog.setFixedSize(422, 512);
+                    dialog.addWidget(cefWidget);
+                    dialog.exec();
+                }
+
+                showMessageBox = false;
+            }
+        }
+        else if (BS_LIMIT_DUPLICATE_BROAD == ret) {
+            broadStartFailMsg = QString::fromStdString(info.broadMsg); 
+        }
+        else if (BS_LIMIT_DUPLICATE_BROADING == ret) {
+            broadStartFailMsg = QString::fromStdString(info.broadMsg);
+        }
+        else if (BS_BROADSTART_API_JSON_INVALID == ret) {
+            if(info.broadMsg.empty())
+                broadStartFailMsg = "API.Failed";
+            else
+                broadStartFailMsg = info.broadMsg.c_str();
+        }
+        else if (BS_ALREADY_BROADCASTING == ret) {
+            broadStartFailMsg = QTStr("Popup.AlreadyBroadCasting");
+        }
+        else if (BS_INVALID_STREAMKEY == ret) {
+            broadStartFailMsg = QTStr("API.Failed");
+        }
+        else if (BS_SUBSCRIBE_DISABLED == ret)
+        {
+            broadStartFailMsg = QTStr("Disable.Reject.Subscribe.Broad");
+        }
+        else if (BS_SUBSCRIBE_NOTSAME == ret)
+        {
+            failTopMsg = QTStr("Subscribe.Not.Same.Broad");
+            broadStartFailMsg = QTStr("Subscribe.Needs.Same");
+            messageBoxFixedHeight = 224;
+        }
+        else if (BS_ACCOUNT_RESIGNED == ret || BS_ACCOUNT_NO_INFO == ret)
+        {
+            broadStartFailMsg = QTStr("Confirm.Token.Expired");
+        }
+
+        // BS_NEED_REALNAME_AUTH, BS_NEED_MINOR_CERTIFY, BS_EMAIL_CERTIFY
+        if (!info.redirectURL.empty()) 
+        {
+            if (BS_EMAIL_CERTIFY == ret)
+                VerifyEmailBeforeBroad(info.broadMsg, info.redirectURL);
+            else
+                NavigateDefaultBrowser(QString::fromStdString(info.redirectURL));
+
+            showMessageBox = false;
+        }
+
+        QString failMsg = "[BROAD START FAIL]: " + broadStartFailMsg;
+        blog(LOG_INFO, failMsg.toUtf8().constData());
+        if (showMessageBox) {
+            if (BS_ACCOUNT_RESIGNED == ret || BS_ACCOUNT_NO_INFO == ret)
+            {
+                OffBroadStartAPICheck();
+                LogoutMainAccount(true);
+                return;
+            }
+            AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+                                       "", broadStartFailMsg, false, true,
+                                       failTopMsg, messageBoxFixedWidth, messageBoxFixedHeight);
+        }
+    }
+
+    OffBroadStartAPICheck();
+}
+
+void AFMainFrame::qslotBroadStartAPIResponse_Disconnect(const QByteArray& responseData) {
+    CheckSoopBroadStatus(responseData);
+}
+
+void AFMainFrame::qslotBroadStartAPIResponse_CheckStream(const QByteArray& responseData)
+{
+    OffBroadStartAPICheck();
+    CheckSoopBroadStatus(responseData);
+}
+
+void AFMainFrame::qslotBroadCheckTimeout()
+{
+    AUTH_CONTEXT.SendCheckBroading(this, "qslotBroadStartAPIResponse_CheckStream");
+}
+
+void AFMainFrame::qslotEmailVerify(const QByteArray& responseData)
+{
+    std::string temp = std::string(responseData.constData());
+    blog(LOG_INFO, temp.c_str());
+}
+
 void AFMainFrame::qslotScreenChanged(QScreen* screen)
 {
+    //invalidate needed on change screen (dpi problem)
     QList<QWidget*> widgets = this->findChildren<QWidget*>();
     
     foreach(QWidget * w, widgets)
@@ -3298,724 +3927,45 @@ void AFMainFrame::qslotScreenChanged(QScreen* screen)
 
 void AFMainFrame::qslotDpiChanged(qreal rel)
 {
+    //invalidate needed on change screen (dpi problem)
     qDebug() << "dpi changed:" << rel;
-}
-
-
-void AFMainFrame::qslotShowVolumeSlider()
-{
-    if (!ui->widget_Volume->isEnabled())
-        return;
-
-    m_VolumeTimer = new QTimer(this);
-    m_VolumeTimer->setInterval(300);
-    m_VolumeTimer->setSingleShot(true);
-    
-    m_AudioPeakUpdateTimer = new QTimer(this);
-    m_AudioPeakUpdateTimer->setInterval(50);
-    
-    connect(m_VolumeTimer, &QTimer::timeout, this, &AFMainFrame::qSlotCloseVolumeSlider);
-    connect(m_AudioPeakUpdateTimer, &QTimer::timeout, this, &AFMainFrame::qslotSetAudioPeakValue);
-
-    QPoint globalPos = ui->widget_Volume->mapToGlobal(QPoint(0, 0));
-    globalPos.setX(globalPos.x() - 6);
-    globalPos.setY(globalPos.y() - m_VolumeSliderFrame->height() + 33);
-    m_VolumeSliderFrame->move(globalPos);
-
-    m_VolumeSliderFrame->show();
-    m_VolumeTimer->start();
-    m_AudioPeakUpdateTimer->start();
-}
-
-void AFMainFrame::qslotShowMicSlider()
-{
-    if (!ui->widget_Mic->isEnabled())
-        return;
-
-    m_Mictimer = new QTimer(this);
-    m_Mictimer->setInterval(300);
-    m_Mictimer->setSingleShot(true);
-
-    m_MicPeakUpdateTimer = new QTimer(this);
-    m_MicPeakUpdateTimer->setInterval(50);
-
-    connect(m_Mictimer, &QTimer::timeout, this, &AFMainFrame::qSlotCloseMicSlider);
-    connect(m_MicPeakUpdateTimer, &QTimer::timeout, this, &AFMainFrame::qslotSetMicPeakValue);
-
-    QPoint globalPos = ui->widget_Mic->mapToGlobal(QPoint(0, 0));
-    globalPos.setX(globalPos.x() - 6);
-    globalPos.setY(globalPos.y() - m_MicSliderFrame->height() + 33);
-    m_MicSliderFrame->move(globalPos);
-    
-    m_MicSliderFrame->show();
-    m_Mictimer->start();
-    m_MicPeakUpdateTimer->start();
-}
-
-void AFMainFrame::qSlotCloseVolumeSlider()
-{
-    int volumeSize = m_VolumeSliderFrame->VolumeSize();
-    bool volumechecked = m_VolumeSliderFrame->ButtonIsChecked();
-    
-    disconnect(m_AudioPeakUpdateTimer, &QTimer::timeout, this, &AFMainFrame::qslotSetAudioPeakValue);
-    m_VolumeSliderFrame->hide();
-    m_AudioPeakUpdateTimer->stop();
-}
-
-
-void AFMainFrame::qSlotCloseMicSlider()
-{
-    int volumeSize = m_MicSliderFrame->VolumeSize();
-    bool micchecked = m_MicSliderFrame->ButtonIsChecked();
-
-    disconnect(m_MicPeakUpdateTimer, &QTimer::timeout, this, &AFMainFrame::qslotSetMicPeakValue);
-    m_MicSliderFrame->hide();
-    m_MicPeakUpdateTimer->stop();
-}
-
-void AFMainFrame::qslotSetAudioPeakValue() 
-{
-    if (!GetMainWindow()->IsMainAudioVolumeControlExist())
-        return;
-    if (!m_VolumeSliderFrame)
-        return;
-
-    float peak = GetMainWindow()->GetMainAudioVolumePeak();
-    if (m_VolumeSliderFrame->isVisible())
-        m_VolumeSliderFrame->SetVolumePeak(peak);
-}
-
-void AFMainFrame::qslotSetMicPeakValue() 
-{
-    if (!GetMainWindow()->IsMainMicVolumeControlExist())
-        return;
-    if (!m_MicSliderFrame)
-        return;
-
-    float peak = GetMainWindow()->GetMainMicVolumePeak();
-    if (m_MicSliderFrame->isVisible())
-        m_MicSliderFrame->SetVolumePeak(peak);
-}
-
-void AFMainFrame::qslotStopVolumeTimer()
-{
-    m_VolumeTimer->stop();
-}
-
-void AFMainFrame::qslotStopMicTimer()
-{
-    m_Mictimer->stop();
-}
-
-void AFMainFrame::qslotMainAudioValueChanged(int volume)
-{
-    m_DynamicCompositMainWindow->MainAudioVolumeChanged(volume);
-}
-
-void AFMainFrame::qslotMainMicValueChanged(int volume)
-{
-    m_DynamicCompositMainWindow->MainMicVolumeChanged(volume);
-}
-
-void AFMainFrame::qslotSetVolumeMute()
-{
-    m_DynamicCompositMainWindow->SetMainAudioMute();
-}
-
-void AFMainFrame::qslotSetMicMute()
-{
-    m_DynamicCompositMainWindow->SetMainMicMute();
 }
 
 void AFMainFrame::qslotTopMenuDestoryed()
 {
-    m_bTopMenuTriggered = false;
+    m_topMenuTriggered = false;
 }
 
-void AFMainFrame::qslotShowMainAuthMenu()
+void AFMainFrame::qslotLoginAccountWithProperty()
 {
-    AFLocaleTextManager& localeManager = AFLocaleTextManager::GetSingletonInstance();
-
-    AFMainAccountButton* accountButton = reinterpret_cast<AFMainAccountButton*>(sender());
-    m_qCurrentAccountButton = accountButton;
-
-    if (AFAuthManager::GetSingletonInstance().IsSoopGlobalRegistered())
+    QObject* objectSender = reinterpret_cast<QObject*>(sender());
+    QString platform = objectSender->property("platform").toString();
+    if (AddStreamAccount(this, platform))
     {
-        AFChannelData* channelData = accountButton->GetChannelData();
-        AFQBalloonWidget* authMenu = new AFQBalloonWidget();
-        authMenu->BalloonWidgetInit(QMargins(6, 10, 6, 10), 0);
-        authMenu->setAttribute(Qt::WA_DeleteOnClose);
-
-        QLabel* profilepic = new QLabel(authMenu);
-        profilepic->setFixedSize(24, 24);
-        profilepic->setObjectName("label_AuthMenuThumbnail");
-        
-        QPixmap* savedPixmap = (QPixmap*)channelData->pObjQtPixmap;
-        if (savedPixmap != nullptr)
-        {
-            QPixmap scaledPixmap = savedPixmap->scaled(24,24,
-                                                       Qt::IgnoreAspectRatio,
-                                                       Qt::SmoothTransformation);
-            profilepic->setPixmap(scaledPixmap);
-        }
-
-        AFQElidedSlideLabel* profileNick = new AFQElidedSlideLabel(authMenu);
-        AFBasicAuth* rawAuthData = channelData->pAuthData;
-        QString nick = rawAuthData->strChannelID.c_str();
-        QString platform = rawAuthData->strPlatform.c_str();
-        profileNick->setText(nick);
-        profileNick->setToolTip(nick);
-        profileNick->setObjectName("label_AuthMenuNick");
-        profileNick->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-        QHBoxLayout* profileLayout = new QHBoxLayout();
-        profileLayout->setSpacing(6);
-        profileLayout->setContentsMargins(10, 2, 10, 2);
-
-        profileLayout->addWidget(profilepic);
-        profileLayout->addWidget(profileNick);
-
-        QWidget* profileWidget = new QWidget(authMenu);
-        profileWidget->setLayout(profileLayout);
-        profileWidget->setFixedSize(168, 28);
-
-        //----------------------------------------------------
-
-        QLabel* channelLabel = new QLabel(authMenu);
-        channelLabel->setText(QTStr("Basic.Settings.Audio.Channels"));
-        channelLabel->setObjectName("label_AuthMenuChannel");
-
-        AFQToggleButton* togglebutton = new AFQToggleButton(authMenu);
-        togglebutton->setFixedSize(30, 16);
-        togglebutton->ChangeState(channelData->bIsStreaming);
-        togglebutton->setChecked(channelData->bIsStreaming);
-
-        connect(togglebutton, &QPushButton::clicked, authMenu, &AFQBalloonWidget::qsignalFromChild);
-        connect(authMenu, &AFQBalloonWidget::qsignalFromChild, this, &AFMainFrame::qslotStopSimulcast);
-
-        QHBoxLayout* channelLayout = new QHBoxLayout();
-        channelLayout->setSpacing(6);
-        channelLayout->setContentsMargins(10, 2, 10, 2);
-
-        channelLayout->addWidget(channelLabel);
-        channelLayout->addWidget(togglebutton);
-
-        QWidget* channelWidget = new QWidget(authMenu);
-        channelWidget->setLayout(channelLayout);
-        channelWidget->setFixedSize(168, 28);
-
-        //----------------------------------------------------
-
-        //Setting
-        QPushButton* setting = new QPushButton(authMenu);
-        setting->setFixedHeight(28);
-        setting->setText(QTStr("Settings"));
-        setting->setObjectName("pushButton_AuthSetting");
-        setting->setProperty("type", "1");
-        setting->setProperty("channelID", nick);
-
-
-        connect(setting, &QPushButton::clicked, this, &AFMainFrame::qslotShowStudioSettingWithButtonSender);
-
-        QHBoxLayout* settingLayout = new QHBoxLayout();
-        settingLayout->setSpacing(0);
-        settingLayout->setContentsMargins(0, 0, 0, 0);
-
-        settingLayout->addWidget(setting);
-
-        QWidget* settingWidget = new QWidget(authMenu);
-        settingWidget->setLayout(settingLayout);
-        settingWidget->setFixedSize(168, 28);
-
-        //----------------------------------------------------
-
-        //DashBoard
-        QPushButton* news = new QPushButton(authMenu);
-        news->setFixedHeight(28);
-        news->setText(QTStr("Block.Tooltip.Dashboard"));
-        news->setObjectName("pushButton_AuthMenuDashboard");
-        news->setProperty("type", "Dashboard");
-        news->setProperty("channelID", nick);
-        news->setProperty("platform", platform);
-
-        connect(news, &QPushButton::clicked, this, &AFMainFrame::qslotShowGlobalPageSender);
-
-        QHBoxLayout* newsLayout = new QHBoxLayout();
-        newsLayout->setSpacing(0);
-        newsLayout->setContentsMargins(0, 0, 0, 0);
-
-        newsLayout->addWidget(news);
-
-        QWidget* newsWidget = new QWidget(authMenu);
-        newsWidget->setLayout(newsLayout);
-        newsWidget->setFixedSize(168, 28);
-
-        authMenu->AddWidgetToBalloon(profileWidget);
-        authMenu->AddWidgetToBalloon(channelWidget);
-        authMenu->AddWidgetToBalloon(settingWidget);
-        authMenu->AddWidgetToBalloon(newsWidget);
-
-        int x = pos().x() + accountButton->pos().x() - (authMenu->width() / 2) + 32;
-        int y = pos().y() + ui->frame_Top->height() + ui->widget_Middle->height() - authMenu->height() + 3;
-
-        authMenu->ShowBalloon(QPoint(x, y));
-    }
-    else
-    {
-        if (IsStreamActive()) {
-            AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, nullptr,
-                "", QTStr("Simulcast.Start.Denied"), false, true);
-            return;
-        }
-        
-        if (IsRecordingActive()) {
-            AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, nullptr,
-                "", QTStr("Simulcast.Rec.Start.Denied"), false, true);
-            return;
-        }
-        
-        AFAddStreamWidget* addStream = new AFAddStreamWidget(this);
-        addStream->AddStreamWidgetInit("SOOP Global");
-
-        if (addStream->exec() == QDialog::Accepted)
-        {
-            AFBasicAuth& resAuth = addStream->GetRawAuth();
-            AFChannelData* newChannel = new AFChannelData();
-            resAuth.strPlatform = addStream->GetPlatform().toStdString();
-            const char* uuid = QUuid::createUuid().toString().toStdString().c_str();
-            newChannel->bIsStreaming = true;
-            auto& authManager = AFAuthManager::GetSingletonInstance();
-            authManager.RegisterChannel(uuid, newChannel);
-
-            auto& auth = AFAuthManager::GetSingletonInstance();
-            //auth.FlushAuthCache();
-            //auth.FlushAuthMain();
-            auth.SaveAllAuthed();
-
-            SetStreamingOutput();
-            LoadAccounts();
-        }
-    }
-}
-
-void AFMainFrame::qslotShowOtherAuthMenu()
-{
-    AFLocaleTextManager& localeManager = AFLocaleTextManager::GetSingletonInstance();
-
-    AFMainAccountButton* accountButton = reinterpret_cast<AFMainAccountButton*>(sender());
-    m_qCurrentAccountButton = accountButton;
-
-    AFChannelData* channelData = accountButton->GetChannelData();
-
-    AFQBalloonWidget* authMenu = new AFQBalloonWidget();
-    authMenu->BalloonWidgetInit(QMargins(6, 10, 6, 10), 0);
-    authMenu->setAttribute(Qt::WA_DeleteOnClose);
-
-    //Auth ThumbNail
-    QLabel* profilepic = new QLabel(authMenu);
-    profilepic->setFixedSize(24, 24);
-    profilepic->setObjectName("label_AuthMenuThumbnail");
-    
-    QPixmap* savedPixmap = (QPixmap*)channelData->pObjQtPixmap;
-    if (savedPixmap != nullptr)
-    {
-        QPixmap scaledPixmap = savedPixmap->scaled(24,24,
-                                                   Qt::IgnoreAspectRatio,
-                                                   Qt::SmoothTransformation);
-        profilepic->setPixmap(scaledPixmap);
-    }
-
-    AFQElidedSlideLabel* profileNick = new AFQElidedSlideLabel(authMenu);
-    AFBasicAuth* rawAuthData = channelData->pAuthData;
-    QString nick = rawAuthData->strChannelID.c_str();
-    QString platform = rawAuthData->strPlatform.c_str();
-    profileNick->setText(nick);
-    profileNick->setToolTip(nick);
-    profileNick->setObjectName("label_AuthMenuNick");
-    profileNick->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-    /*
-    connect(this, &AFMainFrame::qsignalHoverEnter, profileNick,
-            &AFQElidedSlideLabel::qSlotHoverButton);
-    connect(this, &AFMainFrame::qSignalLeaveButton, profileNick,
-            &AFQElidedSlideLabel::qSlotLeaveButton);
-    */
-
-    QHBoxLayout* profileLayout = new QHBoxLayout();
-    profileLayout->setSpacing(6);
-    profileLayout->setContentsMargins(10, 2, 10, 2);
-
-    profileLayout->addWidget(profilepic);
-    profileLayout->addWidget(profileNick);
-
-    QWidget* profileWidget = new QWidget(authMenu);
-    profileWidget->setLayout(profileLayout);
-    profileWidget->setFixedSize(168, 28);
-
-    //----------------------------------------------------
-
-    //Setting
-    QPushButton* setting = new QPushButton(authMenu);
-    setting->setFixedHeight(28);
-    setting->setText(QTStr("Settings"));
-    setting->setObjectName("pushButton_AuthSetting");
-    setting->setProperty("type", "1");
-    setting->setProperty("channelID", nick);
-
-
-    connect(setting, &QPushButton::clicked, this, &AFMainFrame::qslotShowStudioSettingWithButtonSender);
-
-    QHBoxLayout* settingLayout = new QHBoxLayout();
-    settingLayout->setSpacing(0);
-    settingLayout->setContentsMargins(0, 0, 0, 0);
-
-    settingLayout->addWidget(setting);
-
-    QWidget* settingWidget = new QWidget(authMenu);
-    settingWidget->setLayout(settingLayout);
-    settingWidget->setFixedSize(168, 28);
-
-    //----------------------------------------------------
-
-    //DashBoard
-    QPushButton* news = new QPushButton(authMenu);
-    news->setFixedHeight(28);
-    news->setText(QTStr("Block.Tooltip.Dashboard"));
-    news->setObjectName("pushButton_AuthMenuDashboard");
-    news->setProperty("type", "Dashboard");
-    news->setProperty("channelID", nick);
-    news->setProperty("platform", platform);
-
-    connect(news, &QPushButton::clicked, this, &AFMainFrame::qslotShowGlobalPageSender);
-
-    QHBoxLayout* newsLayout = new QHBoxLayout();
-    newsLayout->setSpacing(0);
-    newsLayout->setContentsMargins(0, 0, 0, 0);
-
-    newsLayout->addWidget(news);
-
-    QWidget* newsWidget = new QWidget(authMenu);
-    newsWidget->setLayout(newsLayout);
-    newsWidget->setFixedSize(168, 28);
-
-    //----------------------------------------------------
-
-    QPushButton* disconnect = new QPushButton(authMenu);
-    disconnect->setFixedHeight(28);
-    disconnect->setText(QTStr("Simulcast.Stop"));
-    disconnect->setObjectName("pushButton_AuthMenuDashboard");
-    disconnect->setProperty("type", "StopSimulcast");
-
-    connect(disconnect, &QPushButton::clicked, authMenu, &AFQBalloonWidget::qsignalFromChild);
-    connect(authMenu, &AFQBalloonWidget::qsignalFromChild, this, &AFMainFrame::qslotStopSimulcast);
-
-    QHBoxLayout* channelLayout = new QHBoxLayout();
-    channelLayout->setSpacing(0);
-    channelLayout->setContentsMargins(0, 0, 0, 0);
-
-    channelLayout->addWidget(disconnect);
-
-    QWidget* channelWidget = new QWidget(authMenu);
-    channelWidget->setLayout(channelLayout);
-    channelWidget->setFixedSize(168, 28);
-
-    authMenu->AddWidgetToBalloon(profileWidget);
-    authMenu->AddWidgetToBalloon(settingWidget);
-    authMenu->AddWidgetToBalloon(newsWidget);
-    authMenu->AddWidgetToBalloon(channelWidget);
-
-    int x = pos().x() + accountButton->pos().x() - (authMenu->width() / 2) + 32;
-    int y = pos().y() + ui->frame_Top->height() + ui->widget_Middle->height() - authMenu->height() + 3;
-
-    authMenu->ShowBalloon(QPoint(x, y));
-}
-
-void AFMainFrame::qslotShowLoginMenu()
-{
-    if (m_MainGuideWidget)
-    {
-        m_MainGuideWidget->deleteLater();
-        m_MainGuideWidget = nullptr;
-    }
-
-    if (m_ProgramGuideWidget && m_ProgramGuideWidget->isWidgetType())
-        m_ProgramGuideWidget->NextMission(1);
-
-    if (ui->stackedWidget_Platform->currentIndex() != 0)
-    {
-        return;
-    }
-
-    if (IsRecordingActive()) {
-        AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, nullptr,
-            "", QTStr("Simulcast.Rec.Start.Denied"), false, true);
-        return;
-    }
-    
-    AFQBalloonWidget* loginBalloon = new AFQBalloonWidget(this);
-    loginBalloon->BalloonWidgetInit(QMargins(6,6,6,6), 4);
-    loginBalloon->setAttribute(Qt::WA_DeleteOnClose);
-
-    QPushButton* soopgButton = new QPushButton(loginBalloon);
-    soopgButton->setFixedSize(150, 36);
-    soopgButton->setObjectName("pushButton_MenuSoopGlobal");
-    soopgButton->setProperty("platform", "SOOP Global");
-    connect(soopgButton, &QPushButton::clicked,
-        this, &AFMainFrame::qslotLoginAccount);
-    loginBalloon->AddWidgetToBalloon(soopgButton);
-
-    QPushButton* soopButton = new QPushButton(loginBalloon);
-    soopButton->setFixedSize(150, 36);
-    soopButton->setObjectName("pushButton_MenuSoop");
-    soopButton->setProperty("platform", "afreecaTV");
-    connect(soopButton, &QPushButton::clicked,
-        this, &AFMainFrame::qslotLoginAccount);
-    loginBalloon->AddWidgetToBalloon(soopButton);
-
-    QPushButton* twitchButton = new QPushButton(loginBalloon);
-    twitchButton->setFixedSize(150, 36);
-    twitchButton->setObjectName("pushButton_MenuTwitch");
-    twitchButton->setProperty("platform", "Twitch");
-    connect(twitchButton, &QPushButton::clicked,
-        this, &AFMainFrame::qslotLoginAccount);
-    loginBalloon->AddWidgetToBalloon(twitchButton);
-
-    QPushButton* youtubeButton = new QPushButton(loginBalloon);
-    youtubeButton->setFixedSize(150, 36);
-    youtubeButton->setObjectName("pushButton_MenuYoutube");
-    youtubeButton->setProperty("platform", "Youtube");
-    youtubeButton->setWhatsThis("1");
-    connect(youtubeButton, &QPushButton::clicked,
-        this, &AFMainFrame::qslotLoginAccount);
-    loginBalloon->AddWidgetToBalloon(youtubeButton);
-
-    QPushButton* rtmpButton = new QPushButton(loginBalloon);
-    rtmpButton->setFixedSize(150, 36);
-    rtmpButton->setText("+ RTMP");
-    rtmpButton->setObjectName("pushButton_MenuRtmp");
-    rtmpButton->setProperty("platform", "Custom RTMP");
-    rtmpButton->setWhatsThis("1");
-    connect(rtmpButton, &QPushButton::clicked,
-        this, &AFMainFrame::qslotLoginAccount);
-    loginBalloon->AddWidgetToBalloon(rtmpButton);
-
-    int x = pos().x() - ui->pushButton_Login->width() / 2 - 2;
-    int y = pos().y() + ui->frame_Top->height() + ui->widget_Middle->height() - loginBalloon->height() + 3;
-
-    loginBalloon->ShowBalloon(QPoint(x, y));
-}
-
-void AFMainFrame::qslotStopSimulcast(bool checked)
-{
-    if (m_qCurrentAccountButton)
-    {
-        if (checked)
-        {
-            if (IsStreamActive())
-            {
-                AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
-                    "", QTStr("Simulcast.Start.Denied"), false, true);
-                return;
-            }
-            else
-            {
-                m_qCurrentAccountButton->qslotStartStream();
-            }
-        }
-        else
-        {
-            if (IsStreamActive())
-            {
-                QList<AFMainAccountButton*> accountList = findChildren<AFMainAccountButton*>();
-
-                int liveCount = 0;
-                foreach (AFMainAccountButton* account, accountList) {
-                    if (!account || !account->GetChannelData())
-                        continue;
-                    if (account->GetChannelData()->bIsStreaming)
-                        liveCount++;
-                }
-                if (liveCount == 1)
-                {
-                    AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
-                        "", QTStr("Simulcast.Stop.Denied"), false, true);
-                    return;
-                }
-            }
-
-            m_qCurrentAccountButton->qslotQuitStream();
-        }
-
-        
-        SetStreamingOutput();
+        m_pMainOutput->SetStreamingOutput();
         LoadAccounts();
-
-        QWidget* balloon = reinterpret_cast<QWidget*>(sender());
-        balloon->close();
     }
-}
-
-void AFMainFrame::qslotLoginAccount()
-{
-    QPushButton* authButton = reinterpret_cast<QPushButton*>(sender());
-    QString platform = authButton->property("platform").toString();
-
-    AFAddStreamWidget* addStream = new AFAddStreamWidget(this);
-    addStream->AddStreamWidgetInit(platform);
-
-    if (addStream->exec() == QDialog::Accepted)
-    {
-        AFBasicAuth& resAuth = addStream->GetRawAuth();
-        AFChannelData* newChannel = new AFChannelData();
-        std::string strUuid = QUuid::createUuid().toString().toStdString();
-        const char * uuid = strUuid.c_str();
-        resAuth.strUuid = uuid;
-        newChannel->bIsStreaming = true;
-
-        auto& authManager = AFAuthManager::GetSingletonInstance();
-
-        std::string platform = resAuth.strPlatform;
-        if (platform == "SOOP Global") {
-            authManager.CacheAuth(true, resAuth);
-        } else {
-            authManager.CacheAuth(false, resAuth);
-        }
-        authManager.RegisterChannel(uuid, newChannel);
-
-        //auth.FlushAuthCache();
-        //auth.FlushAuthMain();
-        authManager.SaveAllAuthed();
-
-        SetStreamingOutput();
-    }
-
-    LoadAccounts();
-}
-
-
-bool AFMainFrame::qslotShowGlobalPage(QString type)
-{
-    auto& authManager = AFAuthManager::GetSingletonInstance();
-
-    AFChannelData* mainChannel = nullptr;
-    if (!authManager.IsSoopGlobalRegistered()) {
-        if (IsStreamActive()) {
-            AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, nullptr,
-                "", QTStr("Simulcast.Start.Denied"), false, true);
-            return false;
-        }
-        
-        if (IsRecordingActive()) {
-            AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, nullptr,
-                "", QTStr("Simulcast.Rec.Start.Denied"), false, true);
-            return false;
-        }
-        
-        AFAddStreamWidget* addStream = new AFAddStreamWidget(this);
-        addStream->AddStreamWidgetInit("SOOP Global");
-
-        if (addStream->exec() == QDialog::Accepted)
-        {
-            AFBasicAuth& resAuth = addStream->GetRawAuth();
-            AFChannelData* newChannel = new AFChannelData();
-            resAuth.strPlatform = addStream->GetPlatform().toStdString();
-            const char * uuid = QUuid::createUuid().toString().toStdString().c_str();
-            newChannel->bIsStreaming = true;
-            auto& authManager = AFAuthManager::GetSingletonInstance();
-            authManager.RegisterChannel(uuid, newChannel);
-
-            auto& auth = AFAuthManager::GetSingletonInstance();
-            //auth.FlushAuthCache();
-            //auth.FlushAuthMain();
-            auth.SaveAllAuthed();
-
-            SetStreamingOutput();
-            LoadAccounts();
-        }
-        else
-            return false;
-    }
-
-    bool accountValid = true;
-
-    if (type == "Chat") {
-        if (!m_GlobalSoopChatWidget) 
-            accountValid = _SetupChatPage();
-        
-        if (accountValid)
-        {
-            if (m_GlobalSoopChatWidget->isMaximized())
-                m_GlobalSoopChatWidget->showMaximized();
-            else
-            {
-                if (m_GlobalSoopChatWidget->isVisible()) {
-                    m_GlobalSoopChatWidget->showNormal();
-                    m_GlobalSoopChatWidget->raise();
-                }
-                else
-                {
-                    QRect adjustRect;
-                    QRect position = QRect(x() - m_GlobalSoopChatWidget->width(), y(),
-                        m_GlobalSoopChatWidget->width(), m_GlobalSoopChatWidget->height());
-                    m_DynamicCompositMainWindow->AdjustPositionOutSideScreen(position, adjustRect);
-                    m_GlobalSoopChatWidget->setGeometry(adjustRect);
-
-                    m_GlobalSoopChatWidget->showNormal();
-                }
-            }
-        }            
-    }
-    else if (type == "Newsfeed") 
-    {
-        if (!m_GlobalSoopNewsfeedWidget) 
-            _SetupNewsfeedPage();
-        
-        if (m_GlobalSoopNewsfeedWidget->isMaximized())
-            m_GlobalSoopNewsfeedWidget->showMaximized();
-        else
-        {
-            if (m_GlobalSoopNewsfeedWidget->isVisible()) {
-                m_GlobalSoopNewsfeedWidget->showNormal();
-                m_GlobalSoopNewsfeedWidget->raise();
-            }
-            else
-            {
-                QRect adjustRect;
-                QRect position = QRect(x() - m_GlobalSoopNewsfeedWidget->width(), y(),
-                    m_GlobalSoopNewsfeedWidget->width(), m_GlobalSoopNewsfeedWidget->height());
-                m_DynamicCompositMainWindow->AdjustPositionOutSideScreen(position, adjustRect);
-                m_GlobalSoopNewsfeedWidget->setGeometry(adjustRect);
-
-                m_GlobalSoopNewsfeedWidget->showNormal();
-            }
-        }
-    }
-    return true;
 }
 
 void AFMainFrame::qslotShowGlobalPageSender()
 {
+    auto& authManager = AUTH_CONTEXT;
+    //
     QPushButton* button = reinterpret_cast<QPushButton*>(sender());
     if (button) {
         QString platform = button->property("platform").toString();
         
-        if (platform == "SOOP Global") {
+        if (platform == PLATFORM_SOOP) {
             QString dashboard_url;
-            dashboard_url = SOOP_GLOBAL_DASHBOARD_URL;
-            QDesktopServices::openUrl(QUrl(dashboard_url));
+            dashboard_url = QString::fromStdString(SOOP_DASHBOARD_URL);
+            NavigateDefaultBrowser(dashboard_url);
         }
-        else if (platform == "afreecaTV") {
-            QString dashboard_url;
-            dashboard_url = SOOP_DASHBOARD_URL;
-            QDesktopServices::openUrl(QUrl(dashboard_url));
-        }
-        else if (platform == "Twitch") {
+        else if (platform == PLATFORM_TWITCH) {
             QString dashboard_url;
             dashboard_url = TWITCH_DASHBOARD_URL + button->property("channelID").toString() + "/home";
-            QDesktopServices::openUrl(QUrl(dashboard_url));
+            NavigateDefaultBrowser(dashboard_url);
         }
-        else if (platform == "Youtube") {
-            auto& authManager = AFAuthManager::GetSingletonInstance();
+        else if (platform == PLATFORM_YOUTUBE) {
             int cntOfAccount = authManager.GetCntChannel();
             for (int idx = 0; idx < cntOfAccount; idx++)
             {
@@ -4023,309 +3973,107 @@ void AFMainFrame::qslotShowGlobalPageSender()
                 authManager.GetChannelData(idx, tmpChannel);
                 if (!tmpChannel || !tmpChannel->pAuthData)
                     continue;
-                if (tmpChannel->pAuthData->strPlatform == "Youtube")
+                if (tmpChannel->pAuthData->platform == PLATFORM_YOUTUBE)
                 {
                     ShowPopupPageYoutubeChannel(tmpChannel->pAuthData);
                     break;
                 }
             }
-        }        
+        }
+
     }    
 }
 
-void AFMainFrame::qslotLogoutGlobalPage()
+void AFMainFrame::qslotResetCertainBroadTime()
 {
-    if (m_BlockPopup)
-    {
-        m_BlockPopup->BlockButtonToggled(false, ENUM_BLOCK_TYPE::Chat);
-        m_BlockPopup->BlockButtonToggled(false, ENUM_BLOCK_TYPE::Dashboard);
-    }
-
-    if (m_GlobalSoopChatWidget) {
-        delete m_GlobalSoopChatWidget;
-        m_GlobalSoopChatWidget = nullptr;
-    }
-    if (m_GlobalSoopNewsfeedWidget) {
-        delete m_GlobalSoopNewsfeedWidget;
-        m_GlobalSoopNewsfeedWidget = nullptr;
-    }
-}
-
-void AFMainFrame::qslotCloseGlobalSoopPage(QString type)
-{
-    AFQBorderPopupBaseWidget* pPageWidget = nullptr;
-    if (type == "Chat") {
-        pPageWidget = qobject_cast<AFQBorderPopupBaseWidget*> (m_GlobalSoopChatWidget);
-        if (m_BlockPopup)
-            m_BlockPopup->BlockButtonToggled(false, ENUM_BLOCK_TYPE::Chat);        
-    }
-    else if (type == "Newsfeed") {
-        pPageWidget = qobject_cast<AFQBorderPopupBaseWidget*> (m_GlobalSoopNewsfeedWidget);
-        if (m_BlockPopup)
-            m_BlockPopup->BlockButtonToggled(false, ENUM_BLOCK_TYPE::Dashboard);
-    }
-    if (!pPageWidget)
-        return;
-}
-
-void AFMainFrame::qslotHideGlobalSoopPage(QString type)
-{
-    AFQBorderPopupBaseWidget* pPageWidget = nullptr;
-    if (type == "Chat") {
-        pPageWidget = qobject_cast<AFQBorderPopupBaseWidget*> (m_GlobalSoopChatWidget);
-        if (m_BlockPopup)
-            m_BlockPopup->BlockButtonToggled(false, ENUM_BLOCK_TYPE::Chat);
-    }
-    else if (type == "Newsfeed") {
-        pPageWidget = qobject_cast<AFQBorderPopupBaseWidget*> (m_GlobalSoopNewsfeedWidget);
-        if (m_BlockPopup)
-            m_BlockPopup->BlockButtonToggled(false, ENUM_BLOCK_TYPE::Dashboard);
-    }
-    if (!pPageWidget)
-        return;
-    pPageWidget->hide();
-
-}
-
-void AFMainFrame::qslotMaximizeGlobalSoopPage(QString type)
-{
-    AFQBorderPopupBaseWidget* pPageWidget = nullptr;
-    if (type == "Chat") {
-        pPageWidget = qobject_cast<AFQBorderPopupBaseWidget*> (m_GlobalSoopChatWidget);
-    }
-    else if (type == "Newsfeed") {
-        pPageWidget = qobject_cast<AFQBorderPopupBaseWidget*> (m_GlobalSoopNewsfeedWidget);
-    }
-    if (!pPageWidget)
-        return;
-
-    if (pPageWidget->isMaximized()) {
-        pPageWidget->showNormal();
-    }
-    else {
-        pPageWidget->RestoreNormalWidth(pPageWidget->width());
-        pPageWidget->showMaximized();
-    }
-
-    AFDockTitle* dockTitle = qobject_cast<AFDockTitle*>(pPageWidget->GetWidgetByName("CustomBrowserDockTitle"));
-    if (dockTitle) {
-        dockTitle->ChangeMaximizedIcon(pPageWidget->isMaximized());
-    }
-}
-
-void AFMainFrame::qslotMinimizeGlobalSoopPage(QString type)
-{
-    AFQBorderPopupBaseWidget* pPageWidget = nullptr;
-    if (type == "Chat") {
-        pPageWidget = qobject_cast<AFQBorderPopupBaseWidget*> (m_GlobalSoopChatWidget);
-    }
-    else if (type == "Newsfeed") {
-        pPageWidget = qobject_cast<AFQBorderPopupBaseWidget*> (m_GlobalSoopNewsfeedWidget);
-    }
-    if (!pPageWidget)
-        return;
-    pPageWidget->showMinimized();
+    ui->label_BroadTime->ResetCetainTime();
 }
 
 void AFMainFrame::qslotExtendResource()
 {
-    if (m_ResourceExtensionWidget == nullptr)
+    if (m_resourceExtensionWidget == nullptr)
     {
         ui->label_ResourceExtension->setProperty("resourceExtend", true);
 
-        m_ResourceExtensionWidget = new AFResourceExtension(this);
-        m_ResourceExtensionWidget->ResourceExtensionInit();
-        ui->frame_Bottom->layout()->addWidget(m_ResourceExtensionWidget);
+        m_resourceExtensionWidget = new AFResourceExtension(this);
+        m_resourceExtensionWidget->ResourceExtensionInit();
+        ui->frame_Bottom->layout()->addWidget(m_resourceExtensionWidget);
         ui->frame_Bottom->setMinimumHeight(142);
         ui->frame_Bottom->setMaximumHeight(142);
         if (!isMaximized())
             resize(QSize(width(), height() + 42));
-        setMinimumHeight(750);
+        //setMinimumHeight(750);
+
+        m_resourceExtensionWidget->setProperty("windowtype", ENUM_WINDOW_TYPE::StatPage);
 
         // qslotCheckDiskSpaceRemaining
-        connect(m_ResourceExtensionWidget, &AFResourceExtension::qsignalCheckDiskSpaceRemaining,
+        connect(m_resourceExtensionWidget, &AFResourceExtension::qsignalCheckDiskSpaceRemaining,
                 this, &AFMainFrame::qslotCheckDiskSpaceRemaining);
-        connect(m_ResourceExtensionWidget, &AFResourceExtension::qsignalStatWindowTriggered, this,
-            &AFMainFrame::qslotStatsOpenTriggered);
+        connect(m_resourceExtensionWidget, &AFResourceExtension::qsignalStatWindowTriggered, this,
+            &AFMainFrame::qslotShowBlockWithProperty);
     }
     else
     {
         ui->label_ResourceExtension->setProperty("resourceExtend", false);
 
-        m_ResourceExtensionWidget->close();
-        m_ResourceExtensionWidget->deleteLater();
+        m_resourceExtensionWidget->close();
+        m_resourceExtensionWidget->deleteLater();
         ui->frame_Bottom->setMinimumHeight(100);
         ui->frame_Bottom->setMaximumHeight(100);
-        setMinimumHeight(708);
+        //setMinimumHeight(708);
         if (!isMaximized())
             resize(QSize(width(), height() - 42));
     }
 
-    style()->unpolish(ui->label_ResourceExtension);
-    style()->polish(ui->label_ResourceExtension);
+    PolishStyleSheet(ui->label_ResourceExtension);
 }
 
 void AFMainFrame::qslotReplayBufferSave()
 {
-    if (!IsReplayBufferActive())
+    if (!AFOutputUtil::IsReplayBufferActive())
         return;
 
-    calldata_t cd = { 0 };
-    proc_handler_t* ph = obs_output_get_proc_handler(m_outputHandlers[0].second->replayBuffer);
-    proc_handler_call(ph, "save", &cd);
-    calldata_free(&cd);
+    AFOutputUtil::SaveReplayBuffer();
 }
+
 void AFMainFrame::qslotReplayBufferSaved()
 {
-    if (!IsReplayBufferActive())
+    if (!AFOutputUtil::IsReplayBufferActive())
         return;
 
-    calldata_t cd = { 0 };
-    proc_handler_t* ph = obs_output_get_proc_handler(m_outputHandlers[0].second->replayBuffer);
-    proc_handler_call(ph, "get_last_replay", &cd);
-    std::string path = calldata_string(&cd, "path");
+    std::string path = AFOutputUtil::SavedReplayBuffer();
     QString msg = QTStr("Basic.StatusBar.ReplayBufferSavedTo").arg(QT_UTF8(path.c_str()));
 
-    //    ShowStatusBarMessage(msg);
-    m_statusbar.qslotClearMessage();
-    m_statusbar.qslotShowMessage(msg, 10000);
-    //lastReplay = path;
-    calldata_free(&cd);
+    //OnEvent(OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED);
 
-    if (api)
-        api->on_event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED);
+    m_pMainOutput->AutoRemux(QT_UTF8(path.c_str()));
 
-    _AutoRemux(QT_UTF8(path.c_str()));
+    ShowSystemAlert(msg, "", AFQSystemAlert::AlertIcon::Success);
 
-    AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
-                               "", msg, false, true);
-}
-
-void AFMainFrame::qslotAddSourceMenu()
-{
-    AFQAddSourceMenuButton* button = qobject_cast<AFQAddSourceMenuButton*>(sender());
-
-    QString id = button->GetSourceId();
-
-    if (0 == id.compare("scene")) {
-        ShowSceneSourceSelectList();
-        return;
-    }
-
-    OBSSource newSource;
-    QString displayText = AFSourceUtil::GetPlaceHodlerText(id.toStdString().c_str());
-    if (!AFSourceUtil::AddNewSource(this, id.toStdString().c_str(), displayText.toStdString().c_str(), true, newSource))
-        return;
-
-    if (AFSourceUtil::ShouldShowProperties(newSource))
-        CreatePropertiesPopup(newSource);
-}
-
-void AFMainFrame::qslotShowSelectSourcePopup()
-{
-    AFQSelectSourceDialog sourceSelect(nullptr);
-    setCenterPositionNotUseParent(&sourceSelect, this);
-
-    if (sourceSelect.exec() != QDialog::DialogCode::Accepted)
-        return;
-
-    QString id = sourceSelect.m_sourceId;
-    if (0 == id.compare("scene")) {
-        ShowSceneSourceSelectList();
-        return;
-    }
-
-    OBSSource newSource;
-    QString displayText = AFSourceUtil::GetPlaceHodlerText(id.toStdString().c_str());
-    if (!AFSourceUtil::AddNewSource(this, id.toStdString().c_str(), displayText.toStdString().c_str(), true, newSource))
-        return;
-
-    if (AFSourceUtil::ShouldShowProperties(newSource))
-        CreatePropertiesPopup(newSource);
-}
-
-void AFMainFrame::qslotSceneButtonClicked(OBSScene scene)
-{
-    if (!scene)
-        return;
-
-    obs_source_t* source = obs_scene_get_source(scene);
-
-    AFMainDynamicComposit* dynamicComposit = GetMainWindow();
-    if (!dynamicComposit)
-        return;
-
-    dynamicComposit->SetCurrentScene(source);
-
-}
-
-void AFMainFrame::qslotSceneButtonDoubleClicked(OBSScene scene)
-{
-    if (!scene)
-        return;
-
-    obs_source_t* source = obs_scene_get_source(scene);
-
-    AFMainDynamicComposit* dynamicComposit = GetMainWindow();
-    if (!dynamicComposit)
-        return;
-
-    UNUSED_PARAMETER(scene);
-
-    dynamicComposit->qslotChangeSceneOnDoubleClick();
-}
-
-void AFMainFrame::qslotSceneButtonDotClicked()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    SceneItemVector& sceneItems = sceneContext.GetSceneItemVector();
-    const OBSScene curObsScene = sceneContext.GetCurrOBSScene();
-
-    if (sceneItems.empty())
-        return;
-
-    AFQCustomMenu popup(this);
-
-    QAction* actionSelectSourcePopup = new QAction(Str("AddSource"), this);
-    connect(actionSelectSourcePopup, &QAction::triggered, 
-            this, &AFMainFrame::qslotShowSelectSourcePopup);
-
-    popup.addAction(actionSelectSourcePopup);
-    popup.addSeparator();
-
-    QAction* actionPopupSceneDock = new QAction(Str("Basic.BottomSceneMenu.ShowSceneSourceDock"), this);
-    auto popupSceneDock = [this] {
-        _PopupRequest(true, ENUM_BLOCK_TYPE::SceneSource);
-    };
-    connect(actionPopupSceneDock, &QAction::triggered, popupSceneDock);
-    popup.addAction(actionPopupSceneDock);
-
-    popup.addSeparator();
-
-    popup.exec(QCursor::pos());
+    emit qsignalReplayBufferSaved();
 }
 
 void AFMainFrame::qslotMinimizeWindow()
 {
-    AFCQMainBaseWidget::qslotMinimizeWindow();
-    
-    
-    if (m_BlockPopup != nullptr)
-    {
-        if (m_BlockPopup->isVisible())
-        {
-            m_BlockPopup->hide();
-        }
-    }
+    GetController()->minimizeWindow();
 }
 
 void AFMainFrame::qslotIconActivated(QSystemTrayIcon::ActivationReason reason)
 {	
+    //projector
+    // Refresh projector list
+    /*previewProjector->clear();
+    studioProgramProjector->clear();
+    AddProjectorMenuMonitors(previewProjector, this,
+        &OBSBasic::OpenPreviewProjector);
+    AddProjectorMenuMonitors(studioProgramProjector, this,
+        &OBSBasic::OpenStudioProgramProjector);*/
+
 #ifdef __APPLE__
     UNUSED_PARAMETER(reason);
 #else
     if (reason == QSystemTrayIcon::Trigger) {
-        EnablePreviewDisplay(m_bPreviewEnabled && !isVisible());
+        EnablePreviewDisplay(m_previewEnabled && !isVisible());
         qslotToggleShowHide();
     }
 #endif
@@ -4333,13 +4081,8 @@ void AFMainFrame::qslotIconActivated(QSystemTrayIcon::ActivationReason reason)
 
 void AFMainFrame::qslotSetShowing(bool showing)
 {
-    auto& configMan = AFConfigManager::GetSingletonInstance();
-    auto& localeMan = AFLocaleTextManager::GetSingletonInstance();
-
     if (!showing && isVisible()) {
-        config_set_string(configMan.GetGlobal(), "BasicWindow",
-            "geometry",
-            saveGeometry().toBase64().constData());
+        config_set_string(USERCONFIG, "BasicWindow", "geometry", saveGeometry().toBase64().constData());
 
         /* hide all visible child dialogs */
         /*visDlgPositions.clear();
@@ -4350,11 +4093,11 @@ void AFMainFrame::qslotSetShowing(bool showing)
             }
         }*/
 
-        if (m_qMainShowHideAction)
-            m_qMainShowHideAction->setText(QT_UTF8(localeMan.Str(("Basic.SystemTray.Show"))));
+        if (m_mainShowHideAction)
+            m_mainShowHideAction->setText(QTStr(("Basic.SystemTray.Show")));
         QTimer::singleShot(0, this, &AFMainFrame::hide);
 
-        if (m_bPreviewEnabled)
+        if (m_previewEnabled)
             EnablePreviewDisplay(false);
 
 #ifdef __APPLE__
@@ -4363,11 +4106,11 @@ void AFMainFrame::qslotSetShowing(bool showing)
 
     }
     else if (showing && !isVisible()) {
-        if (m_qMainShowHideAction)
-            m_qMainShowHideAction->setText(QT_UTF8(localeMan.Str(("Basic.SystemTray.Hide"))));
+        if (m_mainShowHideAction)
+            m_mainShowHideAction->setText(QTStr(("Basic.SystemTray.Hide")));
         QTimer::singleShot(0, this, &AFMainFrame::show);
 
-        if (m_bPreviewEnabled)
+        if (m_previewEnabled)
             EnablePreviewDisplay(true);
 
 #ifdef __APPLE__
@@ -4389,9 +4132,7 @@ void AFMainFrame::qslotSetShowing(bool showing)
 
         /* Unminimize window if it was hidden to tray instead of task
          * bar. */
-        bool sysTrayMinimizeToTray = config_get_bool(configMan.GetGlobal(), "BasicWindow",
-            "SysTrayMinimizeToTray");
-
+        bool sysTrayMinimizeToTray = config_get_bool(USERCONFIG, "BasicWindow", "SysTrayMinimizeToTray");
         if (sysTrayMinimizeToTray) {
             Qt::WindowStates state;
             state = windowState() & ~Qt::WindowMinimized;
@@ -4413,663 +4154,364 @@ void AFMainFrame::qslotToggleShowHide()
     qslotSetShowing(!showing);
 }
 
-void AFMainFrame::qslotDisplayStreamStartError()
+void AFMainFrame::SystemTrayNotify(const QString& text, QSystemTrayIcon::MessageIcon n)
 {
+    if (m_trayIcon && m_trayIcon->isVisible() &&
+        QSystemTrayIcon::supportsMessages()) {
+        QSystemTrayIcon::MessageIcon icon =
+            QSystemTrayIcon::MessageIcon(n);
+        m_trayIcon->showMessage("OBS Studio", text, icon, 10000);
+    }
+}
+
+void AFMainFrame::qslotDisplayStreamStartError()
+{ 
     OUTPUT_HANDLER_LIST::iterator outputIter;
-    for (outputIter = m_outputHandlers.begin(); outputIter != m_outputHandlers.end(); ++outputIter) {
+    OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+
+    emit StreamingStopped();
+
+    for (outputIter = outputHandlers.begin(); outputIter != outputHandlers.end(); ++outputIter) {
 
         QString message = !outputIter->second->lastError.empty()
-            ? QTStr(outputIter->second->lastError.c_str())
-            : QTStr("Output.StartFailedGeneric");
-        //
+                            ? QTStr(outputIter->second->lastError.c_str())
+                            : QTStr("Output.StartFailedGeneric");
+
         QMessageBox::critical(this, QTStr("Output.StartStreamFailed"), message);
     }
 
-    if (!IsStreamActive()) {
-        _ChangeStreamState(true, false, "LIVE", 77);
-        ShowSystemAlert(QTStr("Output.StartStreamFailed"));
+    if (!AFOutputUtil::IsStreamActive()) {
+        ChangeStreamStateUI(true, false, "LIVE", 77);
+        ShowSystemAlert(QTStr("Output.StartStreamFailed")); 
     }
 }
 
 void AFMainFrame::qslotTogglePreview()
 {
-    m_bPreviewEnabled = !m_bPreviewEnabled;
-    EnablePreviewDisplay(m_bPreviewEnabled);
+    m_previewEnabled = !m_previewEnabled;
+    EnablePreviewDisplay(m_previewEnabled);
 }
 
 void AFMainFrame::qslotLockPreview()
 {
-    AFBasicPreview* preview = GetMainWindow()->GetMainPreview();
+    CBasicPreview* preview = GetMainWindow()->GetMainPreview();
     if (preview) {
         preview->ToggleLocked();
         ui->action_LockPreview->setChecked(preview->GetLocked());
     }
 }
 
-void AFMainFrame::qslotActionScaleWindow()
+//
+void AFMainFrame::qslotSetCurrentSceneFrontendAPI(OBSSource scene, bool force)
 {
-    GetMainWindow()->GetMainPreview()->SetFixedScaling(false);
-    GetMainWindow()->GetMainPreview()->ResetScrollingOffset();
-    emit GetMainWindow()->GetMainPreview()->qsignalDisplayResized();
+    SetCurrentScene(scene, force);
 }
 
-void AFMainFrame::qslotActionScaleCanvas()
+void AFMainFrame::qslotTransitionStudioModeScene()
 {
-    GetMainWindow()->GetMainPreview()->SetFixedScaling(true);
-    GetMainWindow()->GetMainPreview()->SetScalingLevel(0);
-    emit GetMainWindow()->GetMainPreview()->qsignalDisplayResized();
+    if (m_dynamicCompositMainWindow)
+        m_dynamicCompositMainWindow->TransitionStudioModeScene();
 }
 
-void AFMainFrame::qslotActionScaleOutput()
+void AFMainFrame::qslotStartStreamingFrontendAPI()
 {
-    obs_video_info ovi;
-    obs_get_video_info(&ovi);
-
-    GetMainWindow()->GetMainPreview()->SetFixedScaling(true);
-    float scalingAmount = float(ovi.output_width) / float(ovi.base_width);
-    // log base ZOOM_SENSITIVITY of x = log(x) / log(ZOOM_SENSITIVITY)
-    int32_t approxScalingLevel =
-        int32_t(round(log(scalingAmount) / log(ZOOM_SENSITIVITY)));
-    GetMainWindow()->GetMainPreview()->SetScalingLevel(approxScalingLevel);
-    GetMainWindow()->GetMainPreview()->SetScalingAmount(scalingAmount);
-    emit GetMainWindow()->GetMainPreview()->qsignalDisplayResized();
+    StartStreaming();
 }
 
-void AFMainFrame::qSlotActionCopySource()
+void AFMainFrame::qslotStopStreamingFrontendAPI()
 {
-    m_clipboard.clear();
-
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    AFQSourceListView* sourceListView = sceneContext.GetSourceListViewPtr();
-
-    for (auto& selectedSource : sourceListView->selectionModel()->selectedIndexes()) {
-        OBSSceneItem item = sourceListView->Get(selectedSource.row());
-        if (!item)
-            continue;
-
-        OBSSource source = obs_sceneitem_get_source(item);
-
-        SourceCopyInfo copyInfo;
-        copyInfo.weak_source = OBSGetWeakRef(source);
-        obs_sceneitem_get_info(item, &copyInfo.transform);
-        obs_sceneitem_get_crop(item, &copyInfo.crop);
-        copyInfo.blend_method = obs_sceneitem_get_blending_method(item);
-        copyInfo.blend_mode = obs_sceneitem_get_blending_mode(item);
-        copyInfo.visible = obs_sceneitem_visible(item);
-
-        m_clipboard.push_back(copyInfo);
-    }
-
-    UpdateEditMenu();
+    StopStreaming();
 }
 
-void AFMainFrame::qSlotActionPasteRefSource()
+void AFMainFrame::qslotStartRecordingFrontendAPI()
 {
-	AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-	OBSScene scene = sceneContext.GetCurrOBSScene();
-	OBSSource scene_source = OBSSource(obs_scene_get_source(scene));
-
-	OBSData undo_data = BackupScene(scene_source);
-	m_undo_s.PushDisabled();
-
-	for (size_t i = m_clipboard.size(); i > 0; i--) {
-		SourceCopyInfo& copyInfo = m_clipboard[i - 1];
-
-		OBSSource source = OBSGetStrongRef(copyInfo.weak_source);
-		if (!source)
-			continue;
-
-		const char* name = obs_source_get_name(source);
-
-		/* do not allow duplicate refs of the same group in the same
-		 * scene */
-		if (!!obs_scene_get_group(scene, name)) {
-			continue;
-		}
-
-		AFSourceUtil::SourcePaste(copyInfo, false);
-		//OBSBasicSourceSelect::SourcePaste(copyInfo, false);
-	}
-
-	m_undo_s.PopDisabled();
-
-	QString action_name = QTStr("Undo.PasteSourceRef");
-	const char* scene_name = obs_source_get_name(scene_source);
-
-	OBSData redo_data = BackupScene(scene_source);
-	CreateSceneUndoRedoAction(action_name.arg(scene_name), undo_data, redo_data);
+    StartRecording();
 }
 
-void AFMainFrame::qSlotActionPasteDupSource()
+void AFMainFrame::qslotStopRecordingFrontendAPI()
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    OBSScene scene = sceneContext.GetCurrOBSScene();
-    OBSSource scene_source = OBSSource(obs_scene_get_source(scene));
-
-    OBSData undo_data = BackupScene(scene_source);
-    m_undo_s.PushDisabled();
-
-
-    for (size_t i = m_clipboard.size(); i > 0; i--) {
-        SourceCopyInfo& copyInfo = m_clipboard[i - 1];
-        AFSourceUtil::SourcePaste(copyInfo, true);
-    }
-
-    m_undo_s.PopDisabled();
-
-    QString action_name = QTStr("Undo.PasteSource");
-    const char* scene_name = obs_source_get_name(scene_source);
-
-    OBSData redo_data = BackupScene(scene_source);
-    CreateSceneUndoRedoAction(action_name.arg(scene_name), undo_data, redo_data);
+    StopRecording();
 }
 
-void AFMainFrame::qSlotActionRenameSource()
+void AFMainFrame::qslotToggleMainMicFrontendAPI()
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    AFQSourceListView* sourceListView = sceneContext.GetSourceListViewPtr();
-    if (!sourceListView)
+    if (m_pMainAudioSource)
+        m_pMainAudioSource->qslotSetMicMute();
+}
+
+void AFMainFrame::qslotToggleMainVolFrontendAPI()
+{
+    if (m_pMainAudioSource)
+        m_pMainAudioSource->qslotSetVolumeMute();
+}
+
+void AFMainFrame::qslotToggleSOOPChannelSidebarFrontendAPI()
+{
+    if (m_leftNavigationBar)
+        m_leftNavigationBar->SelectChannelSlide(PLATFORM_SOOP);
+}
+
+void AFMainFrame::qslotToggleSOOPLnbMenuFrontendAPI(int menuType)
+{
+    auto& authManager = AUTH_CONTEXT;
+    if (!authManager.IsSoopRegistered())
         return;
 
-    int idx = sourceListView->GetTopSelectedSourceItem();
-    sourceListView->Edit(idx);
-}
+    if (menuType == 99) {
 
-void AFMainFrame::qSlotActionRemoveSource()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    AFSourceUtil::RemoveSourceItems(sceneContext.GetCurrOBSScene());
-}
-
-void AFMainFrame::qSlotActionEditTransform()
-{
-    const auto item = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    if (!item)
-        return;
-
-    CreateEditTransformPopup(item);
-}
-
-void AFMainFrame::qSlotActionCopyTransform()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    const auto item = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    if (!item)
-        return;
-
-    obs_sceneitem_get_info(item, &sceneContext.m_copiedTransformInfo);
-    obs_sceneitem_get_crop(item, &sceneContext.m_copiedCropInfo);
-
-    ui->action_PasteTransform->setEnabled(true);
-    m_hasCopiedTransform = true;
-}
-
-void undo_redo(const std::string& data)
-{
-    OBSDataAutoRelease dat = obs_data_create_from_json(data.c_str());
-    OBSSourceAutoRelease source = obs_get_source_by_uuid(obs_data_get_string(dat, "scene_uuid"));
-    AFMainFrame* main = App()->GetMainView();
-    main->GetMainWindow()->SetCurrentScene(source.Get(), true);
-    obs_scene_load_transform_states(data.c_str());
-}
-void AFMainFrame::qSlotActionPasteTransform()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    OBSScene curScene = sceneContext.GetCurrOBSScene();
-
-    OBSDataAutoRelease wrapper = obs_scene_save_transform_states(curScene, false);
-    auto func = [](obs_scene_t*, obs_sceneitem_t* item, void* data) {
-        if (!obs_sceneitem_selected(item))
-            return true;
-
-        AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-        obs_sceneitem_defer_update_begin(item);
-        obs_sceneitem_set_info(item, &sceneContext.m_copiedTransformInfo);
-        obs_sceneitem_set_crop(item, &sceneContext.m_copiedCropInfo);
-        obs_sceneitem_defer_update_end(item);
-
-        return true;
-    };
-
-    obs_scene_enum_items(curScene, func, this);
-
-    OBSDataAutoRelease rwrapper = obs_scene_save_transform_states(curScene, false);
-    std::string undo_data(obs_data_get_json(wrapper));
-    std::string redo_data(obs_data_get_json(rwrapper));
-    OBSSource curSource = sceneContext.GetCurrOBSSceneSource();
-    m_undo_s.AddAction(QTStr("Undo.Transform.Paste").arg(obs_source_get_name(curSource)),
-                       undo_redo, undo_redo, undo_data, redo_data);
-}
-
-static bool reset_tr(obs_scene_t* /* scene */, obs_sceneitem_t* item, void*)
-{
-    if (obs_sceneitem_is_group(item))
-        obs_sceneitem_group_enum_items(item, reset_tr, nullptr);
-    if (!obs_sceneitem_selected(item))
-        return true;
-    if (obs_sceneitem_locked(item))
-        return true;
-
-    obs_sceneitem_defer_update_begin(item);
-
-    obs_transform_info info;
-    vec2_set(&info.pos, 0.0f, 0.0f);
-    vec2_set(&info.scale, 1.0f, 1.0f);
-    info.rot = 0.0f;
-    info.alignment = OBS_ALIGN_TOP | OBS_ALIGN_LEFT;
-    info.bounds_type = OBS_BOUNDS_NONE;
-    info.bounds_alignment = OBS_ALIGN_CENTER;
-    vec2_set(&info.bounds, 0.0f, 0.0f);
-    obs_sceneitem_set_info(item, &info);
-
-    obs_sceneitem_crop crop = {};
-    obs_sceneitem_set_crop(item, &crop);
-
-    obs_sceneitem_defer_update_end(item);
-
-    return true;
-}
-
-
-void AFMainFrame::qSlotActionResetTransform()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    OBSScene curScene = sceneContext.GetCurrOBSScene();
-    OBSDataAutoRelease wrapper = obs_scene_save_transform_states(curScene, false);
-    obs_scene_enum_items(sceneContext.GetCurrOBSScene(), reset_tr, nullptr);
-    OBSDataAutoRelease rwrapper = obs_scene_save_transform_states(curScene, false);
-
-    std::string undo_data(obs_data_get_json(wrapper));
-    std::string redo_data(obs_data_get_json(rwrapper));
-    OBSSource curSource = sceneContext.GetCurrOBSSceneSource();
-    m_undo_s.AddAction(QTStr("Undo.Transform.Reset").arg(obs_source_get_name(curSource)),
-                       undo_redo, undo_redo, undo_data, redo_data);
-
-    obs_scene_enum_items(sceneContext.GetCurrOBSScene(), reset_tr, nullptr);
-}
-
-void AFMainFrame::qSlotActionRotate90CW()
-{
-    AFSourceUtil::RotateSourceFromMenu(90.0f);
-}
-
-void AFMainFrame::qSlotActionRotate90CCW()
-{
-    AFSourceUtil::RotateSourceFromMenu(-90.0f);
-}
-
-void AFMainFrame::qSlotActionRotate180()
-{
-    AFSourceUtil::RotateSourceFromMenu(180.0f);
-}
-
-void AFMainFrame::qSlotFlipHorizontal()
-{
-    AFSourceUtil::FlipSourceFromMenu(-1.0f, 1.0f);
-}
-
-void AFMainFrame::qSlotFlipVertical()
-{
-    AFSourceUtil::FlipSourceFromMenu(1.0f, -1.0f);
-}
-
-void AFMainFrame::qSlotFitToScreen()
-{
-    AFSourceUtil::FitSourceToScreenFromMenu(OBS_BOUNDS_SCALE_INNER);
-}
-
-void AFMainFrame::qSlotStretchToScreen()
-{
-    AFSourceUtil::FitSourceToScreenFromMenu(OBS_BOUNDS_STRETCH);
-}
-
-void AFMainFrame::qSlotCenterToScreen()
-{
-    AFSourceUtil::SetCenterToScreenFromMenu(CenterType::Scene);
-}
-
-void AFMainFrame::qSlotVerticalCenter()
-{
-    AFSourceUtil::SetCenterToScreenFromMenu(CenterType::Vertical);
-}
-
-void AFMainFrame::qSlotHorizontalCenter()
-{
-    AFSourceUtil::SetCenterToScreenFromMenu(CenterType::Horizontal);
-}
-
-void AFMainFrame::qSlotActionShowInteractionPopup()
-{
-    const auto item = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    if (!item)
-        return;
-
-    OBSSource source = obs_sceneitem_get_source(item);
-
-    if (source)
-        GetMainWindow()->ShowBrowserInteractionPopup(source);
-}
-
-void AFMainFrame::qSlotActionShowProperties()
-{
-    const auto item = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    if (!item)
-        return;
-
-    obs_source_t* source = obs_sceneitem_get_source(item);
-    if (obs_source_configurable(source)) {
-        App()->GetMainView()->CreatePropertiesPopup(source);
-    }
-}
-
-void AFMainFrame::qSlotOpenSourceFilters()
-{
-    OBSSceneItem item = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    OBSSource source = obs_sceneitem_get_source(item);
-
-    CreateFiltersWindow(source);
-}
-
-void AFMainFrame::qSlotCopySourceFilters()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    OBSSceneItem item = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    if (!item)
-        return;
-
-    OBSSource source = obs_sceneitem_get_source(item);
-
-    sceneContext.m_obsCopyFiltersSource = obs_source_get_weak_source(source);
-
-    ui->action_PasteFilters->setEnabled(true);
-}
-
-void AFMainFrame::qSlotPasteSourceFilters()
-{
-    AFLocaleTextManager& locale  = AFLocaleTextManager::GetSingletonInstance();
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    OBSSourceAutoRelease source =
-        obs_weak_source_get_source(sceneContext.m_obsCopyFiltersSource);
-
-    OBSSceneItem sceneItem = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    if (!sceneItem)
-        return;
-
-    OBSSource dstSource = obs_sceneitem_get_source(sceneItem);
-
-    if (source == dstSource)
-        return;
-
-    OBSDataArrayAutoRelease undo_array = obs_source_backup_filters(dstSource);
-    obs_source_copy_filters(dstSource, source);
-    OBSDataArrayAutoRelease redo_array = obs_source_backup_filters(dstSource);
-
-    const char* srcName = obs_source_get_name(source);
-    const char* dstName = obs_source_get_name(dstSource);
-    QString text = locale.Str("Undo.Filters.Paste.Multiple");
-    text = text.arg(srcName, dstName);
-
-    CreateFilterPasteUndoRedoAction(text, dstSource, undo_array, redo_array);
-}
-
-static void ConfirmColor(AFQSourceListView* sourceList, const QColor& color,
-                         QModelIndexList selectedItems)
-{
-    for (int x = 0; x < selectedItems.count(); x++) {
-        AFQSourceViewItem* sourceItem =
-            sourceList->GetItemWidget(selectedItems[x].row());
-
-        sourceItem->SetBackgroundColor(color);
-
-        OBSSceneItem sceneItem = sourceList->Get(selectedItems[x].row());
-        OBSDataAutoRelease privData =
-                    obs_sceneitem_get_private_settings(sceneItem);
-        obs_data_set_int(privData, "color-preset", 1);
-        obs_data_set_string(privData, "color",
-                            QT_TO_UTF8(color.name(QColor::HexArgb)));
-    }
-}
-
-void AFMainFrame::qSlotSourceListItemColorChange()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    AFQSourceListView* sourceList = sceneContext.GetSourceListViewPtr();
-    QModelIndexList selectedItems =
-                    sourceList->selectionModel()->selectedIndexes();
-
-    QAction* action = qobject_cast<QAction*>(sender());
-    QPushButton* colorButton = qobject_cast<QPushButton*>(sender());
-   
-    if (selectedItems.count() == 0)
-        return;
-
-    if (colorButton) {
-        QFrame* colorButtonFrame = qobject_cast<QFrame*>(colorButton->parentWidget());
-
-        int preset = colorButton->property("bgColor").value<int>();
-        for (int x = 0; x < selectedItems.count(); x++) {
-            AFQSourceViewItem* sourceItem = sourceList->GetItemWidget(selectedItems[x].row());
-            
-            QColor color = _GetSourceListBackgroundColor(preset);
-            sourceItem->SetBackgroundColor(color);
-
-            OBSSceneItem sceneItem =
-                sourceList->Get(selectedItems[x].row());
-            OBSDataAutoRelease privData =
-                obs_sceneitem_get_private_settings(sceneItem);
-            obs_data_set_int(privData, "color-preset", preset + 1);
-            obs_data_set_string(privData, "color", "");
+        if (CheckSplitVodAvailable()) {
+            m_blockManager->ShowVodSplit(this);
         }
-
-        for (int i = 1; i < 9; i++) {
-            std::stringstream button;
-            button << "framePreset" << i;
-            QFrame* cButtonFrame =
-                colorButton->parentWidget()->parentWidget()
-                        ->findChild<QFrame*>(
-                                button.str().c_str());
-            cButtonFrame->setStyleSheet("QFrame { border: 1px solid black; border-radius:6px; }");
-        }
-        colorButtonFrame->setStyleSheet("QFrame { border: 1px solid #D9D9D9; border-radius:6px; }");
-    }
-    else if (action) {
-        int preset = action->property("bgColor").value<int>();
-		if (1 == preset) {
-			OBSSceneItem sceneItem = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-			if (!sceneItem)
-				return;
-
-            AFQSourceViewItem* sourceItem =
-                               sourceList->GetItemWidgetFromSceneItem(sceneItem);
-
-            OBSDataAutoRelease curPrivData =
-                               obs_sceneitem_get_private_settings(sceneItem);
-
-            int oldPreset =
-                obs_data_get_int(curPrivData, "color-preset");
-
-            const QString oldSheet = sourceItem->styleSheet();
-            const QColor  oldColor = sourceItem->GetBackgroundColor();
-
-            auto liveChangeColor = [=](const QColor& color) {
-                if (color.isValid()) {
-                    sourceItem->SetBackgroundColor(color);
-                }
-            };
-
-            auto changedColor = [=](const QColor& color) {
-                if (color.isValid()) {
-                    ConfirmColor(sourceList, color,
-                                 selectedItems);
-                }
-            };
-
-            auto rejected = [=]() {
-                if (oldPreset == 1) {
-                    sourceItem->SetBackgroundColor(oldColor);
-                }
-                else if (oldPreset == 0) {
-                    sourceItem->SetBackgroundColor(QColor(24, 27, 32, 84));
-                }
-                else {
-                    QColor color = _GetSourceListBackgroundColor(oldPreset - 1);
-                    sourceItem->SetBackgroundColor(color);
-                }
-            };
-
-            QColorDialog::ColorDialogOptions options =
-                QColorDialog::ShowAlphaChannel;
-
-#ifdef _WIN32
-            AFQCustomColorDialog* colorDialog = new AFQCustomColorDialog(oldColor,
-                                                        Str("CustomColorDialog.title"), this);
-            colorDialog->setOptions(options);
-
-            connect(colorDialog, &AFQCustomColorDialog::qSignalCurrentColorChanged,
-                    liveChangeColor);
-
-            connect(colorDialog, &AFQCustomColorDialog::qSignalColorSelected,
-                    changedColor);
-
-            connect(colorDialog, &AFQCustomColorDialog::rejected, rejected);
-
-            colorDialog->open();
-#else
-            QColorDialog* colorDialog = new QColorDialog(this);
-            colorDialog->setOptions(options);
-            colorDialog->setCurrentColor(oldColor);
-            connect(colorDialog, &QColorDialog::currentColorChanged,
-                liveChangeColor);
-            connect(colorDialog, &QColorDialog::colorSelected,
-                changedColor);
-            connect(colorDialog, &QColorDialog::rejected, rejected);
-            colorDialog->open();
-#endif
-		}
         else {
-            for (int x = 0; x < selectedItems.count(); x++) {
-                AFQSourceViewItem* sourceItem 
-                            = sourceList->GetItemWidget(selectedItems[x].row());
-
-                QColor color(24, 27, 32, 84);
-                sourceItem->SetBackgroundColor(color);
-
-                OBSSceneItem sceneItem = sourceList->Get(selectedItems[x].row());
-                OBSDataAutoRelease privData =
-                                obs_sceneitem_get_private_settings(
-                                sceneItem);
-                obs_data_set_int(privData, "color-preset",
-                                 preset);
-                obs_data_set_string(privData, "color", "");
-            }
+            AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this, "", QTStr("SplitVod.Condition.Info"), false, true);
         }
+        return;
+    }
+    else if (menuType != -1)
+    {
+        AFQBorderPopupBaseWidget* popup = nullptr;
+        if (m_blockManager->GetPopup((ENUM_WINDOW_TYPE)menuType, popup))
+        {
+            m_blockManager->qslotClosePopup(menuType);
+            return;
+        }
+        bool success = m_blockManager->MakePopup(menuType, popup);
     }
 }
 
-void AFMainFrame::qSlotResizeOutputSizeOfSource()
+#ifdef __APPLE__
+void AFMainFrame::qslotMacSwitchToDock(int windowType, int posX, int posY)
 {
-    auto& confManager = AFConfigManager::GetSingletonInstance();
+    AFQCustomMenu menu(this);
+    menu.addAction(QTStr("Block.Title.ToDock"), this, [this, windowType](){
+        this->m_blockManager->qslotSwitchBlockWindowType(false, windowType);
+    });
 
-    if (obs_video_active())
-        return;
-
-    int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, 
-                                            this, "",
-                                            QString(Str("ResizeOutputSizeOfSource.Text")) + "\n\n" +
-                                            QString(Str("ResizeOutputSizeOfSource.Continue")));
-
-    if (!result)
-        return;
-
-    OBSSceneItem sceneItem = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    OBSSource source = obs_sceneitem_get_source(sceneItem);
-
-    int width = obs_source_get_width(source);
-    int height = obs_source_get_height(source);
-  
-    config_set_uint(confManager.GetBasic(), "Video", "BaseCX", width);
-    config_set_uint(confManager.GetBasic(), "Video", "BaseCY", height);
-    config_set_uint(confManager.GetBasic(), "Video", "OutputCX", width);
-    config_set_uint(confManager.GetBasic(), "Video", "OutputCY", height);
-
-    AFVideoUtil* videoUtil = GetMainWindow()->GetVideoUtil();
-    videoUtil->ResetVideo();
-    ResetOutputs();
-
-    config_save_safe(confManager.GetBasic(), "tmp", nullptr);
-    qSlotFitToScreen();
+    QPoint globalPos(posX,posY);
+    menu.exec(globalPos);
 }
-
-void AFMainFrame::qSlotSetScaleFilter()
-{
-    QAction* action = reinterpret_cast<QAction*>(sender());
-    obs_scale_type mode = (obs_scale_type)action->property("mode").toInt();
-    OBSSceneItem sceneItem = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-
-    obs_sceneitem_set_scale_filter(sceneItem, mode);
-}
-
-void AFMainFrame::qSlotBlendingMethod()
-{
-    QAction* action = reinterpret_cast<QAction*>(sender());
-    obs_blending_method method =
-        (obs_blending_method)action->property("method").toInt();
-    OBSSceneItem sceneItem = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-
-    obs_sceneitem_set_blending_method(sceneItem, method);
-}
-
-void AFMainFrame::qSlotBlendingMode()
-{
-    QAction* action = reinterpret_cast<QAction*>(sender());
-    obs_blending_type mode =
-        (obs_blending_type)action->property("mode").toInt();
-    OBSSceneItem sceneItem = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-
-    obs_sceneitem_set_blending_mode(sceneItem, mode);
-}
-
-void AFMainFrame::qSlotSetDeinterlaceingMode()
-{
-    QAction* action = reinterpret_cast<QAction*>(sender());
-    obs_deinterlace_mode mode =
-        (obs_deinterlace_mode)action->property("mode").toInt();
-    OBSSceneItem sceneItem = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    obs_source_t* source = obs_sceneitem_get_source(sceneItem);
-
-    obs_source_set_deinterlace_mode(source, mode);
-}
-
-void AFMainFrame::qSlotSetDeinterlacingOrder()
-{
-    QAction* action = reinterpret_cast<QAction*>(sender());
-    obs_deinterlace_field_order order =
-        (obs_deinterlace_field_order)action->property("order").toInt();
-    OBSSceneItem sceneItem = GetMainWindow()->GetSceneSourceDock()->GetCurrentSceneItem();
-    obs_source_t* source = obs_sceneitem_get_source(sceneItem);
-
-    obs_source_set_deinterlace_field_order(source, order);
-}
-
+#endif
 void AFMainFrame::qslotProcessHotkey(obs_hotkey_id id, bool pressed)
 {
     obs_hotkey_trigger_routed_callback(id, pressed);
 }
+
+void AFMainFrame::qslotUpdateContextToolBar(bool force)
+{
+    m_dynamicCompositMainWindow->UpdateSourceToolBar(force);
+}
+
+void AFMainFrame::qslotClearBrowserInteractionPopup(OBSSource source)
+{
+    MAP_BROWSER_INTERACTION::iterator it = m_mapBrowserInteraction.find(source);
+
+    if (m_mapBrowserInteraction.end() == it)
+        return;
+
+    AFQBrowserInteraction* interaction = (*it);
+    if (!interaction)
+        return;
+
+    interaction->close();
+    interaction = nullptr;
+
+    m_mapBrowserInteraction.remove(source);
+}
+
+void AFMainFrame::qslotSplitFilterActivated()
+{
+    if (m_dynamicCompositMainWindow)
+        m_dynamicCompositMainWindow->RefreshToolBarSplitFilterToggleButton();
+}
+
+void AFMainFrame::qslotUninstallFreecshotAccept()
+{
+	QString intallPath;
+	if (!GetRegKeyValue(CurrentUserRegKey, "SOFTWARE\\soop\\Studio2", "Path", intallPath))
+	{
+		AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this, "", QTStr("Freecshot.UnInstall.Message_3"));
+		return;
+	}
+
+	QString unInstallPath = QString("%1\\UnInstall2.exe").arg(intallPath);
+	bool exists = os_file_exists(unInstallPath.toStdString().c_str());
+	if (false == exists)
+	{
+		AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this, "", QTStr("Freecshot.UnInstall.Message_3"));
+		return;
+	}
+    
+    // backup freecshot settings
+    QString appDataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir dir(appDataPath);
+    dir.cdUp();
+
+    QString freecshotSettingDataPath = dir.absolutePath() + "/SOOP/freecshot/settings";
+    QString backupPath = appDataPath + "/freecshot_backup";
+    if (QDir(freecshotSettingDataPath).exists()) {
+        QDir().mkpath(backupPath);
+
+        QDir srcDir(freecshotSettingDataPath);
+        QStringList entries = srcDir.entryList(QDir::NoDotAndDotDot | QDir::AllEntries);
+
+        for (const QString& entry : entries) {
+            QString srcFilePath = srcDir.absoluteFilePath(entry);
+            QString destFilePath = backupPath + "/" + entry;
+
+            QFileInfo info(srcFilePath);
+            if (info.isDir()) {
+                QDir().mkpath(destFilePath);
+                QDir subDir(srcFilePath);
+                QStringList subEntries = subDir.entryList(QDir::NoDotAndDotDot | QDir::AllEntries);
+                for (const QString& subEntry : subEntries) {
+                    QFile::copy(subDir.absoluteFilePath(subEntry),
+                        destFilePath + "/" + subEntry);
+                }
+            }
+            else {
+                QFile::copy(srcFilePath, destFilePath);
+            }
+        }
+    }
+
+    // uninstall freecshot
+	UninstallResult ret = RunUninstallerWithUAC(unInstallPath);
+	if (UninstallResult::Succeeded == ret)
+	{
+		AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+                                   QTStr("Freecshot.UnInstall.Title_2"), QTStr("Freecshot.UnInstall.Message_2"));
+	}
+}
+
+void AFMainFrame::qslotCheckVersionLimit()
+{
+    if(!m_VersionLimit)
+    {
+        m_VersionLimit = new QNetworkAccessManager(this);
+
+        connect(m_VersionLimit, &QNetworkAccessManager::finished,
+            this, &AFMainFrame::qslotGetVersionLimit);
+
+    }
+
+    QUrl url;
+    QNetworkRequest request(url);
+    request.setTransferTimeout(2000);
+
+    m_VersionLimit->get(request);
+}
+
+void AFMainFrame::qslotGetVersionLimit(QNetworkReply* reply)
+{
+    bool restartNeeded = false;
+
+    do
+    {
+        if(reply->error() == QNetworkReply::NoError) {
+            QStringList formats = {"yyyy/MM/dd", "yyyy/M/d", "yyyy-MM-dd", "yy-MM-dd", "yy-M-d"};
+
+            QByteArray data = reply->readAll();
+            QString versionInfo = QString::fromUtf8(data);
+            QString rawData = versionInfo.trimmed();
+            QDate serverDate;
+
+            for(const QString& fmt : formats) {
+                serverDate = QDate::fromString(rawData, fmt);
+                if(serverDate.isValid()) break;
+            }
+
+            if(!serverDate.isValid())
+                break;
+
+
+            QString appDir = QCoreApplication::applicationDirPath();
+            QDir dir(appDir);
+
+            dir.cdUp();
+            dir.cdUp();
+            dir.cdUp();
+
+            QString updateText = dir.absoluteFilePath("UpdateTime_soop.txt");
+            QString filePath = QDir::toNativeSeparators(updateText);
+
+            QFile file(filePath);
+
+            if(file.exists()) {
+                if(file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                    QTextStream in(&file);
+                    QString fullText = in.readAll().trimmed();
+                    file.close();
+
+                    QString dateOnly = fullText.section(' ', 0, 0);
+
+                    QDate fileDate;
+                    for(const QString& fmt : formats) {
+                        fileDate = QDate::fromString(dateOnly, fmt);
+                        if(fileDate.isValid()) break;
+                    }
+                    if(!fileDate.isValid())
+                        break;
+
+                    if(fileDate < serverDate) {
+                        restartNeeded = true;
+                    }
+                }
+            }
+        }
+    } while(false);
+
+
+    reply->deleteLater();
+
+    if(m_VersionLimit) {
+        m_VersionLimit->deleteLater();
+        m_VersionLimit = nullptr;
+    }
+
+
+    if(restartNeeded)
+    {
+        bool result = AFQMessageBox::ShowMessageWithButtonText(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+                                                               QT_UTF8(""),
+                                                               QTStr("Basic.Version.Limit"), QTStr("Basic.Restart"));
+        if(result)
+        {
+            g_bRestart = true;
+            m_restartWidthoutConfirm = true;
+            _RestartApp();
+        } else
+        {
+            ui->pushButton_Broad->setChecked(false);
+            m_checkBroadStartAPI = false;
+            m_CheckBroadStartAPITimer->stop();
+        }
+    } else
+    {
+        SOOP_API_HANDLER->getAPIfromId(GET_CATEGORY_LIST, {}, this, "qslotCategoryCheckAPIResponse");
+    }
+}
+
+void AFMainFrame::qslotScreenShot(OBSSource source)
+{
+    MAIN_SCENESOURCE->Screenshot(source);
+}
+
 void AFMainFrame::qSlotUndo()
 {
+#pragma region _SOOP_BREAKTIME
+    if(m_breakTimeManager->IsActive())
+        return;
+#pragma endregion
+
     m_undo_s.Undo();
 }
 void AFMainFrame::qSlotRedo()
 {
+#pragma region _SOOP_BREAKTIME
+    if(m_breakTimeManager->IsActive())
+        return;
+#pragma endregion
+
     m_undo_s.Redo();
 }
 
@@ -5083,68 +4525,129 @@ void AFMainFrame::closeEvent(QCloseEvent* event)
         event->ignore();
         return;
     }*/
-    config_t* configGlobalFile = AFConfigManager::GetSingletonInstance().GetGlobal();
 
-    bool confirmOnExit =
-        config_get_bool(configGlobalFile, "General", "ConfirmOnExit");
-
-    if (confirmOnExit && IsActive() &&
-        !m_bClearingFailed)
+    auto& auth = AUTH_CONTEXT;
+    //
+    if (m_normalInit)
     {
-        //System Tray Disable - MainView can't be hidden
-        //qslotSetShowing(true);
-
-        auto& localeMan = AFLocaleTextManager::GetSingletonInstance();
-        bool result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
-            this, "", QT_UTF8(localeMan.Str("ConfirmExit.Text")));
-        if (result == QDialog::Rejected)
+        if (AFOutputUtil::IsStreamActive() &&
+            !m_clearingFailed)
         {
-            event->ignore();
-            g_bRestart = false;
-            return;
+            int nBreaktimeCheck = 0;
+            if (m_breakTimeManager->IsActive())
+            {
+                nBreaktimeCheck = AFQMessageBox::ShowMessageWithButtonText(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                                                                           this, QT_UTF8(""),
+                                                                           QTStr("breaktime.broad.end"), QTStr("breaktime.broad.end.btn"));
+                if (nBreaktimeCheck != 1)
+                {
+                    event->ignore();
+                    g_bRestart = false;
+                    m_logOut = false;
+                    return;
+                }
+            }
+
+            //System Tray Disable - MainView can't be hidden
+            //qslotSetShowing(true);
+            if (auth.IsSoopStreaming())
+            {
+                AFQEndBroadDialog* endBroad = new AFQEndBroadDialog(this, true);
+
+                bool splitAvailable = CheckSplitVodAvailable();
+
+                endBroad->EndBroadInfoInit(splitAvailable);
+                endBroad->deleteLater();
+
+                if (endBroad->exec() == QDialog::Rejected)
+                {
+                    event->ignore();
+                    g_bRestart = false;
+                    m_logOut = false;
+
+                    endBroad->close();
+                    return;
+                }
+
+                if (nBreaktimeCheck) {
+                    QEventLoop loop;
+                    QMetaObject::Connection c1, c2;
+
+                    QTimer timer;
+                    timer.setSingleShot(true);
+                    timer.start(3000);
+
+                    c1 = connect(&BREAKTIME_MANAGER, &BreaktimeManager::signalStopApisDone, &loop, [&loop](bool) { loop.quit(); });
+
+                    c2 = connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+
+                    m_breakTimeManager->Stop(true);
+
+                    loop.exec();
+
+                    disconnect(c1);
+                    disconnect(c2);
+                }
+              
+                endBroad->close();
+            }
+            else
+            {
+                bool warnStopBroad = config_get_bool(USERCONFIG, "BasicWindow", "WarnBeforeStoppingStream");
+                if (warnStopBroad) {
+                    int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+                        "",
+                        QTStr("Output.EndStudioOnBroad.Info"));
+
+                    if (result == QDialog::Rejected) {
+                        event->ignore();
+                        g_bRestart = false;
+                        m_logOut = false;
+                        return;
+                    }
+                }
+            }
+            //
+            int nMinsimCheckCnt = config_get_int(USERCONFIG, "SARSA", "UseMinsimCheckCnt");
+            if (nMinsimCheckCnt > 0) {
+                auto broadInfo = auth.GetSoopBroadInfo();
+                
+                auto endTime = std::chrono::steady_clock::now();
+                auto startTime = auth.GetMinsimCheckStartTime();
+                if (startTime != std::chrono::steady_clock::time_point{}) {
+                    auth.InitMinsimCheckStartTime();
+                }
+            }
         }
+        else if (AFOutputUtil::IsRecordingActive() && !m_clearingFailed)
+        {
+            bool warnStopRecord = config_get_bool(USERCONFIG, "BasicWindow", "WarnBeforeStoppingRecord");
+            if (warnStopRecord) {
+                int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+                    "",
+                    QTStr("ConfirmExit.Text"));
 
+                if (result == QDialog::Rejected) {
+                    event->ignore();
+                    g_bRestart = false;
+                    m_logOut = false;
+                    return;
+                }
+            }
+        }
     }
 
-    //Save chat
+    if (m_AddStreamWidget)
+        m_AddStreamWidget->close(); //delete on AFMainFrame::AddStreamAccount
 
-    if (m_GlobalSoopChatWidget)
-    {
-        std::string check = QString("%1Popup").arg("Chat").toStdString();
+    BroadInfoTimerStop();
 
-        config_set_bool(configGlobalFile,
-            "BasicWindow", check.c_str(), m_GlobalSoopChatWidget->isVisible());
-
-        config_set_string(configGlobalFile, "BasicWindow", "Chat",
-            m_GlobalSoopChatWidget->saveGeometry().toBase64().constData());
-    }
-
-
-    if (m_GlobalSoopNewsfeedWidget)
-    {
-        std::string check = QString("%1Popup").arg("Dashboard").toStdString();
-        config_set_bool(configGlobalFile,
-            "BasicWindow", check.c_str(), m_GlobalSoopNewsfeedWidget->isVisible());
-
-        config_set_string(configGlobalFile, "BasicWindow", "Dashboard",
-            m_GlobalSoopNewsfeedWidget->saveGeometry().toBase64().constData());
-    }
-
-
-    if(m_GlobalSoopChatWidget)
-        m_GlobalSoopChatWidget->close();
-
-    if (m_GlobalSoopNewsfeedWidget)
-        m_GlobalSoopNewsfeedWidget->close();
-
-    auto& authManager = AFAuthManager::GetSingletonInstance();
-    
-    int cntOfAccount = authManager.GetCntChannel();
+    int cntOfAccount = auth.GetCntChannel();
     for (int idx = 0; idx < cntOfAccount; idx++)
     {
         AFChannelData* tmpChannel = nullptr;
-        authManager.GetChannelData(idx, tmpChannel);
-        
+        auth.GetChannelData(idx, tmpChannel);
+
         if (tmpChannel != nullptr)
         {
             QPixmap* delObj = (QPixmap*)tmpChannel->pObjQtPixmap;
@@ -5154,10 +4657,10 @@ void AFMainFrame::closeEvent(QCloseEvent* event)
             }
         }
     }
-    
+
     AFChannelData* tmpMainChannel = nullptr;
-    authManager.GetMainChannelData(tmpMainChannel);
-    
+    auth.GetMainChannelData(tmpMainChannel);
+
     if (tmpMainChannel != nullptr)
     {
         QPixmap* delObj = (QPixmap*)tmpMainChannel->pObjQtPixmap;
@@ -5167,43 +4670,29 @@ void AFMainFrame::closeEvent(QCloseEvent* event)
         }
     }
     
-    std::vector<void*>* pVecDeferrdDel = authManager.GetContainerDeferrdDelObj();
+    std::vector<void*>* pVecDeferrdDel = AUTH_CONTEXT.GetContainerDeferrdDelObj();
     for(void* node : *pVecDeferrdDel)
     {
         QPixmap* delObj = (QPixmap*)node;
         delete delObj;
     }
     pVecDeferrdDel->clear();
-        
-        
-    auto& statusLogManager = AFStatusLogManager::GetSingletonInstance();
-    statusLogManager.SendLogProgramStart(false);
 
-    if (m_VolumeSliderFrame)
-    {
-        m_VolumeSliderFrame->close();
-        delete m_VolumeSliderFrame;
-        m_VolumeSliderFrame = nullptr;
+    if (m_refreshVideoBallonTimer) {
+        m_refreshVideoBallonTimer->stop();
+        delete m_refreshVideoBallonTimer;
+        m_refreshVideoBallonTimer = nullptr;
     }
-
-    if (m_MicSliderFrame)
-    {
-        m_MicSliderFrame->close();
-        delete m_MicSliderFrame;
-        m_MicSliderFrame = nullptr;
-    }
-
 
     if (isVisible())
-        config_set_string(configGlobalFile, "BasicWindow",
-            "geometry",
-            saveGeometry().toBase64().constData());
+    {
+        config_set_string(USERCONFIG, "BasicWindow", "geometry", saveGeometry().toBase64().constData());
 
-    config_set_bool(GetGlobalConfig(),
-        "BasicWindow", "BlockAreaOff", m_BlockPopup->isVisible() ? false : true);
-
-    disconnect(App(), &QApplication::focusChanged, this, &AFMainFrame::qslotFocusChanged);
-
+        QRect mainRect = normalGeometry();
+        std::string strPos = std::to_string(mainRect.x()) + "." + std::to_string(mainRect.y())
+            + "." + std::to_string(mainRect.width()) + "." + std::to_string(mainRect.height());
+        config_set_string(USERCONFIG, "BasicWindow", "MainframeCheckRect", strPos.c_str());
+    }
 
     //Remux
     /*if (remux && !remux->close()) {
@@ -5214,39 +4703,65 @@ void AFMainFrame::closeEvent(QCloseEvent* event)
 
     QWidget::closeEvent(event);
     if (!event->isAccepted())
+    {
+        m_logOut = false;
         return;
+    }
 
-    //blog(LOG_INFO, SHUTDOWN_SEPARATOR);
-    m_bClosing = true;
+    if (m_logOut)
+    {
+        AFChannelData* tmpSoopChannel = nullptr;
+        if (auth.GetChannelData(PLATFORM_SOOP, tmpSoopChannel))
+            if(tmpSoopChannel)
+                tmpSoopChannel->pAuthData->loginRetain = false;
 
-    config_set_bool(configGlobalFile, "BasicWindow",
-        "PreviewProgramMode", IsPreviewProgramMode());
+        auth.RemoveAllChannel(false);
+    }
 
-    config_save_safe(GetGlobalConfig(), "tmp", nullptr);
+    if (m_normalInit && m_dynamicCompositMainWindow)
+    {
+        m_blockManager->FinPopups();
 
+        config_set_bool(USERCONFIG, "BasicWindow", "PreviewProgramMode", IsPreviewProgramMode());
+        config_save_safe(USERCONFIG, "tmp", nullptr);
 
-    AFAuthManager::GetSingletonInstance().SaveAllAuthed();
-    AFLoadSaveManager::GetSingletonInstance().SaveProjectNow();
+        auth.SaveAllAuthed();
+        auth.DeleteSoopBroadInfo();
+        LOADSAVE_CONTEXT.SaveProjectNow();
+    }
 
-    if (api)
-        api->on_event(OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN);
+    //OnEvent(OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN);
 
-    AFMainWindowAccesser* tmpViewModels = g_ViewModelsDynamic.UnSafeGetInstace();
+    //disableSaving++;
+
+    AFMainWindowAccesser* tmpViewModels = g_viewModelsDynamic.UnSafeGetInstace();
     if (tmpViewModels)
-        tmpViewModels->m_RenderModel.RemoveCallbackMainDisplay();
+        tmpViewModels->m_renderModel.RemoveCallbackMainDisplay();
+
+    if(AFOutputUtil::IsVirtualCamActive()) {
+        OUTPUT_HANDLER_LIST& outputHandlers = m_outputContext->GetOutputHandlerLists();
+        if(!outputHandlers.empty()) {
+            OUTPUT_HANDLER_PTR& outputHandler = outputHandlers[0].second;
+            if(outputHandler)
+                outputHandler->StopVirtualCam();
+        }
+    }
 
     /* Clear all scene data (dialogs, widgets, widget sub-items, scenes,
      * sources, etc) so that all references are released before shutdown */
     ClearSceneData();
     
-    if (api)
-        api->on_event(OBS_FRONTEND_EVENT_EXIT);
+    //OnEvent(OBS_FRONTEND_EVENT_EXIT);
 
     // Destroys the frontend API so plugins can't continue calling it
-    obs_frontend_set_callbacks_internal(nullptr);
+    soop_frontend_set_callbacks_internal(nullptr);
     api = nullptr;
 
-    m_DynamicCompositMainWindow->close();
+    if (m_normalInit && m_dynamicCompositMainWindow)
+        m_dynamicCompositMainWindow->close();
+
+    QApplication::sendPostedEvents(nullptr);
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
     QMetaObject::invokeMethod(App(), "quit", Qt::QueuedConnection);
 }
@@ -5261,242 +4776,149 @@ void AFMainFrame::paintEvent(QPaintEvent*)
 }
 
 void AFMainFrame::showEvent(QShowEvent* event)
-{
-    if (m_BlockPopup == nullptr)
-    {
-        _SetupBlock();
-        connect(m_DynamicCompositMainWindow->GetMainPreview(), &AFQTDisplay::qsignalDisplayResized,
-            this, &AFMainFrame::qslotPreviewResizeTriggered);
+{ 
+    QWidget::showEvent(event);
 
-
-        //First Execute Show Chat and NewsFeed
-        config_t* globalconfig = AFConfigManager::GetSingletonInstance().GetGlobal();
-
-        bool showChat = config_get_bool(
-            globalconfig, "BasicWindow", "ChatPopup");
-
-        bool showDashboard = config_get_bool(
-            globalconfig, "BasicWindow", "DashboardPopup");
-
-        if (showChat)
-        {
-            bool accountValid = true;
-            if (!m_GlobalSoopChatWidget)
-                accountValid = _SetupChatPage();
-
-            if (accountValid)
-            {
-                const char* chatPos = config_get_string(
-                    globalconfig, "BasicWindow", "Chat");
-                QByteArray byteArray =
-                    QByteArray::fromBase64(QByteArray(chatPos));
-                m_GlobalSoopChatWidget->restoreGeometry(byteArray);
-                m_GlobalSoopChatWidget->show();
-                if (m_BlockPopup)
-                    m_BlockPopup->BlockButtonToggled(showChat, ENUM_BLOCK_TYPE::Chat);
-            }
-        }
-
-        if (showDashboard)
-        {
-            if (!m_GlobalSoopNewsfeedWidget)
-                _SetupNewsfeedPage();
-
-            const char* dashboardPos = config_get_string(
-                globalconfig, "BasicWindow", "Dashboard");
-
-            QByteArray byteArray =
-                QByteArray::fromBase64(QByteArray(dashboardPos));
-            m_GlobalSoopNewsfeedWidget->restoreGeometry(byteArray);
-            m_GlobalSoopNewsfeedWidget->show();
-            if (m_BlockPopup)
-                m_BlockPopup->BlockButtonToggled(showDashboard, ENUM_BLOCK_TYPE::Dashboard);
-
-        }
+    if (m_isInitialRun) {
+        emit qsignalMainShowEventTriggered();
+        m_isInitialRun = false;
     }
-
-    qslotToggleBlockAreaByToggleButton();
-    
-    if (config_get_bool(AFConfigManager::GetSingletonInstance().GetBasic(), "General", "OpenStatsOnStartup"))
-        qslotStatsOpenTriggered();
-    
-    m_DynamicCompositMainWindow->SetDockedValues();
 }
 
 void AFMainFrame::moveEvent(QMoveEvent* event)
 {
-    //_MoveBlocks();
-    //_MoveStatWidget();
-    if (m_BlockPopup != nullptr)
-    {
-        if (m_BlockPopup->isVisible())
-        {
-            m_BlockPopup->hide();
-        }
+    if (m_leftNavigationBar) {
+#ifdef _WIN32
+        m_leftNavigationBar->MoveChannelSlide();
+#elif defined(__APPLE__)
+        m_leftNavigationBar->HideChannelSlide();
+#endif
     }
 
-    if (currentScreen != App()->screenAt(this->mapToGlobal(rect().center())))
+    if (m_systemAlert && m_systemAlert->isVisible()) {
+        _MoveSystemAlert(m_systemAlert, this->isMinimized());
+    }
+
+    if (m_pCurrentScreen != App()->screenAt(this->mapToGlobal(rect().center())))
     {
-        currentScreen = App()->screenAt(this->mapToGlobal(rect().center()));
+        m_pCurrentScreen = App()->screenAt(this->mapToGlobal(rect().center()));
         repaint();
     }
+
+    bool isAboutToMax = GetAboutToMax();
+
+    if (!isAboutToMax)
+        emit qsignalmovedOrResized();
 }
 
-void AFMainFrame::changeWidgetBorder(bool isMaximized)
+void AFMainFrame::dragEnterEvent(QDragEnterEvent* event)
 {
-    this->setProperty("frame_maximized", isMaximized);
-
-    if (!isMaximized)
-        ui->pushButton_MaximumWindow->setObjectName("pushButton_MaximumWindow");
-    else
-        ui->pushButton_MaximumWindow->setObjectName("pushButton_MaxedWindow");
-
-    updateStyleSheet(ui->pushButton_MaximumWindow);
-    updateStyleSheet(ui->frame_Top);
-    updateStyleSheet(ui->frame_Bottom);
-    updateStyleSheet(this);
-}
-
-//Block = Block Area + Lock Button
-void AFMainFrame::_SetupBlock()
-{
-    m_BlockPopup = new AFQBlockPopup(this);
-    m_BlockPopup->BlockWindowInit(false, m_DynamicCompositMainWindow);
-    
-    connect(ui->pushButton_BlockToggle, &QPushButton::clicked, this, &AFMainFrame::qslotToggleBlockArea);
-
-    connect(m_BlockPopup, &AFQBlockPopup::qsignalBlockButtonTriggered, 
-        this, &AFMainFrame::qslotToggleBlockFromBlockArea);
-    connect(m_BlockPopup, &AFQBlockPopup::qsignalShowSetting, 
-        this, &AFMainFrame::qslotShowStudioSettingPopup);
-
-    bool blockAreaOff = config_get_bool(GetGlobalConfig(),
-        "BasicWindow", "BlockAreaOff");
-
-    if(!blockAreaOff)
-        _ShowBlockArea(0);
-
-    m_BlockPopup->raise();
-}
-
-void AFMainFrame::_MoveBlocks()
-{
-    if (m_BlockPopup != nullptr)
-    {
-        int32_t mainDisplayYPosSize = m_DynamicCompositMainWindow->GetMainPreview()->y() +
-                                        m_DynamicCompositMainWindow->GetMainPreview()->height();
-        
-        auto& configManager = AFConfigManager::GetSingletonInstance();
-
-        if (configManager.GetStates()->IsPreviewProgramMode())
-        {
-            bool studioPortraitLayout = config_get_bool(configManager.GetGlobal(), 
-                "BasicWindow", "StudioPortraitLayout");
-            if (studioPortraitLayout)
-            {
-                AFQVerticalProgramView* tmpStudioModeView = m_DynamicCompositMainWindow->GetVerticalStudioModeViewLayout();
-                if (tmpStudioModeView)
-                    mainDisplayYPosSize = tmpStudioModeView->y() + tmpStudioModeView->height();
-            }
-            else
-            {
-                AFQProgramView* tmpStudioModeView = m_DynamicCompositMainWindow->GetStudioModeViewLayout();
-                if(tmpStudioModeView)
-                    mainDisplayYPosSize = tmpStudioModeView->y() + tmpStudioModeView->height();
-            }
-        }
-
-        //Pos -> Width: Total/2 - block/2 (make it center), Height: Preview Bottom - block/2
-        m_BlockPopup->move(x() + width() / 2 - m_BlockPopup->width() / 2,
-                           y() + mainDisplayYPosSize - m_BlockPopup->height() / 2 - 12);
+    // refuse drops of our own widgets
+    if (event->source() != nullptr) {
+        event->setDropAction(Qt::IgnoreAction);
+        return;
     }
+
+    event->acceptProposedAction();
 }
 
-bool AFMainFrame::_SetupChatPage()
+void AFMainFrame::dragLeaveEvent(QDragLeaveEvent* event)
 {
-    m_GlobalSoopChatWidget = new AFQBorderPopupBaseWidget(nullptr);
-    m_GlobalSoopChatWidget->setObjectName("widget_CustomBrowser");
-    m_GlobalSoopChatWidget->setStyleSheet("border-radius: 0px");
-    m_GlobalSoopChatWidget->setWindowFlag(Qt::FramelessWindowHint);
-    m_GlobalSoopChatWidget->setProperty("uuid", "Chat");
-    m_GlobalSoopChatWidget->SetIsCustom(true);
-    m_GlobalSoopChatWidget->setWindowTitle(QTStr("Block.Tooltip.Chat"));
-    m_GlobalSoopChatWidget->setMinimumSize(QSize(360, 650));
-    m_GlobalSoopChatWidget->setAttribute(Qt::WA_DeleteOnClose);
-
-    connect(m_GlobalSoopChatWidget, &AFQBorderPopupBaseWidget::qsignalCloseWidget,
-        this, &AFMainFrame::qslotCloseGlobalSoopPage);
-
-    AFDockTitle* dockTitle = new AFDockTitle(m_GlobalSoopChatWidget);
-    dockTitle->Initialize(QTStr("Block.Tooltip.Chat"));
-    dockTitle->setProperty("uuid", "Chat");
-    dockTitle->setObjectName("CustomBrowserDockTitle");
-
-    connect(dockTitle, &AFDockTitle::qsignalCustomBrowserClose,
-        this, &AFMainFrame::qslotHideGlobalSoopPage);
-    connect(dockTitle, &AFDockTitle::qsignalCustomBrowserMaximize,
-        this, &AFMainFrame::qslotMaximizeGlobalSoopPage);
-    connect(dockTitle, &AFDockTitle::qsignalCustomBrowserMinimize,
-        this, &AFMainFrame::qslotMinimizeGlobalSoopPage);
-
-    connect(m_GlobalSoopChatWidget, &AFCQMainBaseWidget::qsignalBaseWindowMaximized,
-            dockTitle, &AFDockTitle::qslotChangeMaximizeIcon);
-
-    auto& auth = AFAuthManager::GetSingletonInstance();
-    AFChannelData* mainChannel = nullptr;
-    auth.GetMainChannelData(mainChannel);
-    if (!mainChannel)
-        return false;
-
-    std::string strID = mainChannel->pAuthData->strChannelID;
-    std::string strChatUrl = SOOP_GLOBAL_CHAT_URL + strID;
-
-    auto& cefManager = AFCefManager::GetSingletonInstance();
-    QCefWidget* cefWidget = cefManager.GetCef()->
-        create_widget(m_GlobalSoopChatWidget,
-            strChatUrl);
-    m_GlobalSoopChatWidget->AddWidget(dockTitle);
-    m_GlobalSoopChatWidget->AddCustomWidget(cefWidget);
-    return true;
+    event->accept();
 }
 
-bool AFMainFrame::_SetupNewsfeedPage()
+void AFMainFrame::dragMoveEvent(QDragMoveEvent* event)
 {
-    m_GlobalSoopNewsfeedWidget = new AFQBorderPopupBaseWidget(nullptr);
-    m_GlobalSoopNewsfeedWidget->setObjectName("widget_CustomBrowser");
-    m_GlobalSoopNewsfeedWidget->setStyleSheet("border-radius: 0px");
-    m_GlobalSoopNewsfeedWidget->setWindowFlag(Qt::FramelessWindowHint);
-    m_GlobalSoopNewsfeedWidget->setProperty("uuid", "Newsfeed");
-    m_GlobalSoopNewsfeedWidget->SetIsCustom(true);
-    m_GlobalSoopNewsfeedWidget->setWindowTitle(QTStr("Block.Tooltip.Newsfeed"));
-    m_GlobalSoopNewsfeedWidget->setMinimumSize(QSize(360, 650));
-    m_GlobalSoopNewsfeedWidget->setAttribute(Qt::WA_DeleteOnClose);
+    event->acceptProposedAction();
+}
 
-    connect(m_GlobalSoopNewsfeedWidget, &AFQBorderPopupBaseWidget::qsignalCloseWidget,
-        this, &AFMainFrame::qslotCloseGlobalSoopPage);
+void AFMainFrame::dropEvent(QDropEvent* event)
+{
+    if (m_pMainDragDrop)
+        m_pMainDragDrop->DropEvent(event);
+}
 
-    AFDockTitle* dockTitle = new AFDockTitle(m_GlobalSoopNewsfeedWidget);
-    dockTitle->Initialize(QTStr("Block.Tooltip.Newsfeed"));
-    dockTitle->setProperty("uuid", "Newsfeed");
-    dockTitle->setObjectName("CustomBrowserDockTitle");
+void AFMainFrame::resizeEvent(QResizeEvent* event)
+{
+    if (m_leftNavigationBar) {
+#ifdef _WIN32
+        m_leftNavigationBar->MoveChannelSlide();
+#elif defined(__APPLE__)
+        m_leftNavigationBar->HideChannelSlide();
+#endif
+    }
 
-    connect(dockTitle, &AFDockTitle::qsignalCustomBrowserClose,
-        this, &AFMainFrame::qslotHideGlobalSoopPage);
-    connect(dockTitle, &AFDockTitle::qsignalCustomBrowserMaximize,
-        this, &AFMainFrame::qslotMaximizeGlobalSoopPage);
-    connect(dockTitle, &AFDockTitle::qsignalCustomBrowserMinimize,
-        this, &AFMainFrame::qslotMinimizeGlobalSoopPage);
+    if (m_systemAlert) {
+        m_systemAlert->close();
+    }
 
-    connect(m_GlobalSoopNewsfeedWidget, &AFCQMainBaseWidget::qsignalBaseWindowMaximized,
-            dockTitle, &AFDockTitle::qslotChangeMaximizeIcon);
+    emit qsignalMainResized(event->oldSize(), size());
 
-    auto& cefManager = AFCefManager::GetSingletonInstance();
-    QCefWidget* cefWidget = cefManager.GetCef()->
-        create_widget(m_GlobalSoopNewsfeedWidget,
-            SOOP_GLOBAL_NEWSFEED_URL);
-    m_GlobalSoopNewsfeedWidget->AddWidget(dockTitle);
-    m_GlobalSoopNewsfeedWidget->AddCustomWidget(cefWidget);
-    return true;
+    bool isAboutToMax = GetAboutToMax();
+
+    if (!isAboutToMax)
+        emit qsignalmovedOrResized();
+}
+
+void AFMainFrame::_ConnectStatisticsSignals()
+{
+    auto& statistics = STATISTICS;
+    //
+    connect(&statistics, &AFStatistics::qsignalCheckDiskSpaceRemaining, this, &AFMainFrame::qslotCheckDiskSpaceRemaining);
+    connect(&statistics, &AFStatistics::qsignalMemoryError, this, &AFMainFrame::qslotShowMemorySystemAlert);
+    connect(&statistics, &AFStatistics::qsignalCPUError, this, &AFMainFrame::qslotShowCPUSystemAlert);
+    connect(&statistics, &AFStatistics::qsignalNetworkError, this, &AFMainFrame::qslotShowNetworkSystemAlert);
+    connect(&statistics, &AFStatistics::qsignalFPSState, this, &AFMainFrame::qslotResourceState);
+}
+
+void AFMainFrame::_SetMainFrameUI()
+{
+    // Connect MainFrame Signals
+    
+    // QSS - Broad: Color Different, Record: false
+    ui->pushButton_Broad->setProperty("IsLive", false);
+    ui->pushButton_Record->setProperty("IsRec", false);
+
+    PolishStyleSheet(ui->pushButton_Broad);
+    PolishStyleSheet(ui->pushButton_Record);
+
+    // Top Menu Buttons
+    connect(ui->pushButton_TopMenu, &QPushButton::clicked, this, &AFMainFrame::qslotTopMenuClicked);
+    connect(ui->pushButton_MinimumWindow, &QPushButton::clicked, this, &AFMainFrame::qslotMinimizeWindow);
+    connect(ui->pushButton_MaximumWindow, &QPushButton::clicked, GetController(), &AFQBaseWindowController::maximizeWindow);
+    connect(ui->pushButton_Close, &QPushButton::clicked, this, &AFMainFrame::close);
+    connect(GetController(), &AFQBaseWindowController::qsignalMaximized, this, &AFMainFrame::qslotMaximizedChanged);
+
+    // Bottom Menu Buttons
+    //Check Version Limit -> need change
+    connect(ui->pushButton_Broad, &QPushButton::clicked, this, &AFMainFrame::qslotCheckBroadAvailable);
+    connect(ui->pushButton_Broad, &QPushButton::pressed, this, &AFMainFrame::qslotSetButtonOpacity);
+    connect(ui->pushButton_Broad, &QPushButton::released, this, &AFMainFrame::qslotRemoveButtonOpacity);
+
+    QGraphicsOpacityEffect* broadEffect = new QGraphicsOpacityEffect();
+    broadEffect->setOpacity(0.5);
+    ui->pushButton_Broad->setGraphicsEffect(broadEffect);
+    ui->pushButton_Broad->graphicsEffect()->setEnabled(false);
+
+    connect(ui->pushButton_Record, &QPushButton::clicked, this, &AFMainFrame::qslotChangeRecordState);
+    connect(ui->pushButton_Record, &QPushButton::pressed, this, &AFMainFrame::qslotSetButtonOpacity);
+    connect(ui->pushButton_Record, &QPushButton::released, this, &AFMainFrame::qslotRemoveButtonOpacity);
+
+    QGraphicsOpacityEffect* recEffect = new QGraphicsOpacityEffect();
+    recEffect->setOpacity(0.5);
+    ui->pushButton_Record->setGraphicsEffect(recEffect);
+    ui->pushButton_Record->graphicsEffect()->setEnabled(false);
+
+    if (m_pMainAudioSource)
+        m_pMainAudioSource->SetupMainFrameAudioUI(this);
+
+    connect(ui->pushButton_ShortcutSettings, &QPushButton::clicked, this, &AFMainFrame::qslotShowStudioSettingPopup);
+    connect(ui->widget_ResourceExtension, &AFQHoverWidget::qsignalMouseClick, this, &AFMainFrame::qslotExtendResource);
+
+    ui->widget_BroadTimer->setVisible(false);
+    ui->widget_RecordTimer->setVisible(false);
+    ui->line_Time->setVisible(false);
+    ui->pushButton_ShortcutSettings->setProperty("buttonType", "settings");
 }
 
 void AFMainFrame::_MoveSystemAlert(AFQSystemAlert* systemAlert, bool isMainMinimized)
@@ -5540,7 +4962,7 @@ void AFMainFrame::_MoveSystemAlert(AFQSystemAlert* systemAlert, bool isMainMinim
     }
     else {
         globalPosX = this->mapToGlobal(QPoint(this->width() / 2, 0)).x();
-        globalPosY = ui->widget_ResourceNetwork->mapToGlobal(QPoint(0, 0)).y();
+        globalPosY = ui->widget_ResourceButton->mapToGlobal(QPoint(0, 0)).y();
         globalPosX -= (systemAlert->width() / 2);
         globalPosY -= (systemAlert->height() / 2);
     }
@@ -5548,52 +4970,36 @@ void AFMainFrame::_MoveSystemAlert(AFQSystemAlert* systemAlert, bool isMainMinim
     systemAlert->move(QPoint(globalPosX, globalPosY));
 }
 
-void AFMainFrame::_MoveProgramGuide()
+void AFMainFrame::_RestartApp()
 {
-    if (!m_ProgramGuideWidget)
-        return;
-
-    if (!m_ProgramGuideWidget->isVisible())
-        return;
-
-    QPoint globalPos = this->mapToGlobal(QPoint(0, 0));
-    globalPos.setX(globalPos.x() - m_ProgramGuideWidget->width());
-    globalPos.setY(globalPos.y() + height() - m_ProgramGuideWidget->height());
-
-    m_ProgramGuideWidget->move(globalPos);
-}
-
-void AFMainFrame::_PopupRequest(bool show, int type)
-{
-    switch (type)
+    if (g_bRestart)
     {
-    case ENUM_BLOCK_TYPE::SceneSource:
-        if (m_ProgramGuideWidget && m_ProgramGuideWidget->isWidgetType())
-            m_ProgramGuideWidget->NextMission(0);
-        
-        m_DynamicCompositMainWindow->ToggleDockVisible(ENUM_BLOCK_TYPE(type), show);
-        break;
-    case ENUM_BLOCK_TYPE::Chat:
-        if (qslotShowGlobalPage("Chat"))
-            if (m_BlockPopup)
-                m_BlockPopup->BlockButtonToggled(show, type);
-        break;
-    case ENUM_BLOCK_TYPE::Dashboard:
-        if(qslotShowGlobalPage("Newsfeed"))
-            if (m_BlockPopup)
-                m_BlockPopup->BlockButtonToggled(show, type);
-        break;
-    case ENUM_BLOCK_TYPE::Settings:
-        qslotShowStudioSettingPopup(show);
-        break;
-    default: 
-        m_DynamicCompositMainWindow->ToggleDockVisible(ENUM_BLOCK_TYPE(type), show);
-        break;
+        if (!m_restartWidthoutConfirm)  // Ask Whether To Restart
+        {
+            int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this,
+                "", QTStr("NeedsRestart"));
+
+            if (result == QDialog::Accepted)
+            {
+                close();
+            }
+            else
+            {
+                g_bRestart = false;
+            }
+        }
+        else // Force Restart
+        {
+            close();
+        }
     }
 }
 
 void AFMainFrame::_CreateTopMenu()
 { 
+    if (m_topMenu)
+        return;
+
     auto funcSetWhatsThis = [](QList<QAction*> list) {
         foreach(QAction* menuAction, list)
         {
@@ -5605,37 +5011,91 @@ void AFMainFrame::_CreateTopMenu()
             }
         }
     };
-    
-    AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-    
-    
+    //TOP MENU
+    m_topMenu = new AFQCustomMenu("Top Menu", this);
+    connect(m_topMenu, &AFQCustomMenu::aboutToHide, this, &AFMainFrame::qslotTopMenuDestoryed);
+
+    m_topMenu->setFixedWidth(200);
+
     //TOOL
     AFQCustomMenu* toolMenu = new AFQCustomMenu(this, true);
     toolMenu->setFixedWidth(200);
 
     toolMenu->addAction(ui->action_Settings);
+    toolMenu->addAction(ui->action_VirtualCamera);
     toolMenu->addAction(ui->action_AdvanceControls);
     toolMenu->addAction(ui->action_Stats);
 
-    connect(ui->action_Settings, &QAction::triggered, 
-            this, &AFMainFrame::qslotShowStudioSettingPopup);
+    ui->action_AdvanceControls->setProperty("windowtype", ENUM_WINDOW_TYPE::AdvanceControls);
+    ui->action_Stats->setProperty("windowtype", ENUM_WINDOW_TYPE::StatPage);
+
+    connect(ui->action_Settings, &QAction::triggered, this, &AFMainFrame::qslotShowStudioSettingPopup);
     //
-    connect(ui->action_AdvanceControls, &QAction::triggered, 
-            this, &AFMainFrame::qslotToggleBlockFromMenu);
-    connect(ui->action_Stats, &QAction::triggered,
-            this, &AFMainFrame::qslotStatsOpenTriggered);
+    connect(ui->action_VirtualCamera, &QAction::triggered, m_leftNavigationBar, &AFQLeftNavigationBar::qslotVirtualCamConfig);
+    connect(ui->action_AdvanceControls, &QAction::triggered, this, &AFMainFrame::qslotShowBlockWithProperty);
+    connect(ui->action_Stats, &QAction::triggered, this, &AFMainFrame::qslotShowBlockWithProperty);
 
     funcSetWhatsThis(toolMenu->actions());
+    m_topMenu->addMenu(toolMenu)->setText(QT_UTF8(Str("Basic.MainMenu.ToolsFix")));
 
+    //View
+    
+    AFQCustomMenu* viewMenu = new AFQCustomMenu(this, true);
+
+    bool PropertiesOn = config_get_bool(USERCONFIG, "BasicWindow", "ShowContextToolbars");
+    ui->action_ViewToggleProperties->setChecked(PropertiesOn);
+    qslotPropertiesToggled(PropertiesOn);
+
+    if (false) //Always On Top Hide until All Dialog Fix Z order
+    {
+        bool AlwaysOnTop = config_get_bool(USERCONFIG, "General", "AlwaysOnTop");
+        ui->action_ViewToggleOnTop->setChecked(AlwaysOnTop);
+        if (AlwaysOnTop || g_opt_always_on_top)
+            SetAlwaysOnTop(this, true);
+
+        viewMenu->addAction(ui->action_ViewToggleOnTop);
+    }
+    else
+    {
+        config_set_bool(USERCONFIG, "General", "AlwaysOnTop", false);
+        g_opt_always_on_top = false;
+        SetAlwaysOnTop(this, false);
+    }
+
+    bool sideDockOn = config_get_bool(USERCONFIG, "BasicWindow", "SideDocks");
+    ui->action_SideDocks->setChecked(sideDockOn);
+
+    viewMenu->addAction(ui->action_ViewToggleProperties);
+    viewMenu->addAction(ui->action_ViewUIReset);
+    viewMenu->addAction(ui->action_ViewSceneControl);
+    //viewMenu->addAction(ui->action_LockDocks);
+    viewMenu->addAction(ui->action_SideDocks);
+    viewMenu->addAction(ui->action_ViewRaiseAllBlock);
+    viewMenu->addAction(ui->action_ViewCloseAllBlocks);
+
+    connect(ui->action_ViewToggleProperties, &QAction::triggered, this, &AFMainFrame::qslotPropertiesToggled);
+    connect(ui->action_ViewToggleOnTop, &QAction::triggered, this, &AFMainFrame::qslotAlwaysOnTopToggled);
+    connect(ui->action_ViewUIReset, &QAction::triggered, this, &AFMainFrame::qslotUIResetTriggered);
+    connect(ui->action_ViewSceneControl, &QAction::triggered, this, &AFMainFrame::qslotSceneControlTriggered);
+    connect(ui->action_LockDocks, &QAction::triggered, MAIN_BLOCKMANAGER, &AFQBlockManager::qslotLockDock);
+    connect(ui->action_SideDocks, &QAction::triggered, DYNAMIC_COMPOSIT, &AFMainDynamicComposit::SetSideDock);
+    connect(ui->action_ViewRaiseAllBlock, &QAction::triggered, this, &AFMainFrame::qslotPopupBlockClicked);
+    connect(ui->action_ViewCloseAllBlocks, &QAction::triggered, this, &AFMainFrame::qslotCloseAllBlocks);
+
+    funcSetWhatsThis(viewMenu->actions());
+    m_topMenu->addMenu(viewMenu)->setText(QT_UTF8(Str("Basic.TopMenu.View")));
 
     //ADD-ON
-    AFQCustomMenu* addonMenu = new AFQCustomMenu(this, true);
-    addonMenu->setFixedWidth(200);
-    
-    //addonMenu->addAction(ui->action_Plugin);
+    m_addonMenu = new AFQCustomMenu(this, true);
+    m_addonMenu->setFixedWidth(200);
 
-    funcSetWhatsThis(addonMenu->actions());
+    connect(ui->action_ImportRecentBroadcastSettings, &QAction::triggered, this, &AFMainFrame::qslotShowImportRecentGuide);
+    
+    funcSetWhatsThis(m_addonMenu->actions());
+    m_topMenu->addMenu(m_addonMenu)->setText(QT_UTF8(Str("Basic.MainMenu.Addon")));
         
+    //m_topMenu->addAction(ui->action_ImportPreset);
+
     //PROFILE
     AFQCustomMenu* profileMenu = new AFQCustomMenu(this, true);
     profileMenu->setObjectName("menu_ProfileTopMenu");
@@ -5649,25 +5109,19 @@ void AFMainFrame::_CreateTopMenu()
     profileMenu->addAction(ui->action_ImportProfile);
     profileMenu->addSeparator();
 
-    connect(ui->action_NewProfile, &QAction::triggered,
-            this, &AFMainFrame::qSlotNewProfile);
-    connect(ui->action_DupProfile, &QAction::triggered,
-        this, &AFMainFrame::qSlotDupProfile);
-    connect(ui->action_RenameProfile, &QAction::triggered,
-        this, &AFMainFrame::qSlotRenameProfile);
-    connect(ui->action_RemoveProfile, &QAction::triggered,
-        this, &AFMainFrame::qSlotDeleteProfile);
+    connect(ui->action_NewProfile, &QAction::triggered, m_mainProfile, &AFMainProfile::qActionNewProfileTriggered);
+    connect(ui->action_DupProfile, &QAction::triggered, m_mainProfile, &AFMainProfile::qActionDupProfileTriggered);
+    connect(ui->action_RenameProfile, &QAction::triggered, m_mainProfile, &AFMainProfile::qActionRenameProfileTriggered);
+    connect(ui->action_RemoveProfile, &QAction::triggered, m_mainProfile, &AFMainProfile::qActionRemoveProfileTriggered);
 
-    connect(ui->action_ExportProfile, &QAction::triggered,
-            this, &AFMainFrame::qSlotExportProfile);
-    connect(ui->action_ImportProfile, &QAction::triggered,
-            this, &AFMainFrame::qSlotImportProfile);
+    connect(ui->action_ExportProfile, &QAction::triggered, m_mainProfile, &AFMainProfile::qActionExportProfileTriggered);
+    connect(ui->action_ImportProfile, &QAction::triggered, m_mainProfile, &AFMainProfile::qActionImportProfileTriggered);
     
     funcSetWhatsThis(profileMenu->actions());
     
     ui->action_Profile->setMenu(profileMenu);
-    
-    
+    m_topMenu->addMenu(profileMenu)->setText(QT_UTF8(Str("Basic.MainMenu.ProfileFix")));
+        
     //SCENE_COLLECTION
     AFQCustomMenu* sceneCollectionMenu = new AFQCustomMenu(this, true);
     sceneCollectionMenu->setObjectName("menu_SceneCollectionTopMenu");
@@ -5683,92 +5137,252 @@ void AFMainFrame::_CreateTopMenu()
     sceneCollectionMenu->addAction(ui->action_ShowMissingFiles);
     sceneCollectionMenu->addSeparator();
 
-    connect(ui->action_NewSceneCollection, &QAction::triggered,
-            this, &AFMainFrame::qSlotNewSceneCollection);
-    connect(ui->action_DupSceneCollection, &QAction::triggered,
-        this, &AFMainFrame::qSlotDupSceneCollection);
-    connect(ui->action_RenameSceneCollection, &QAction::triggered,
-        this, &AFMainFrame::qSlotRenameSceneCollection);
-    connect(ui->action_RemoveSceneCollection, &QAction::triggered,
-        this, &AFMainFrame::qSlotDeleteSceneCollection);
-
-    connect(ui->action_ExportSceneCollection, &QAction::triggered,
-            this, &AFMainFrame::qSlotExportSceneCollection);
-    connect(ui->action_ImportSceneCollection, &QAction::triggered,
-            this, &AFMainFrame::qSlotImportSceneCollection);
-    connect(ui->action_ShowMissingFiles, &QAction::triggered,
-            this, &AFMainFrame::qSlotShowMissingFiles);
+    connect(ui->action_NewSceneCollection, &QAction::triggered, m_mainSceneCollection, &AFMainSceneCollection::qActionNewSceneCollectionTriggered);
+    connect(ui->action_DupSceneCollection, &QAction::triggered, m_mainSceneCollection, &AFMainSceneCollection::qActionDupSceneCollectionTriggered);
+    connect(ui->action_RenameSceneCollection, &QAction::triggered, m_mainSceneCollection, &AFMainSceneCollection::qActionRenameSceneCollectionTriggered);
+    connect(ui->action_RemoveSceneCollection, &QAction::triggered, m_mainSceneCollection, &AFMainSceneCollection::qActionRemoveSceneCollectionTriggered);
+    connect(ui->action_ExportSceneCollection, &QAction::triggered, m_mainSceneCollection, &AFMainSceneCollection::qActionExportSceneCollectionTriggered);
+    connect(ui->action_ImportSceneCollection, &QAction::triggered, m_mainSceneCollection, &AFMainSceneCollection::qActionImportSceneCollectionTriggered);
+    //
+    connect(ui->action_ImportPreset, &QAction::triggered, this, &AFMainFrame::qslotImportPreset);
+    connect(ui->action_ShowMissingFiles, &QAction::triggered, this, &AFMainFrame::qslotShowMissingFiles);
     
     funcSetWhatsThis(sceneCollectionMenu->actions());
-    
+
     ui->action_SceneCollection->setMenu(sceneCollectionMenu);
-    
-        
-    //INFO
+    m_topMenu->addMenu(sceneCollectionMenu)->setText(QT_UTF8(Str("Basic.MainMenu.SceneCollectionFix")));
+
+    connect(ui->action_LinkServiceNotice, &QAction::triggered, this, &AFMainFrame::qslotNavigateSoopServiceNoticePage);
+
+    m_topMenu->addAction(ui->action_LinkServiceNotice);
+
     AFQCustomMenu* infoMenu = new AFQCustomMenu(this, true);
     infoMenu->setFixedWidth(200);
 
     infoMenu->addAction(ui->action_Guide);
-    infoMenu->addAction(ui->action_ProgramInfo);
-    //infoMenu->addAction(ui->action_Homepage);
+
+    connect(ui->action_LinkStreammerSupport, &QAction::triggered, this, &AFMainFrame::qslotNavigateStreamerSuppportPage);
+    connect(ui->action_Homepage, &QAction::triggered, this, &AFMainFrame::qslotNavigateSoopliveKrPage);
+
+    infoMenu->addAction(ui->action_LinkStreammerSupport);
+    QString strMenuHome = QString("SOOP %1").arg(QTStr("Basic.MainMenu.Help.WebHome"));
+    ui->action_Homepage->setText(strMenuHome);
+    infoMenu->addAction(ui->action_Homepage);
+
     infoMenu->addAction(ui->action_UpdateLog);
+    connect(ui->action_UpdateLog, &QAction::triggered, this, &AFMainFrame::qslotShowStudioUpdatePage);
+
+    connect(ui->action_FAQ, &QAction::triggered, this, &AFMainFrame::qslotShowMigrationGuide);
+    infoMenu->addAction(ui->action_FAQ);
+    
+    infoMenu->addAction(ui->action_ProgramInfo);
     //infoMenu->addAction(ui->action_Update);
 
-    connect(ui->action_Guide, &QAction::triggered,
-        this, &AFMainFrame::qslotProgramGuideOpenTriggered);
-
-    connect(ui->action_ProgramInfo, &QAction::triggered,
-            this, &AFMainFrame::qslotProgamInfoOpenTriggered);
+    connect(ui->action_Guide, &QAction::triggered, this, &AFMainFrame::qslotMainFrameTutorial);
+    connect(ui->action_ProgramInfo, &QAction::triggered, this, &AFMainFrame::qslotProgamInfoOpenTriggered);
 
     funcSetWhatsThis(infoMenu->actions());
 
-    //TOP MENU
-    m_qTopMenu = new AFQCustomMenu(this);
-    connect(m_qTopMenu, &AFQCustomMenu::aboutToHide, this, &AFMainFrame::qslotTopMenuDestoryed);
+    m_topMenu->addMenu(infoMenu)->setText(QT_UTF8(Str("Basic.MainMenu.HelpFix")));
 
-    m_qTopMenu->setFixedWidth(200);
-    m_qTopMenu->addMenu(toolMenu)->setText(QT_UTF8(locale.Str("Basic.MainMenu.ToolsFix")));
-    m_qTopMenu->addMenu(addonMenu)->setText(QT_UTF8(locale.Str("Basic.MainMenu.Addon")));
-    m_qTopMenu->addMenu(profileMenu)->setText(QT_UTF8(locale.Str("Basic.MainMenu.ProfileFix")));
-    m_qTopMenu->addMenu(sceneCollectionMenu)->setText(QT_UTF8(locale.Str("Basic.MainMenu.SceneCollectionFix")));
-    m_qTopMenu->addMenu(infoMenu)->setText(QT_UTF8(locale.Str("Basic.MainMenu.HelpFix")));
+    //INFO
+    QString loginText = QTStr("Login");
+    AFChannelData* channelData;
+
+    if (AUTH_CONTEXT.GetMainChannelData(channelData))
+    {
+        QString channelID = QString::fromStdString(channelData->pAuthData->channelID);
+        int maxLen = 9;
+
+        if (channelID.length() > maxLen) {
+            channelID = channelID.left(maxLen) + "...";
+        }
+
+        loginText = QTStr("Logout.With.Account").arg(channelID);
+    }
+
+    m_loginAction = new QAction(this);
+    m_loginAction->setText(loginText);
+    QAction* exitAction = new QAction(this);
+    exitAction->setText(QTStr("Exit"));
+
+    connect(m_loginAction, &QAction::triggered, this, &AFMainFrame::qslotToggleMainAccount);
+    connect(exitAction, &QAction::triggered, this, &AFMainFrame::close);
+
+    m_topMenu->addAction(m_loginAction);
+    m_topMenu->addAction(exitAction);
+
+#ifdef __APPLE__
+    QMenuBar *menuBar = new QMenuBar(this);
+    menuBar->setNativeMenuBar(true);
+    
+    menuBar->addMenu(m_topMenu);
+#endif
 }
 
 void AFMainFrame::_ToggleTopMenu()
 {
-    QPushButton* topMenuButton = reinterpret_cast<QPushButton*>(sender());
+	QPushButton* topMenuButton = reinterpret_cast<QPushButton*>(sender());
 
-    if (m_bTopMenuTriggered) {
-        m_qTopMenu->hide();
+	if (m_topMenuTriggered) {
+		m_topMenu->hide();
+	}
+	else {
+        QList<QAction*> actions = m_addonMenu->actions();
+
+        AFQCustomMenu* customBrowserMenu = _FindSubMenuByTitle(m_topMenu, QTStr("Basic.MainMenu.Addon.CustomBrowserDocks"));
+        if (customBrowserMenu)
+        {
+            QAction* customBrowserAction = customBrowserMenu->menuAction();
+            auto it = std::find(actions.begin(), actions.end(), customBrowserAction);
+            if (it != actions.end()) {
+                auto nextIt = std::next(it);
+                if (!actions.contains(ui->action_ImportPreset)) {
+                    if (nextIt != actions.end())
+                        m_addonMenu->insertAction(*nextIt, ui->action_ImportPreset);
+                    else
+                        m_addonMenu->addAction(ui->action_ImportPreset); // add end menu
+                }
+
+                if (!actions.contains(ui->action_ImportRecentBroadcastSettings)) {
+                    m_addonMenu->insertAction(ui->action_ImportPreset, ui->action_ImportRecentBroadcastSettings);
+                }
+            }
+        }
+
+		QPoint position = this->pos();
+		m_topMenu->show(QPoint(position.x(), position.y() + ui->widget_Top->height()));
+	}
+	m_topMenuTriggered = !m_topMenuTriggered;
+}
+
+void AFMainFrame::_AddBroadPreset()
+{
+    int sourcesCount = m_presetSourcesGeometry.size();
+    if (sourcesCount < 1)
+        return;
+
+    obs_video_info ovi;
+    obs_get_video_info(&ovi);
+
+    QString sourceType;
+    QRectF sourceRelativeRect;
+
+    for (int idx = 0; idx < sourcesCount; idx++)
+    {
+        sourceType = m_presetSourcesGeometry[idx].first;
+        const char* sourceId = "";
+
+        obs_bounds_type boundType = OBS_BOUNDS_NONE;
+
+        if (sourceType == PRESET_SOURCETYPE_VIDEOCAPTURE)
+        {
+#if defined(_WIN32)
+            sourceId = "dshow_input";
+#elif defined(__APPLE__)
+            sourceId = "av_capture_input";
+#endif
+            boundType = OBS_BOUNDS_SCALE_INNER;
+        }
+        else if (sourceType == PRESET_SOURCETYPE_GAMECAPTURE)
+        {
+#if defined(_WIN32)
+            sourceId = "game_capture";
+#elif defined(__APPLE__)
+            sourceId = "syphon-input";
+#endif
+            boundType = OBS_BOUNDS_SCALE_INNER;
+        }
+        else if (sourceType == PRESET_SOURCETYPE_DIRECTBROAD) {
+            sourceId = "soop_directbroad_source";
+            boundType = OBS_BOUNDS_STRETCH;
+        }
+        else if (sourceType == PRESET_SOURCETYPE_ALERT) {
+            sourceId = "soop_chat_source_notice";
+            boundType = OBS_BOUNDS_STRETCH;
+        }
+        else if (sourceType == PRESET_SOURCETYPE_CHATTING) {
+            sourceId = "soop_chat_source_chat";
+            boundType = OBS_BOUNDS_STRETCH;
+        }
+        else if (sourceType == PRESET_SOURCETYPE_TARGETGRAPH) {
+            sourceId = "soop_chat_source_goal";
+            boundType = OBS_BOUNDS_STRETCH;
+        }
+        else if (sourceType == PRESET_SOURCETYPE_GIFTSUBTITLE) {
+            sourceId = "soop_chat_source_subtitle";
+            boundType = OBS_BOUNDS_STRETCH;
+        }
+        else
+            continue;
+
+        if (sourceId && sourceId[0] == '\0')
+            continue;
+
+        // Set Source Size, Position
+        sourceRelativeRect = m_presetSourcesGeometry[idx].second;
+
+        float sourceWidth = ovi.base_width * sourceRelativeRect.width();
+        float sourceHeight = ovi.base_height * sourceRelativeRect.height();
+        float sourcePosX = ovi.base_width * sourceRelativeRect.x();
+        float sourcePosY = ovi.base_height * sourceRelativeRect.y();
+
+        // Add Source
+        _AddBroadPresetSource(sourceId, sourceWidth, sourceHeight, sourcePosX, sourcePosY, boundType);
     }
-    else {
-        QPoint position = this->pos();
-        m_qTopMenu->show(QPoint(position.x(), 
-            position.y() + ui->frame_Top->height()));
+
+    LOADSAVE_CONTEXT.ForceSaveProjectNow();
+    m_mainSceneCollection->RefreshSceneCollections();
+}
+
+void AFMainFrame::_AddBroadPresetSource(const char* sourceId, float width, float height, float posX, float posY, obs_bounds_type boundType)
+{
+    obs_transform_info itemInfo;
+    vec2_set(&itemInfo.pos, posX, posY);
+    vec2_set(&itemInfo.scale, 1.0f, 1.0f);
+    vec2_set(&itemInfo.bounds, width, height);
+
+    itemInfo.alignment = OBS_ALIGN_LEFT | OBS_ALIGN_TOP;
+    itemInfo.rot = 0.0f;
+    itemInfo.bounds_type = boundType;
+    itemInfo.bounds_alignment = OBS_ALIGN_CENTER;
+
+    OBSSource newSource;
+    QString sourceName = AFSourceUtil::GetPlaceHodlerText(sourceId);
+
+    AFSourceUtil::AddNewSource(this, sourceId, sourceName.toStdString().c_str(), true, newSource, &itemInfo);
+    
+    if (AFSourceUtil::IsSoopMediaSource(newSource)) {
+        SOOP_SRC_MANAGER.SetSoopMediaSource(newSource);
     }
-    m_bTopMenuTriggered = !m_bTopMenuTriggered;
+
+    // To resize preset empty source
+    OBSDataAutoRelease data = obs_source_get_settings(newSource);
+    obs_data_set_bool(data, "preset", true);
+    obs_data_set_int(data, "width", width);
+    obs_data_set_int(data, "height", height);
+    
+    //soop_source_empty_video(newSource, width, height);
 }
 
 void AFMainFrame::_AccountButtonStreamingToggle(bool stream)
 {
-    QList<AFMainAccountButton*> buttons = ui->widget_Platform->findChildren<AFMainAccountButton*>();
-    foreach(AFMainAccountButton * button, buttons)
-    {
-        if (button->IsMainAccount())
-        {
-            if (button->GetCurrentState() == AFMainAccountButton::ChannelState::Disable)
-            {
+    QList<AFMainAccountButton*> buttons = findChildren<AFMainAccountButton*>();
+
+    foreach(AFMainAccountButton * button, buttons) {
+        if (button->GetCurrentState() == AFMainAccountButton::ChannelState::Disable)
+            continue;
+        else
+            if (button->GetChannelData() && !button->GetChannelData()->isStreaming)
                 continue;
-            }
-            else
-            {
-                if (!button->GetChannelData()->bIsStreaming)
-                    continue;
-            }
-        }
-            
+
+
         button->SetStreaming(stream);
     }
+
+    m_leftNavigationBar->ToggleAddChannelButton(stream);
+
+    emit qsignalBroadToggled(stream);
 }
 
 AFQCustomMenu* AFMainFrame::_FindSubMenuByTitle(AFQCustomMenu* menu, const QString& name)
@@ -5791,75 +5405,385 @@ AFQCustomMenu* AFMainFrame::_FindSubMenuByTitle(AFQCustomMenu* menu, const QStri
     return nullptr;
 }
 
-void AFMainFrame::_ShowBlockArea(int animateSpeed)
+void AFMainFrame::EnableTransitionState(bool enable)
 {
-    if (m_bIsBlockPopup && !m_bBlockAnimating && m_BlockPopup->isHidden())
+    m_transitionWidgetEnabled = enable;
+
+    EnableTransitionWidgets();
+}
+
+void AFMainFrame::EnableTransitionWidgets()
+{
+    bool enable = m_transitionWidgetEnabled;
+
+    // Set Scene Transition Popup Widget Enabled
+    if (m_sceneTransitionPopup)
+        m_sceneTransitionPopup->SetWidgetsEnabled(enable);
+
+    // Set Stinger Properties Enabled
+    if (!enable)
     {
-        QPropertyAnimation* blockanim = new QPropertyAnimation(m_BlockPopup, "pos", this);
-        blockanim->setDuration(animateSpeed);
-
-        int32_t mainDisplayYPosSize = m_DynamicCompositMainWindow->GetMainPreview()->y() +
-            m_DynamicCompositMainWindow->GetMainPreview()->height();
-
-        auto& configManager = AFConfigManager::GetSingletonInstance();
-        if (configManager.GetStates()->IsPreviewProgramMode())
+        if (m_sourceProperties != nullptr)
         {
-            bool studioPortraitLayout = config_get_bool(configManager.GetGlobal(),
-                "BasicWindow", "StudioPortraitLayout");
-            if (studioPortraitLayout)
+            if (m_sourceProperties->isVisible() &&
+                m_sourceProperties->GetSourceType() == OBS_SOURCE_TYPE_TRANSITION)
             {
-                AFQVerticalProgramView* tmpStudioModeView = m_DynamicCompositMainWindow->GetVerticalStudioModeViewLayout();
-                if (tmpStudioModeView)
-                    mainDisplayYPosSize = tmpStudioModeView->y() + tmpStudioModeView->height();
-            }
-            else
-            {
-                AFQProgramView* tmpStudioModeView = m_DynamicCompositMainWindow->GetStudioModeViewLayout();
-                if (tmpStudioModeView)
-                    mainDisplayYPosSize = tmpStudioModeView->y() + tmpStudioModeView->height();
+                m_sourceProperties->CloseSourcePropertise();
             }
         }
-
-        //(18) Preview Margin
-        blockanim->setStartValue(QPoint(x() + width() / 2 - m_BlockPopup->width() / 2,
-            y() + mainDisplayYPosSize - m_BlockPopup->height() / 2 + 14));
-        blockanim->setEndValue(QPoint(x() + width() / 2 - m_BlockPopup->width() / 2,
-            y() + mainDisplayYPosSize - m_BlockPopup->height() / 2 - 12));
-
-        m_bBlockAnimating = true;
-
-        auto PopupShowFinished = [this]() {
-            m_bBlockAnimating = false;
-        };
-        connect(blockanim, &QPropertyAnimation::finished, PopupShowFinished);
-
-        blockanim->start(QAbstractAnimation::DeleteWhenStopped);
-       
-        m_BlockPopup->show();
-        ui->pushButton_BlockToggle->setChecked(true);
     }
+
 }
 
-void AFMainFrame::_HideBlockArea(int animateSpeed)
+void AFMainFrame::ShowUninstallFreecShotAlert()
 {
-    if (m_bIsBlockPopup && !m_bBlockAnimating && !m_BlockPopup->isHidden())
-    {
-        QPropertyAnimation* blockanim = new QPropertyAnimation(m_BlockPopup, "pos", this);
-        blockanim->setDuration(animateSpeed);
+    if (m_leftNavigationBar)
+        m_leftNavigationBar->ResetChannelSlide();
 
-        blockanim->setStartValue(QPoint(m_BlockPopup->x(), m_BlockPopup->y()));
-        blockanim->setEndValue(QPoint(m_BlockPopup->x(), m_BlockPopup->y() + 14));
-        m_bBlockAnimating = true;
+    bool closed = true;
+    if (m_uninstallFreecshotAlert)
+        closed = m_uninstallFreecshotAlert->close();
 
-        auto PopupHideFinished = [this]() {
-            m_bBlockAnimating = false;
-            m_BlockPopup->hide();
-        };
-        connect(blockanim, &QPropertyAnimation::finished, PopupHideFinished);
+    if (!closed)
+        return;
 
-        blockanim->start(QAbstractAnimation::DeleteWhenStopped);
-        
-        ui->pushButton_BlockToggle->setChecked(false);
+    m_uninstallFreecshotAlert = new AFQFreecshotUninstallAlert(this);
+    m_uninstallFreecshotAlert->setAttribute(Qt::WA_DeleteOnClose, true);
+
+    connect(m_uninstallFreecshotAlert, &AFQFreecshotUninstallAlert::qsignalninstallFreecshotAccept,
+        this, &AFMainFrame::qslotUninstallFreecshotAccept);
+
+    m_uninstallFreecshotAlert->show();
+}
+
+#ifdef _WIN32
+
+void AFMainFrame::AddRegStartProcessWindows() {
+    auto createOrOpenRegKey = [](HKEY rootKey, const QString& subKey) -> HKEY {
+        HKEY hKey;
+        LONG lRes = RegCreateKeyEx(rootKey, subKey.toStdWString().c_str(), 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL);
+        if (lRes != ERROR_SUCCESS) {
+            qDebug() << "Failed to create or open key:" << subKey << "Error code:" << lRes;
+            return NULL;
+        }
+        return hKey;
+    };
+
+    auto setRegValue = [](HKEY hKey, const QString& valueName, const QString& value) -> bool {
+        LONG lRes = RegSetValueEx(hKey, valueName.toStdWString().c_str(), 0, REG_SZ, (BYTE*)value.utf16(), (DWORD)((value.length() + 1) * sizeof(wchar_t)));
+        if (lRes != ERROR_SUCCESS) {
+            qDebug() << "Failed to set value:" << valueName << "Error code:" << lRes;
+            return false;
+        }
+        return true;
+    };
+
+    auto getRegValue = [](HKEY hKey, const QString& valueName) -> QString {
+        DWORD size = 0;
+        LONG lRes = RegQueryValueEx(hKey, valueName.toStdWString().c_str(), NULL, NULL, NULL, &size);
+        if (lRes != ERROR_SUCCESS) {
+            return "";
+        }
+
+        std::wstring buffer(size / sizeof(wchar_t), L'\0');
+        lRes = RegQueryValueEx(hKey, valueName.toStdWString().c_str(), NULL, NULL, (LPBYTE)buffer.data(), &size);
+        if (lRes == ERROR_SUCCESS) {
+            return QString::fromStdWString(buffer);
+        }
+        return "";
+    };
+
+    QString targetPath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
+    QString workingDir = QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
+
+    QString bitDir = QFileInfo(workingDir).absolutePath();
+    QString binDir = QFileInfo(bitDir).absolutePath();
+    QString updaterDir = QFileInfo(binDir).absolutePath() + "\\update";
+    QString launcherPath = QDir::toNativeSeparators(updaterDir + "\\" UPDATE_LAUNCHER_NAME);
+
+    HKEY hKey;
+    LONG lRes = RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Classes\\soopstudio\\shell\\open\\command"), 0, KEY_READ | KEY_WRITE, &hKey);
+    if (lRes == ERROR_SUCCESS) {
+
+        QString existingCommand = getRegValue(hKey, "");
+
+        if (existingCommand.contains("SOOPUpdaterLauncher.exe", Qt::CaseInsensitive)) {
+            RegCloseKey(hKey);
+            return;
+        }
+
+        QString newCommand = QString("\"%1\" \"%2\"").arg(launcherPath).arg("%1");
+        if (!setRegValue(hKey, "", newCommand)) {
+            qDebug() << "Failed to update registry command value.";
+        }
+        else {
+            qDebug() << "Updated existing registry key with new launcher path.";
+        }
+        RegCloseKey(hKey);
+        return;
+    }
+
+    hKey = createOrOpenRegKey(HKEY_CURRENT_USER, "Software\\Classes\\soopstudio");
+    if (hKey) {
+        if (setRegValue(hKey, "", "URL:SOOPStudio") &&
+            setRegValue(hKey, "URL Protocol", "") &&
+            setRegValue(hKey, "FriendlyTypeName", "SOOPStudio 열기")) {
+            RegCloseKey(hKey);
+        }
+        else {
+            qDebug() << "Failed to set registry values for base key.";
+            RegCloseKey(hKey);
+            return;
+        }
+    }
+    else {
+        qDebug() << "Failed to create or open base registry key.";
+        return;
+    }
+
+    if ((hKey = createOrOpenRegKey(HKEY_CURRENT_USER, "Software\\Classes\\soopstudio\\shell"))) {
+        RegCloseKey(hKey);
+}
+    else {
+        return;
+    }
+
+    if ((hKey = createOrOpenRegKey(HKEY_CURRENT_USER, "Software\\Classes\\soopstudio\\shell\\open"))) {
+        RegCloseKey(hKey);
+    }
+    else {
+        return;
+    }
+
+    hKey = createOrOpenRegKey(HKEY_CURRENT_USER, "Software\\Classes\\soopstudio\\shell\\open\\command");
+    if (hKey) {
+        QString strCommand = QString("\"%1\" \"%2\"").arg(launcherPath).arg("%1");
+        if (!setRegValue(hKey, "", strCommand)) {
+            qDebug() << "Failed to set command value.";
+        }
+        else {
+            qDebug() << "Successfully created registry keys and values.";
+        }
+        RegCloseKey(hKey);
+    }
+    else {
+        qDebug() << "Failed to create command key.";
     }
 }
 
+void AFMainFrame::UpdaterKill()
+{
+    auto killIfRunning = [](const QString& imageName) {
+        QProcess process;
+        process.start("tasklist", { "/fi", QString("IMAGENAME eq %1").arg(imageName) });
+        if (!process.waitForFinished(3000))
+            return;
+
+        const QString output = process.readAllStandardOutput();
+        if (output.contains(imageName, Qt::CaseInsensitive)) {
+            QProcess::execute("taskkill", { "/f", "/im", imageName });
+        }
+    };
+
+    killIfRunning("SOOPUpdaterLauncher.exe");
+    killIfRunning("updater.exe");
+}
+
+#else // APPLE
+
+
+#endif
+
+void AFMainFrame::InitLnbMenuItems()
+{
+    for (LnbMenuItem& item : lnbMenuItems) {
+        delete item.action.data();
+    }
+    lnbMenuItems.clear();
+
+    std::string absPath;
+    GetDataFilePath("assets", absPath);
+
+    const QString iconBasePath =
+        QString("%1/platform/channel").arg(QString::fromStdString(absPath));
+
+    const QString iconDefaultPath = QString("%1/default").arg(iconBasePath);
+    const QString iconActivePath = QString("%1/checked").arg(iconBasePath);
+    const QString iconDisabledPath = QString("%1/disabled").arg(iconBasePath);
+
+    auto addFavoriteMenu =
+        [this, &iconDefaultPath, &iconActivePath, &iconDisabledPath](
+            const char* menuId,
+            const char* menuLog,
+            const char* iconFileName,
+            ENUM_WINDOW_TYPE windowType)
+        {
+            const QString menuIdText = QString::fromUtf8(menuId);
+            const QString menuLogText = QString::fromUtf8(menuLog);
+            const QString iconFileNameText = QString::fromUtf8(iconFileName);
+
+            QAction* action = new QAction(this);
+            connect(action, &QAction::triggered,
+                this, [this, menuIdText, windowType]() {
+                    if (m_leftNavigationBar)
+                        m_leftNavigationBar->HideChannelSlide();
+
+                    ShowLnbMenuPopup(menuIdText, windowType);
+                });
+
+            const QByteArray favoriteAtKey =
+                QString("%1_favorite_at").arg(menuLogText).toUtf8();
+
+            const char* favoriteAtValue = config_get_string(
+                USERCONFIG, "FavoriteMenu", favoriteAtKey.constData());
+
+            LnbMenuItem item;
+            item.menuId = menuIdText;
+            item.menuLog = menuLogText;
+            item.menuName = QTStr(menuId);
+            item.iconDefaultPath = QString("%1/%2").arg(iconDefaultPath, iconFileNameText);
+            item.iconActivePath = QString("%1/%2").arg(iconActivePath, iconFileNameText);
+            item.iconDisabledPath = QString("%1/%2").arg(iconDisabledPath, iconFileNameText);
+            item.action = action;
+            item.isFavorite = config_get_bool(USERCONFIG, "FavoriteMenu", menuLog);
+            item.favoriteAt = QDateTime::fromString(
+                QString::fromUtf8(favoriteAtValue ? favoriteAtValue : ""),
+                Qt::ISODateWithMs);
+
+           lnbMenuItems.push_back(item);
+        };
+
+    addFavoriteMenu("Chat", "chat", "chat.svg", ENUM_WINDOW_TYPE::SoopChat);
+    addFavoriteMenu("LiveOverlay", "overlay", "overlay.svg", ENUM_WINDOW_TYPE::SoopOverlay);
+    addFavoriteMenu("SubTitle", "subtitle", "subtitle.svg", ENUM_WINDOW_TYPE::SubTitle);
+    addFavoriteMenu("Mission", "mission", "mission.svg", ENUM_WINDOW_TYPE::Mission);
+    addFavoriteMenu("Vote", "vote", "vote.svg", ENUM_WINDOW_TYPE::Vote);
+    //addFavoriteMenu("ExtensionProgram", "extensions", "extensions.svg", ENUM_WINDOW_TYPE::Extensions);
+    addFavoriteMenu("AquaRemoteControl", "aquaControl", "aquacontrol.svg", ENUM_WINDOW_TYPE::AquaControl);
+    addFavoriteMenu("SaveVodNow", "savevod", "savevod.svg", ENUM_WINDOW_TYPE::None);
+    addFavoriteMenu("Breaktime", "breaktime", "breaktime.svg", ENUM_WINDOW_TYPE::Breaktime);
+}
+
+LnbMenuItem* AFMainFrame::FindLnbMenuItem(const QString& menuId)
+{
+    for (LnbMenuItem& item : lnbMenuItems) {
+        if (item.menuId == menuId)
+            return &item;
+    }
+
+    return nullptr;
+}
+
+bool AFMainFrame::TriggerLnbMenu(const QString& menuId)
+{
+    LnbMenuItem* item = FindLnbMenuItem(menuId);
+    if (!item) {
+        return false;
+    }
+
+    if (!item->action) {
+        return false;
+    }
+
+    item->action->trigger();
+    return true;
+}
+
+void AFMainFrame::SetLnbMenuDisabled(const QString& menuId, bool disabled)
+{
+    for (LnbMenuItem& item : lnbMenuItems) {
+        if (item.menuId != menuId)
+            continue;
+
+        item.disabled = disabled;
+        return;
+    }
+}
+
+bool AFMainFrame::SetFavoriteLnbMenu(const QString& menuId, bool favorite)
+{
+    config_t* userConfig = USERCONFIG;
+
+    LnbMenuItem* item = FindLnbMenuItem(menuId);
+    if (!item)
+        return false;
+
+    if (item->isFavorite == favorite)
+        return true;
+
+    item->isFavorite = favorite;
+    item->favoriteAt = favorite ? QDateTime::currentDateTime() : QDateTime();
+
+    const QByteArray favoriteAtKey =
+        QString("%1_favorite_at").arg(item->menuLog).toUtf8();
+
+    const QByteArray now = item->favoriteAt.toString(Qt::ISODateWithMs).toUtf8();
+
+    config_set_bool(USERCONFIG, "FavoriteMenu", item->menuLog.toStdString().c_str(), favorite);
+    config_set_string(userConfig, "FavoriteMenu", favoriteAtKey.constData(), now.constData());
+
+    config_save_safe(userConfig, "tmp", nullptr);
+
+    return true;
+}
+
+void AFMainFrame::RefreshFavoriteLnbMenus()
+{
+    if(m_leftNavigationBar)
+        m_leftNavigationBar->RefreshFavoriteLnbMenuButtons();
+}
+
+
+void AFMainFrame::UpdateFavoirteLnbMenus(const QString& menuId)
+{
+    if (m_leftNavigationBar)
+        m_leftNavigationBar->UpdateFavoriteLnbMenuButtons(menuId);
+}
+
+QVector<LnbMenuItem>& AFMainFrame::GetLnbMenuItems()
+{
+    return lnbMenuItems;
+}
+
+void AFMainFrame::ShowLnbMenuPopup(const QString& menuId, ENUM_WINDOW_TYPE type)
+{
+    if (!m_blockManager)
+        return;
+
+    if (type != ENUM_WINDOW_TYPE::None)
+    {
+        if (type == ENUM_WINDOW_TYPE::SubTitle)
+        {
+            AFQBroadInfo* broadInfo = AUTH_CONTEXT.GetSoopBroadInfo();
+            QString url_ = QString::fromStdString(SOOP_SUBTITLE).arg(broadInfo->Lang().c_str());
+            NavigateDefaultBrowser(url_);
+        }
+        else
+        {
+            AFQBorderPopupBaseWidget* popup = nullptr;
+            if (m_blockManager->GetPopup(type, popup)) {
+                popup->raise();
+                return;
+            }
+
+            bool active = m_blockManager->MakePopup(type, popup);
+            for (LnbMenuItem& item : lnbMenuItems) {
+                if (0 == item.menuId.compare(menuId)) {
+                    item.active = active;
+                    break;
+                }
+            }
+        }
+    }
+    else
+    {
+        if (0 == menuId.compare("SaveVodNow"))
+        {
+            if (CheckSplitVodAvailable())
+                m_blockManager->ShowVodSplit(this);
+            else 
+                AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this, 
+                    "", QTStr("SplitVod.Condition.Info"), false, true);
+        }
+    }
+}

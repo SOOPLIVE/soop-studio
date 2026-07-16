@@ -2,7 +2,12 @@
 #define AFCWIDGET_H
 
 #include <QWidget>
+#include <QDialog>
+
+#if 0 //Rubberband
 #include <QRubberBand>
+#endif
+
 #include <QPointer>
 
 class AFCQMainBaseWidget : public QWidget
@@ -11,12 +16,14 @@ class AFCQMainBaseWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit AFCQMainBaseWidget(QWidget* parent = nullptr, Qt::WindowFlags flag = Qt::WindowFlags());
+    explicit AFCQMainBaseWidget(QWidget* parent = nullptr, Qt::WindowFlags flag = Qt::WindowFlags(),
+        bool widthResizable = true, bool heightResizable = true);
     ~AFCQMainBaseWidget();
 
 signals:
     void qsignalBaseWindowMouseRelease();
     void qsignalBaseWindowMaximized(bool max);
+    void qsignalCloseTriggered();
 
 public slots:
     void qslotMaximizeWindow();
@@ -26,6 +33,7 @@ public slots:
 
 #pragma region public func
 public:
+#if 0 //Rubberband
     enum Edge {
         None = 0x0,
         Left = 0x1,
@@ -40,56 +48,80 @@ public:
     Q_ENUM(Edge);
     Q_DECLARE_FLAGS(Edges, Edge);
 
-    inline void setBorderWidth(int w) { m_iBorderWidth = w; }
-    inline int borderWidth() const { return m_iBorderWidth; }
-    void SetHeightFixed(bool fixed) { m_bIsFixedHeight = fixed; };
-    void SetWidthFixed(bool fixed) { m_bIsFixedWidth = fixed; };
-    void RestoreNormalWidth(int w) { m_RestoreNormalWidth = w; }
+    inline void setBorderWidth(int w) { m_borderWidth = w; }
+    inline int borderWidth() const { return m_borderWidth; }
+#endif
+
+    void SetWidthResizeEnabled(bool enable) { m_widthResizable = enable; };
+    void SetHeightResizeEnabled(bool enable) { m_heightResizable = enable; };
+
+    bool ResizeEnabled() const;
+    bool WidthResizeEnabled() const;
+    bool HeightResizeEnabled() const;
+    bool MoveAllArea() const;
+    bool HasTitleBar() const;
+
+    int TitleBarHeight() const;
 
 #pragma region public func
 
 #pragma region protected func
 protected:
+#if 0 //Rubberband
     void mouseHoverEvent(QHoverEvent* e);
     void mouseLeaveEvent(QEvent* e);
     void mousePressEvent(QMouseEvent* e);
     void mouseReleaseEvent(QMouseEvent* e);
     void mouseMoveEvent(QMouseEvent* e);
+    void closeEvent(QCloseEvent* event) override;
     bool event(QEvent* e) override;
+#endif
     virtual void changeWidgetBorder(bool isMaximized) {};
+    bool nativeEvent(const QByteArray& eventType, void* message, qintptr* result) override;
 #pragma region protected func
 
 #pragma region private func
 private:
+#if 0 //Rubberband
     void _SetCursorToDefault();
     void _UpdateCursorShape(const QPoint& pos);
     void _CalculateCursorPosition(const QPoint& pos, const QRect& framerect, Edges& _edge);
     void _AdjustWidgetSizeToScreen();
     void _AdjustMaximizeDragPosition(QMouseEvent* event);
+#endif
+
 #pragma region private func
 
 #pragma region private member var
 private:
-    QPoint m_CurrentPoint = QPoint();
-    QPoint m_NewPoint = QPoint();
+#if 0 //Rubberband
+    QPoint m_currentPoint = QPoint();
+    QPoint m_newPoint = QPoint();
     QPoint m_DragPosition = QPoint();
 
-    QPointer<QRubberBand> m_Rubberband = new QRubberBand(QRubberBand::Rectangle);
-    Edges m_MousePressedEdge = Edge::None;
-    Edges m_MouseMoveEdge = Edge::None;
-    int m_iBorderWidth = 8;
+    QPointer<QRubberBand> m_rubberband = new QRubberBand(QRubberBand::Rectangle);
+    Edges m_mousePressedEdge = Edge::None;
+    Edges m_mouseMoveEdge = Edge::None;
+    int m_borderWidth = 8;
 
-    bool m_bCursorChanged = false;
-    bool m_bLeftButtonPressed = false;
-    bool m_bIsFixedWidth = false;
-    bool m_bIsFixedHeight = false;
-    bool m_bDragStart = false;
+    bool m_cursorChanged = false;
+    bool m_leftButtonPressed = false;
+    bool m_isFixedWidth = false;
+    bool m_isFixedHeight = false;
+    bool m_dragStart = false;
 
     QSize m_maximumSize;
     QSize m_minimumSize;
 
-    bool m_IsFixedSizeSet = false;
-    int  m_RestoreNormalWidth = -1;
+    bool m_isFixedSizeSet = false;
+    int  m_restoreNormalWidth = -1;
+#endif
+
+    bool m_widthResizable = true;
+    bool m_heightResizable = true;
+    bool m_moveAllArea = false;
+    bool m_firstShow = true;
+    int m_titleBarHeight = 40; // <0: auto, =0: no title bar, >0: manual
 #pragma region private member var
 };
 

@@ -30,8 +30,6 @@ public:
 public slots:
 	void qslotMoveMenu();
 
-signals:
-	void qsignalMenuClosed();
 #pragma endregion QT Field, CTOR/DTOR
 
 #pragma region public func
@@ -41,8 +39,6 @@ public:
 #pragma endregion public func
 
 #pragma region protected func
-protected:
-	virtual void closeEvent(QCloseEvent *event) override;
 #pragma endregion protected func
 
 #pragma region private func

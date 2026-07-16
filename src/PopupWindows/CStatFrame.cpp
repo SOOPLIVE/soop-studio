@@ -1,7 +1,10 @@
 ﻿#include "CStatFrame.h"
 #include "ui_stat-frame.h"
+
 #include "Application/CApplication.h"
-#include "qt-wrapper.h"
+
+#include "CoreModel/Statistics/CStatistics.h"
+
 
 #define REC_TIME_LEFT_INTERVAL 30000
 #define SPACE_TEXT ": "
@@ -15,34 +18,37 @@ static QString MakeMissedFramesText(uint32_t total_lagged,
 }
 
 AFQStatWidget::AFQStatWidget(QWidget* parent, Qt::WindowFlags flag) :
-    AFCQMainBaseWidget(parent, flag),
+    QWidget(parent, flag),
     ui(new Ui::AFQStatWidget)
 {
     ui->setupUi(this);
 
-    setAttribute(Qt::WA_TranslucentBackground);
-    setAttribute(Qt::WA_DeleteOnClose, true);
     installEventFilter(this);
     setWindowTitle(QTStr("Basic.Stats"));
 
-    m_Statistics = App()->GetStatistics();
-    connect(m_Statistics, &AFStatistics::qsignalNetworkState, this, &AFQStatWidget::qslotNetworkState);
-    connect(m_Statistics, &AFStatistics::qsignalCPUState, this, &AFQStatWidget::qslotCPUState);
-    connect(m_Statistics, &AFStatistics::qsignalDiskState, this, &AFQStatWidget::qslotDiskState);
-    connect(m_Statistics, &AFStatistics::qsignalMemoryState, this, &AFQStatWidget::qslotMemoryState);
-    //connect(m_Statistics, &AFStatistics::qsignalFPSState, this, &AFQStatWidget::qslotFPSState);
-    //connect(m_Statistics, &AFStatistics::qsignalRenderTimeState, this, &AFQStatWidget::qslotRenderTimeState);
-    connect(m_Statistics, &AFStatistics::qsignalSkippedFrameState, this, &AFQStatWidget::qslotSkippedFrameState);
-    connect(m_Statistics, &AFStatistics::qsignalLaggedFrameState, this, &AFQStatWidget::qslotLaggedFrameState);
+    auto& statistics = STATISTICS;
+    //
+    connect(&statistics, &AFStatistics::qsignalNetworkState, this, &AFQStatWidget::qslotNetworkState);
+    connect(&statistics, &AFStatistics::qsignalCPUState, this, &AFQStatWidget::qslotCPUState);
+    connect(&statistics, &AFStatistics::qsignalDiskState, this, &AFQStatWidget::qslotDiskState);
+    connect(&statistics, &AFStatistics::qsignalMemoryState, this, &AFQStatWidget::qslotMemoryState);
+    connect(&statistics, &AFStatistics::qsignalFPSState, this, &AFQStatWidget::qslotFPSState);
+    connect(&statistics, &AFStatistics::qsignalRenderTimeState, this, &AFQStatWidget::qslotRenderTimeState);
+    connect(&statistics, &AFStatistics::qsignalSkippedFrameState, this, &AFQStatWidget::qslotSkippedFrameState);
+    connect(&statistics, &AFStatistics::qsignalLaggedFrameState, this, &AFQStatWidget::qslotLaggedFrameState);
 
-    connect(ui->pushButton_Close, &QPushButton::clicked, this, &AFQStatWidget::close);
-    connect(ui->pushButton_CloseBtn, &QPushButton::clicked, this, &AFQStatWidget::close);
+    connect(ui->pushButton_CloseBtn, &QPushButton::clicked, this, &AFQStatWidget::qslotCloseButtonTriggered);
     connect(ui->pushButton_Reset, &QPushButton::clicked, [this]() { qslotReset(); });
-    connect(App()->GetMainView(), &AFMainFrame::qsignalRefreshTimerTick,
-            this, &AFQStatWidget::UpdateState);
+    connect(MAINFRAME, &AFMainFrame::qsignalRefreshTimerTick, this, &AFQStatWidget::UpdateState);
 
     UpdateState();
     UpdateStateIcon();
+
+    if (MAINFRAME->IsSmallResolution())
+    {
+        ui->buttonBoxFrame->setMinimumHeight(0);
+        ui->buttonBoxFrame->setMaximumHeight(QWIDGETSIZE_MAX);
+    }
 
     //OBSBasic* main = reinterpret_cast<OBSBasic*>(App()->GetMainWindow());
     //const char* geometry =
@@ -62,11 +68,6 @@ AFQStatWidget::AFQStatWidget(QWidget* parent, Qt::WindowFlags flag) :
     //    }
     //}
     //obs_frontend_add_event_callback(OBSFrontendEvent, this);
-
-    _ChangeLanguage();
-
-    this->SetHeightFixed(true);
-    this->SetWidthFixed(true);
 }
 
 AFQStatWidget::~AFQStatWidget()
@@ -76,13 +77,14 @@ AFQStatWidget::~AFQStatWidget()
 
 void AFQStatWidget::qslotReset()
 {
-    m_Statistics->Reset();
+    STATISTICS.Reset();
 
     UpdateState();
     UpdateStateIcon();
 }
 
-void AFQStatWidget::qslotNetworkState(PCStatState state) {
+void AFQStatWidget::qslotNetworkState(PCStatState state) 
+{
     AFMainFrame::SetPCStateIconStyle(ui->label_NetworkState, state);
 
     if (state == PCStatState::None)
@@ -105,6 +107,14 @@ void AFQStatWidget::qslotMemoryState(PCStatState state) {
     AFMainFrame::SetPCStateIconStyle(ui->label_MemoryState, state);
 }
 
+void AFQStatWidget::qslotFPSState(PCStatState state) {
+    AFMainFrame::SetPCStateIconStyle(ui->label_FPSState, state);
+}
+
+void AFQStatWidget::qslotRenderTimeState(PCStatState state) {
+    AFMainFrame::SetPCStateIconStyle(ui->label_RenderTimeSState, state);
+}
+
 void AFQStatWidget::qslotSkippedFrameState(PCStatState state) {
     AFMainFrame::SetPCStateIconStyle(ui->label_SkippedFramesState, state);
 }
@@ -113,28 +123,32 @@ void AFQStatWidget::qslotLaggedFrameState(PCStatState state) {
     AFMainFrame::SetPCStateIconStyle(ui->label_MissedFramesState, state);
 }
 
+void AFQStatWidget::qslotCloseButtonTriggered()
+{
+    emit qsignalCloseTriggered(ENUM_WINDOW_TYPE::StatPage);
+}
+
 void AFQStatWidget::UpdateStateIcon()
 {
+    auto& statistics = STATISTICS;
+    //
     // Init State Icon
-    PCStatState curState = m_Statistics->GetNetworkIconState();
+    PCStatState curState = statistics.GetNetworkIconState();
     qslotNetworkState(curState);
-    curState = m_Statistics->GetCPUIconState();
+    curState = statistics.GetCPUIconState();
     qslotCPUState(curState);
-    curState = m_Statistics->GetDiskIconState();
+    curState = statistics.GetDiskIconState();
     qslotDiskState(curState);
-    curState = m_Statistics->GetMemoryIconState();
+    curState = statistics.GetMemoryIconState();
     qslotMemoryState(curState);
-    curState = m_Statistics->GetSkippedFrameIconState();
+    curState = statistics.GetSkippedFrameIconState();
     qslotSkippedFrameState(curState);
-    curState = m_Statistics->GetLaggedFrameIconState();
+    curState = statistics.GetLaggedFrameIconState();
     qslotLaggedFrameState(curState);
 }
 
 void AFQStatWidget::UpdateState()
 {
-    if (!m_Statistics)
-        return;
-
     OBSOutputAutoRelease strOutput = obs_frontend_get_streaming_output();
     OBSOutputAutoRelease recOutput = obs_frontend_get_recording_output();
 
@@ -161,23 +175,26 @@ void AFQStatWidget::_ChangeLanguage()
 
 void AFQStatWidget::_RefreshNetworkText()
 {
-    int network = m_Statistics->GetNetworkState();
+    int network = STATISTICS.GetNetworkState();
     QString str = QString::number(network) + QStringLiteral("%");
     ui->label_NetworkValue->setText(str);
 }
 
 void AFQStatWidget::_RefreshFPSText()
 {
-    double curFPS = m_Statistics->GetCurFPS();
+    struct obs_video_info ovi = {};
+    obs_get_video_info(&ovi);
+    double obsFPS = (double)ovi.fps_num / (double)ovi.fps_den;
 
-    QString str = QString::number(curFPS, 'f', 2);
+    double fps = STATISTICS.GetCurFPS();
+    QString str = QString("%1 / %2").arg(QString::number(fps, 'f', 2)).arg(QString::number(obsFPS, 'f', 2));
     str = SPACE_TEXT + str;
     ui->label_FPSValue->setText(str);
 }
 
 void AFQStatWidget::_RefreshCPUText()
 {
-    double usage = m_Statistics->GetCPUUsage();
+    double usage = STATISTICS.GetCPUUsage();
     QString str = QString::number(usage, 'f', 1) + QStringLiteral("%");
     str = SPACE_TEXT + str;
     ui->label_CPUValue->setText(str);
@@ -189,7 +206,7 @@ void AFQStatWidget::_RefreshDiskText()
 #define GBYTE (1024ULL * 1024ULL * 1024ULL)
 #define TBYTE (1024ULL * 1024ULL * 1024ULL * 1024ULL)
 
-    uint64_t numBytes = m_Statistics->GetDiskSize();
+    uint64_t numBytes = STATISTICS.GetDiskSize();
     QString abrv = QStringLiteral(" MB");
     long double num;
 
@@ -210,7 +227,7 @@ void AFQStatWidget::_RefreshDiskText()
 
 void AFQStatWidget::_RefreshMemoryText()
 {
-    long double num = m_Statistics->GetMemorySize();
+    long double num = STATISTICS.GetMemorySize();
 
     QString str = QString::number(num, 'f', 1) + QStringLiteral(" MB");
     str = SPACE_TEXT + str;
@@ -219,7 +236,7 @@ void AFQStatWidget::_RefreshMemoryText()
 
 void AFQStatWidget::_RefreshRenderingAvgTimeText()
 {
-    long double num = m_Statistics->GetOBSAvgFrameTime();
+    long double num = STATISTICS.GetOBSAvgFrameTime();
 
     QString str = QString::number(num, 'f', 1) + QStringLiteral(" ms");
     str = SPACE_TEXT + str;
@@ -228,9 +245,11 @@ void AFQStatWidget::_RefreshRenderingAvgTimeText()
 
 void AFQStatWidget::_RefreshSkippedFrameText()
 {
-    uint32_t totalEncoded = m_Statistics->GetTotalEncoded();
-    uint32_t totalSkipped = m_Statistics->GetTotalSkipped();
-    long double skippedRate = m_Statistics->GetSkippedFrameRate();
+    auto& statistics = STATISTICS;
+    //
+    uint32_t totalEncoded = statistics.GetTotalEncoded();
+    uint32_t totalSkipped = statistics.GetTotalSkipped();
+    long double skippedRate = statistics.GetSkippedFrameRate();
 
     QString str = QString("%1 / %2 (%3%)")
         .arg(QString::number(totalSkipped),
@@ -243,9 +262,11 @@ void AFQStatWidget::_RefreshSkippedFrameText()
 
 void AFQStatWidget::_RefreshLaggedFrameText()
 {
-    uint32_t totalRendered = m_Statistics->GetTotalRendered();
-    uint32_t totalLagged = m_Statistics->GetTotalLagged();
-    long double laggedRate = m_Statistics->GetLaggedFrameRate();
+    auto& statistics = STATISTICS;
+    //
+    uint32_t totalRendered = statistics.GetTotalRendered();
+    uint32_t totalLagged = statistics.GetTotalLagged();
+    long double laggedRate = statistics.GetLaggedFrameRate();
 
     QString str = MakeMissedFramesText(totalLagged, totalRendered, laggedRate);
     str = SPACE_TEXT + str;
@@ -254,8 +275,10 @@ void AFQStatWidget::_RefreshLaggedFrameText()
 
 void AFQStatWidget::_RefreshStreamResourceText()
 {
-    long double num = m_Statistics->GetStreamMegabytesSent();
-    long double kbps = m_Statistics->GetStreamBitrate();
+    auto& statistics = STATISTICS;
+    //
+    long double num = statistics.GetStreamMegabytesSent();
+    long double kbps = statistics.GetStreamBitrate();
 
     QString str = QString("%1 MB").arg(QString::number(num, 'f', 1));
     str = SPACE_TEXT + str;
@@ -265,9 +288,9 @@ void AFQStatWidget::_RefreshStreamResourceText()
     str = SPACE_TEXT + str;
     ui->label_StreamBitrateValue->setText(str);
  
-    int total = m_Statistics->GetStreamTotalFrame();
-    int dropped = m_Statistics->GetStreamDroppedFrame();
-    num = m_Statistics->GetStreamDroppedFrameRate();
+    int total = statistics.GetStreamTotalFrame();
+    int dropped = statistics.GetStreamDroppedFrame();
+    num = statistics.GetStreamDroppedFrameRate();
 
     str = QString("%1 / %2 (%3%)")
         .arg(QString::number(dropped),
@@ -279,8 +302,10 @@ void AFQStatWidget::_RefreshStreamResourceText()
 
 void AFQStatWidget::_RefreshRecResourceText()
 {
-    long double num = m_Statistics->GetRecMegabytesSent();
-    long double kbps = m_Statistics->GetRecBitrate();
+    auto& statistics = STATISTICS;
+    //
+    long double num = statistics.GetRecMegabytesSent();
+    long double kbps = statistics.GetRecBitrate();
 
     QString str = QString("%1 MB").arg(QString::number(num, 'f', 1));
     str = SPACE_TEXT + str;

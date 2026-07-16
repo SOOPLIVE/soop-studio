@@ -1,14 +1,12 @@
 ﻿#pragma once
 
-#include <qobject.h>
-#include <qstring.h>
-#include <qtimer.h>
-#include <qaction.h>
-
 #include <deque>
 #include <functional>
 #include <string>
 #include <memory>
+
+#include <QTimer>
+#include "qt-wrappers.hpp"
 
 class AFMainFrame;
 
@@ -41,13 +39,9 @@ class AFUndoStack : public QObject
     void DisableInternal();
     void ClearRedo();
 
-#pragma region QT Field, CTOR/DTOR
 public:
     AFUndoStack(AFMainFrame* main);
 
-#pragma endregion QT Field, CTOR/DTOR
-
-#pragma region public func
 public:
     void Enable();
     void Disable();
@@ -64,30 +58,16 @@ public:
     void Undo();
     void Redo();
 
-signals:
+    // Change Source Name
+    void AddActionRename(std::string& prevName, std::string& newName, obs_source_t* source);
 
-#pragma endregion public func
-
-#pragma region private func
-private:
-
-#pragma endregion private func
-
-#pragma region private slot func
 private slots:
-    void qSlotResetRepeatableState();
+    void qslotResetRepeatableState();
 
-#pragma endregion private slot func
-
-#pragma region public member var
 public:
-    QAction*    m_actionMainUndo;
-    QAction*    m_actionMainRedo;
-
-#pragma endregion public member var
-
-#pragma region private member var
-private:
-
-#pragma endregion private member var
+    QAction* m_pActionMainUndo = nullptr;
+    QAction* m_pActionMainRedo = nullptr;
 };
+//
+extern bool save_undo_source_enum(obs_scene_t* /*scene*/, obs_sceneitem_t* item, void* p);
+extern void undo_redo(const std::string& data);

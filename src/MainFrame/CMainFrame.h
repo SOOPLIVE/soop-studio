@@ -7,50 +7,151 @@
 #include <QPointer>
 #include <QWidgetAction>
 #include <QSystemTrayIcon>
+#include <QNetworkAccessManager>
 #include <QUrl>
+#include <QNetworkRequest>
+#include <QNetworkReply>
 #include <QDebug>
 #include <QStandardPaths>
 #include <QProcess>
+#include <QSystemTrayIcon>
+#include <chrono>
 
+#ifdef _WIN32
+#include <zlib.h>
+#else
+#include <cstdlib>
+#endif
 
+#include <obs-frontend-internal.hpp>
 
+#include <future>
+
+#include "Application/CApplication.h"
+#include "DynamicCompose/CMainDynamicComposit.h"
+
+#include "Utils/CJsonController.h"
+#include "Utils/SOOPAPIHandler.h"
+
+#include "CoreModel/UndoStack/CUndoStack.h"
+#include "CoreModel/OBSOutput/CVirtualCamDef.h"
+
+#include "ViewModel/Auth/CAuth.h"
+
+#include "CSystemAlert.h"
 #include "CMainBaseWidget.h"
 #include "CMainAccountButton.h"
 #include "CResourceExtension.h"
-#include "CSystemAlert.h"
-#include "UIComponent/CColorSelect.h"
+#include "CMainFrameGuide.h"
+
 #include "UIComponent/CCustomPushbutton.h"
+#include "UIComponent/CSliderFrame.h"
+#include "UIComponent/CMessageBox.h"
+#include "UIComponent/CTopBaseWindow.h"
 
 #include "PopupWindows/CBasicFilters.h"
 #include "PopupWindows/CBasicTransform.h"
-#include "PopupWindows/CGuideWidget.h"
-#include "PopupWindows/CStatFrame.h"
 #include "PopupWindows/CProgramInfoDialog.h"
+#include "PopupWindows/SourceDialog/SOOPVodSource/VodSourceDialog/CVodSourceDialog.h"
+#include "PopupWindows/SourceDialog/SOOPVodSource/TVBroadDialog/CTvBroadDialog.h"
+#include "PopupWindows/SourceDialog/SOOPBrowserSource/CCefPopupDialog.h"
+#include "PopupWindows/SourceDialog/SOOPVodSource/DirectBroadDialog/CDirectBroadDialog.h"
+#include "PopupWindows/SourceDialog/SOOPDowoomiSource/CDowoomiDialog.h"
+#include "PopupWindows/SourceDialog/SOOPDowoomiSource/CDowoomiScoreDialog.h"
+#include "PopupWindows/SourceDialog/SOOPDowoomiSource/CDowoomiMoodCheckDialog.h"
+#include "PopupWindows/SourceDialog/SOOPMissionSource/CMissionChallengeDialog.h"
+#include "PopupWindows/SourceDialog/SOOPMissionSource/CMissionDonationRankDialog.h"
+#include "PopupWindows/SourceDialog/EffectSource/CSplitEffectDialog.h"
+#include "PopupWindows/SourceDialog/EffectSource/CParticleEffectDialog.h"
 
-#include "DynamicCompose/CMainDynamicComposit.h"
+#include "PopupWindows/CCateChangeDialog.h"
+#include "PopupWindows/CWindowCaptureAreaWidget.h"
 
-#include "Utils/CStatusLogManager.h"
+#include "Blocks/CBlockManager.h"
+#include "PopupWindows/ImportGuide/CImportGuide.h"
+
+#include "SOOPFrontendAPI/CSOOPFrontendAPI.h"
 
 
+#define MAINFRAME_UI        MAINFRAME->GetMainFrameUI()
+//#define MAIN_LOADSAVE       MAINFRAME->GetMainLoadSave()
+#define MAIN_PROFILE        MAINFRAME->GetMainProfile()
+#define MAIN_SCENECOLLECTION MAINFRAME->GetMainSceneCollection()
+#define MAIN_OUTPUT         MAINFRAME->GetMainOutput()
+#define MAIN_AUDIOSOURCE    MAINFRAME->GetMainAudioSource()
+#define MAIN_SCENESOURCE    MAINFRAME->GetMainSceneSource()
+#define MAIN_BLOCKMANAGER   MAINFRAME->GetBlockManager()
+//
+#define SERVICE_MANAGER     MAINFRAME->GetServiceManager()
+#define SCENE_CONTEXT       MAINFRAME->GetScene()
+#define OUTPUT_CONTEXT      MAINFRAME->GetOutputContext()
+#define GRAPHIC_CONTEXT     MAINFRAME->GetGraphicContext()
+#define BREAKTIME_MANAGER   MAINFRAME->GetBreakTimeManager()
+#define OVERLAY_MANAGER     MAINFRAME->GetOverlayManager()
 
-#include <obs-frontend-internal.hpp>
-#include "ViewModel/Auth/CAuth.h"
+#define SOOP_SRC_MANAGER    MAINFRAME->GetSoopSrcManager()
+#define CEFMANAGER          MAINFRAME->GetCefManager()
 
-#include "Utils/CJsonController.h"
+#define UNDO_STACK          MAINFRAME->GetUndoStack()
 
-#include "CoreModel/Config/CConfigManager.h"
-#include "CoreModel/OBSOutput/SBasicOutputHandler.h"
-#include "CoreModel/Video/CVideo.h"
-#include "CoreModel/Source/CSource.h"
-#include "CoreModel/UndoStack/CUndoStack.h"
+#define SOOP_API_HANDLER    MAINFRAME->GetSOOPApiHandler()
+#define SOOP_VOD_HANDLER    MAINFRAME->GetSOOPVodHandler()
 
-#include "CStatusbarTemp.h"
+#define MAIN_PREVIEW        DYNAMIC_COMPOSIT->GetMainPreview()
+
+enum BROADSTART_ERROR {
+    BS_NONE,
+    BS_SUCCESS,
+    BS_NOT_EXIST_BROADCAST_CHANNEL,
+    BS_STREAM_ACTIVE,
+    BS_BROADNOTICE_CANCEL,
+    BS_SOOP_MEDIA_SOURCE_CATEGORY_CANCEL,
+    BS_BROADSTART_API_JSON_INVALID,
+    BS_ADMINBLACK_CASE,
+    BS_NEED_REALNAME_AUTH,
+    BS_NEED_MINOR_CERTIFY,
+    BS_LIMIT_DUPLICATE_BROAD,
+    BS_LIMIT_DUPLICATE_BROADING,
+    BS_ALREADY_BROADCASTING,
+    BS_INVALID_STREAMKEY,
+    BS_INVALID_RESOLUTION,
+    BS_USER_REJECT,
+    BS_SUBSCRIBE_DISABLED,
+    BS_SUBSCRIBE_NOTSAME,
+    BS_ACCOUNT_RESIGNED,
+    BS_ACCOUNT_NO_INFO,
+    BS_UNDER_MAINTENANCE,
+    BS_EMAIL_CERTIFY,
+    BS_NEED_LOGIN,
+
+    BS_COUNT,
+};
+
+struct LnbMenuItem
+{
+    QString menuId;
+    QString menuLog;
+    QString menuName;
+    QString iconDefaultPath;
+    QString iconActivePath;
+    QString iconDisabledPath;
+
+    QPointer<QAction> action;
+
+    // favorite state
+    bool isFavorite = false;
+    QDateTime favoriteAt;
+
+    bool active = false;
+    bool disabled = false;
+};
 
 namespace Ui {
 class AFMainFrame;
 }
 
-// Forward
+class JSON;
+
 class QMovie;
 class QLabel;
 
@@ -64,19 +165,86 @@ struct os_event_data;
 struct os_sem_data;
 typedef struct os_event_data os_event_t;
 
-class AFVideoUtil;
 class AFQStudioSettingDialog;
-class AFQSliderFrame;
-class AFQStatWidget;
 class AFQRemux;
 class AFQBalloonWidget;
 class AFQSourceProperties;
 class AFQSceneBottomButton;
 class AFQMissingFilesDialog;
+class AFQColorSelect;
+class AFQBrowserInteraction;
+class AFQLeftNavigationBar;
+class AFQExtensionLinkDialog;
+class AFQExtensionExecDialog;
+class AFQVideoBalloonProps;
+class AFQSignaturePopup;
+class AFAddStreamWidget;
+class AFQStudioUpdateLogDialog;
+class AFQFreecshotUninstallAlert;
+class AFQSourceControlDialog;
+class AFQSceneTransitionsDialog;
+class AFQAudioAdvSettingDialog;
 
-class JSON;
+// MainFrame Separation Class
+class CMainDragDrop;
+class AFMainProfile;
+class AFMainSceneCollection;
+class CMainOutput;
+class CMainAudioSource;
+class CMainUpdate;
+class CMainSceneSource;
+class AFSceneContext;
+class AFOBSOutputContext;
+class AFGraphicsContext;
+class BreaktimeManager;
+class OverlayManager;
+//
+class AFServiceManager;
+class SOOPMediaSourceManager;
+class AFCefManager;
+//
+class AFBasicAuth;
 
-typedef std::vector<std::pair<obs_service_t*, std::unique_ptr<AFBasicOutputHandler>>>   OUTPUT_HANDLER_LIST;
+typedef  QMap<QString, QPointer<AFQExtensionExecDialog>>    MAP_EXTENSION_EXEC;
+typedef  QMap<OBSSource, AFQBrowserInteraction*>            MAP_BROWSER_INTERACTION;
+typedef  QMap<OBSSource, AFQSourceControlDialog*>           MAP_SOURCE_CONTEXT;
+
+struct VCamConfig;
+enum VCamOutputType;
+
+//code 0: API Error
+struct BroadStartAPI_s{
+    int code = 0;
+    std::string broadMsg = "";
+    std::string streamNo= "";
+    std::string redirectURL = "";
+};
+
+struct ChatFeatureParam {
+    std::string feature;
+    std::string name;
+    std::string nickname;
+    std::string type;
+    std::string term = "0";
+};
+
+struct EventTime {
+    int year;
+    int month;
+    int day;
+    int hour;
+    int minute;
+    int second;
+};
+
+struct MainSignalFlags {
+    bool streamingStarting = false;
+    bool recordingStarted = false;
+    bool isRecordingPausable = false;
+    bool recordingPaused = false;
+
+    bool restartingVCam = false;
+};
 
 class MainViewFrame : public QFrame
 {
@@ -101,146 +269,287 @@ protected:
     }
 };
 
-class AFMainFrame : public AFCQMainBaseWidget
+class AFMainFrame : public AFTTopBaseWidget
 {
-#pragma region QT Field
     Q_OBJECT
 
     friend class AFAuth;
 
 public:
-    explicit AFMainFrame(QWidget* parent = nullptr, Qt::WindowFlags flag = Qt::FramelessWindowHint);
+    explicit AFMainFrame(QWidget* parent = nullptr,
+                         Qt::WindowFlags flag = Qt::WindowFlags(),
+                         QString updatePath = "");
     ~AFMainFrame();
 
-    void initializeWithArguments();
-    bool m_bNoUpdate = true;
+    inline Ui::AFMainFrame*       GetMainFrameUI() { return ui; };
+    inline AFMainDynamicComposit* GetMainWindow() const { return m_dynamicCompositMainWindow.data(); }
+
+    //Erase After Block Init change
+    inline AFQBlockManager*     GetBlockManager() const { return m_blockManager; };
+
+    inline AFMainProfile*       GetMainProfile() const { return m_mainProfile; }
+    inline AFMainSceneCollection* GetMainSceneCollection() const { return m_mainSceneCollection; }
+    inline CMainOutput*         GetMainOutput() const { return m_pMainOutput; }
+    inline CMainAudioSource*    GetMainAudioSource() const { return m_pMainAudioSource; }
+    inline CMainSceneSource*    GetMainSceneSource() const { return m_pMainSceneSource; }
+
+    inline AFServiceManager&    GetServiceManager() const { return *m_serviceManager; }
+    inline AFSceneContext&      GetScene() const { return *m_scene; }
+    inline AFOBSOutputContext&  GetOutputContext() const { return *m_outputContext; }
+    inline AFGraphicsContext&   GetGraphicContext() const { return *m_graphicContext; }
+    inline BreaktimeManager&    GetBreakTimeManager() const { return *m_breakTimeManager; }
+    inline OverlayManager&      GetOverlayManager() const { return *m_overlayManager; }
+
+    inline SOOPMediaSourceManager& GetSoopSrcManager() const { return *m_soopSrcManager; }
+    inline AFCefManager&        GetCefManager() const { return *m_cefManager; }
+
+    inline AFUndoStack& GetUndoStack() { return m_undo_s; }
+
+    inline SOOPApiHandler* GetSOOPApiHandler() { return m_soopApiHandler; }
+
+    inline void OnEvent(enum obs_frontend_event event) {
+        if(api) {
+            api->on_event(event);
+        }
+    }
+    inline void OnSoopEvent(enum soop_frontend_type type, void* param) {
+        if(api) {
+            api->on_soop_event(type, param);
+        }
+    }
+
 public slots:
     void qslotSaveProject();
     void qslotSaveProjectDeferred();
+    int qslotShowImportGuide();
+    int qslotShowImportRecentGuide();
 
-    void qslotChangeBroadState(bool BroadButtonOn);
-    void qslotEnterBroadButton();
-    void qslotLeaveBroadButton();
+    void qslotShowMigrationGuide();
+
+    // ==================================================
+    // [qslotFunc AFMainFrame UI]
+    // ==================================================
+;
+    void qslotCheckBroadAvailable(bool BroadButtonOn);
+    void qslotSetButtonOpacity();
+    void qslotRemoveButtonOpacity();
+
     bool qslotReplayBufferClicked();
-    void qslotPauseRecordingClicked();
+    void qslotMaximizedChanged(bool maximized);
+    //void qslotPauseRecordingClicked();
     void qslotStartCountDown();
-    void qslotUpdateCountDown();
     void qslotChangeRecordState(bool checked);
     void qslotTopMenuClicked();
     void qslotPopupBlockClicked();
-    void qslotStatsOpenTriggered();
-    void qslotProgramGuideOpenTriggered();
     void qslotProgamInfoOpenTriggered();
-    void qslotGuideTriggered(int guideNum);
+    void qslotMainFrameTutorial();
+    void qslotTutorialPosition();
+    void qslotMainFrameTutorialClose();
     void qslotGuideClosed();
-    void qslotStatsCloseTriggered();
-    void qslotStatsMouseLeave(); 
-    void qslotFocusChanged(QWidget* old, QWidget* now);
+    void qslotNavigateSoopServiceNoticePage();
+    void qslotNavigateSoopServiceFeedBackPage();
+    void qslotNavigateStreamerSuppportPage();
+    void qslotNavigateSoopliveKrPage();
+    void qslotShowStudioUpdatePage();
+    
+    void qslotPropertiesToggled(bool show);
+    void qslotAlwaysOnTopToggled(bool onTop);
+    void qslotUIResetTriggered();
+    void qslotSceneControlTriggered(bool show);
+    void qslotBlockClosedTriggered(bool used, int checkType, bool enableFavoriteMenu);
+    void qslotCloseAllBlocks();
 
-    //test
+    void qslotTopMenuDestoryed();
+    void qslotLoginAccountWithProperty();
 
-    //Dpi Setting
-    void qslotSetDpiHundred();
-    void qslotSetDpiHundredFifty();
-    void qslotSetDpiTwoHundred();
-    //Dpi Setting
+    void qslotShowGlobalPageSender();
 
-    void qslotCloseAllPopup();
+    void qslotResetCertainBroadTime();
+    // ==================================================
+    // [qslotFunc DPI Setting]
+    // ==================================================
+    void qslotScreenChanged(QScreen* screen);
+    void qslotDpiChanged(qreal rel);
 
-    void qslotToggleBlockArea(bool show);
-    void qslotToggleBlockAreaByToggleButton();
+    // ==================================================
+    // [qslotFunc Block UI]
+    // ==================================================
 
-    void qslotPreviewResizeTriggered();
-
-    void qslotToggleBlockFromBlockArea(bool show, int key);
-    void qslotToggleBlockFromMenu(bool show);
     void qslotShowStudioSettingPopup(bool show);
     void qslotShowStudioSettingWithButtonSender();
-    void qslotBlockToggleTriggered(bool show, int blockType);
 
-    //void qslotBlockStopTimer();
-    //void qslotLeaveBlockAreaOrLockButton();
-    //Block
+    void qslotShowBlockWithProperty();
+    void qslotShowBlock(bool visible, int type);
+    void qslotInitShowSoopChat(); //Call Only on Init
+    void qslotInitFreecShotPlusUpdateLog(); //Call Only on Init
+    void qslotResponseFreecShotPlusUpdateLog(const QByteArray& responseData);
+    void qslotShowFreecShotUnInstallAlert();
+    void qslotShowDockWithProperty();
+    void qslotShowDock(bool visible, int type);
 
+    void qslotShowProjector();
+
+
+    // ==================================================
+    // [qslotFunc Resource Status UI]
+    // ==================================================
+    void qslotExtendResource();
     void qslotShowCPUSystemAlert();
     void qslotShowMemorySystemAlert();
     void qslotShowNetworkSystemAlert();
     void qslotCheckDiskSpaceRemaining();
 
-    void qslotScreenChanged(QScreen* screen);
-    void qslotDpiChanged(qreal rel);
+    // ==================================================
+    // [qslotFunc BraodStart Response]
+    // ==================================================
+    void qslotCategoryCheckAPIResponse(const QByteArray& responseData);
+    void qslotBroadStartAPIResponse(const QByteArray& responseData);
+    void qslotGeoBlockCheckAPIResponse(const QByteArray& responseData);
+    void qslotBroadStartSuccess(bool success, BroadStartAPI_s info);
+    // void qslotBroadStartAPIResponse_Reconnect(const QByteArray& responseData);
+    void qslotBroadStartAPIResponse_Disconnect(const QByteArray& responseData);
+    void qslotBroadStartAPIResponse_CheckStream(const QByteArray& responseData); // SOOP Simulcast broad api check
 
-    void qslotShowVolumeSlider();
-    void qslotShowMicSlider();
-    void qSlotCloseVolumeSlider();
-    void qSlotCloseMicSlider();
-    void qslotSetAudioPeakValue();
-    void qslotSetMicPeakValue();
-    void qslotStopVolumeTimer();
-    void qslotStopMicTimer();
-    void qslotMainAudioValueChanged(int volume);
-    void qslotMainMicValueChanged(int volume);
-    void qslotSetVolumeMute();
-    void qslotSetMicMute();
+    void qslotBroadCheckTimeout();
+    void qslotEmailVerify(const QByteArray& responseData);
 
-    void qslotTopMenuDestoryed();
-    void qslotShowMainAuthMenu();
-    void qslotShowOtherAuthMenu();
-    void qslotShowLoginMenu();
-    void qslotStopSimulcast(bool checked);
-    void qslotLoginAccount();
-
-    bool qslotShowGlobalPage(QString type);
-    void qslotShowGlobalPageSender();
-    void qslotLogoutGlobalPage();
-
-    void qslotCloseGlobalSoopPage(QString type);
-    void qslotHideGlobalSoopPage(QString type);
-    void qslotMaximizeGlobalSoopPage(QString type);
-    void qslotMinimizeGlobalSoopPage(QString type);
-
-    void qslotExtendResource();
-
+    // ==================================================
+    // [qslotFunc Output]
+    // ==================================================
     void qslotReplayBufferSave();
     void qslotReplayBufferSaved();
 
-    // for scene source
-    void qslotAddSourceMenu();
-    void qslotShowSelectSourcePopup();
-    void qslotSceneButtonClicked(OBSScene scene);
-    void qslotSceneButtonDoubleClicked(OBSScene scene);
-    void qslotSceneButtonDotClicked();
+    // virtual cam
+    void qslotStartVirtualCam();
+    void qslotStopVirtualCam();
 
-    void qSlotActionResetTransform();
+    //
+    void qslotScreenShot(OBSSource source = nullptr);
 
-    void Screenshot(OBSSource source = nullptr);
-    void qslotTransitionScene();
-
-
+    // ==================================================
+    // [qslotFunc Undo/Redo]
+    // ==================================================
     void qSlotUndo();
     void qSlotRedo();
+
+    // ==================================================
+    // [qslotFunc Scene Source]
+    // Exist Function Code in CMainFrame_SceneSource.cpp
+    // ==================================================
+    // Recv libobs callback slot
+    void qslotAddSceneFromCallback(OBSSource scene);
+    void qslotRemoveSceneFromCallback(OBSSource scene);
+
+    // common ui slot
+    void qslotTransitionScene();
+    void qslotTransitionSceneTriggered();
+
+    void qslotPasteClipboardAsSource();
+
+    // ==================================================
+    // [qslotFunc Audio UI & Audio Source]
+    // Exist Function Code in CMainFrame_AudioSource.cpp
+    // ==================================================
+    // Recv libobs callback slot
+    void qslotActivateAudioSource(OBSSource source);
+    void qslotDeactivateAudioSource(OBSSource source);
+    void qslotRenameSources(OBSSource source, QString newName, QString prevName);
+
+    // mixer context menu
+    void qslotStackedMixerAreaContextMenuRequested();
+
+    // common ui slot
+    void qslotVolControlContextMenu();
+    void qslotHideAudioControl();
+    void qslotUnhideAllAudioControls();
+    void qslotLockVolumeControl(bool lock);
+    void qslotMixerRenameSource();
+    void qslotAudioMixerCopyFilters();
+    void qslotAudioMixerPasteFilters();
+    void qslotToggleVolControlLayout();
+    void qslotGetAudioSourceFilters();
+    void qslotGetAudioSourceProperties();
+    void qslotAdvAudioPropertiesTriggered();
+
+
+    // ==================================================
+    // [qslotFunc Preview]
+    // ==================================================
+    void qslotTogglePreview();
+    void qslotLockPreview();
+
+    // ==================================================
+    // [qslotFunc Auth]
+    // ==================================================
+    void qslotToggleMainAccount();
+    void qslotRecieveBroadInfo();
+    void setResolution();
+    void qslotToggleLogout(bool useVideo);
+
+    void qslotRefreshSoopCookie();
+
+    // receive frontend-api
+    void qslotSetCurrentSceneFrontendAPI(OBSSource scene, bool force);
+    void qslotTransitionStudioModeScene();
+    void qslotStartStreamingFrontendAPI();
+    void qslotStopStreamingFrontendAPI();
+    void qslotStartRecordingFrontendAPI();
+    void qslotStopRecordingFrontendAPI();
+
+    void qslotToggleMainMicFrontendAPI();
+    void qslotToggleMainVolFrontendAPI();
+
+    void qslotToggleSOOPChannelSidebarFrontendAPI();
+    void qslotToggleSOOPLnbMenuFrontendAPI(int menuType);
+
+    void qslotEventButtonClicked();
+#ifdef __APPLE__
+    void qslotMacSwitchToDock(int windowType, int posX, int posY);
+#endif
+signals:
+    /* Streaming signals */
+    void StreamingPreparing();
+    void StreamingStarting(bool boradcastAutoStart);
+    void StreamingStarted(bool withDelay = false);
+    void StreamingStopping();
+    void StreamingStopped(bool withDelay = false);
+
+    /* Recording signals */
+    void RecordingStarted(bool pausable = false);
+    void RecordingPaused();
+    void RecordingUnpaused();
+    void RecordingStopping();
+    void RecordingStopped();
 
 protected slots:
     void qslotMinimizeWindow();
     
+
 private slots:
+
+    // ==================================================
+    // [qslotFunc System Tray Icon Action]
+    // ==================================================
     void qslotIconActivated(QSystemTrayIcon::ActivationReason reason);
     void qslotSetShowing(bool showing);
     void qslotToggleShowHide();
+    void SystemTrayNotify(const QString& text, QSystemTrayIcon::MessageIcon n);
+
+    // ==================================================
+    // [qslotFunc Error Display] ( Not Used )
+    // ==================================================
     void qslotDisplayStreamStartError();
 
-    // stat
-    void qslotRefreshNetworkText();
-    void qslotNetworkState(PCStatState state);
-
+    // ==================================================
+    // [qslotFunc Output]
+    // Exist Function Code in CMainFrame_Output.cpp
+    // ==================================================
     // streaming
-    void qslotStartStreaming();
-    void qslotStopStreaming();
-    void qslotForceStopStreaming();
-
+    void qslotStartStreaming();     // not call signal
+    void qslotStopStreaming();      // not call signal
+    void qslotForceStopStreaming(); // not call signal
     void qslotStreamDelayStarting(void* output, int sec);
     void qslotStreamDelayStopping(void* output, int sec);
-
     void qslotStreamingStart(void* output);
     void qslotStreamStopping(void* output);
     void qslotStreamingStop(void* output, int errorcode, QString last_error);
@@ -248,204 +557,230 @@ private slots:
     // recording
     void qslotStartRecording();
     void qslotStopRecording();
-
     void qslotRecordingStart();
     void qslotRecordStopping();
     void qslotRecordingStop(int code, QString last_error);
     void qslotRecordingFileChanged(QString lastRecordingPath);
+    //void qslotPauseRecording();
+    //void qslotUnpauseRecording();
 
-    void qslotShowReplayBufferPauseWarning();
+    // replaybuffer
     void qslotStartReplayBuffer();
     void qslotStopReplayBuffer();
-
     void qslotReplayBufferStart();
     void qslotReplayBufferStopping();
     void qslotReplayBufferStop(int code);
+    //void qslotShowReplayBufferPauseWarning();
 
-    void qslotPauseRecording();
-    void qslotUnpauseRecording();
+    // virtual cam
+    void qslotVirtualCamStart();
+    void qslotVirtualCamStop(int code);
 
-    // For Source Context Menu
-    void qslotTogglePreview();
-    void qslotLockPreview();
-    
-    void qslotActionScaleWindow();
-    void qslotActionScaleCanvas();
-    void qslotActionScaleOutput();
+    // ==================================================
+    // [qslotFunc Network and Status]
+    // ==================================================
+    void qslotRefreshMainResourceText();
+    void qslotResourceState(PCStatState state);
 
-    void qSlotActionCopySource();
-    void qSlotActionPasteRefSource();
-    void qSlotActionPasteDupSource();
+    // ==================================================
+    // Profile & SceneCollection
 
-    void qSlotActionRenameSource();
-    void qSlotActionRemoveSource();
+    void qActionRemigrateSceneCollectionTriggered();
 
-    void qSlotActionEditTransform();
-    void qSlotActionCopyTransform();
-    void qSlotActionPasteTransform();
-    void qSlotActionRotate90CW();
-    void qSlotActionRotate90CCW();
-    void qSlotActionRotate180();
-    void qSlotFlipHorizontal();
-    void qSlotFlipVertical();
+    void qslotImportPreset();
+    void qslotShowMissingFiles();
 
-    void qSlotFitToScreen();
-    void qSlotStretchToScreen();
-    void qSlotCenterToScreen();
-    void qSlotVerticalCenter();
-    void qSlotHorizontalCenter();
-
-    void qSlotActionShowInteractionPopup();
-    void qSlotActionShowProperties();
-
-    void qSlotOpenSourceFilters();
-    void qSlotCopySourceFilters();
-    void qSlotPasteSourceFilters();
-
-    void qSlotSourceListItemColorChange();
-    void qSlotResizeOutputSizeOfSource();
-
-    void qSlotSetScaleFilter();
-    void qSlotBlendingMethod();
-    void qSlotBlendingMode();
-    void qSlotSetDeinterlaceingMode();
-    void qSlotSetDeinterlacingOrder();
-
+    // ==================================================
+    // [qslotFunc Hotkey]
+    // ================================================== 
     void qslotProcessHotkey(obs_hotkey_id id, bool pressed);
 
+    // qslotFunc Source Control Popup
+    void qslotUpdateContextToolBar(bool force = false);
+    void qslotClearBrowserInteractionPopup(OBSSource source);
+
+    // [qslotFunc Split Filter]
+    void qslotSplitFilterActivated();
+
+    // [ dummy API Check ]
+    void qslotDummyAPI(const QByteArray& responseData) {}
+
+    // [ source ]
+    void qslotRefreshVideoBalloonSource();
     
-    void qSlotChangeProfile();
-    void qSlotNewProfile();
-    void qSlotDupProfile();
-    void qSlotDeleteProfile(bool skipConfirmation);
-    void qSlotRenameProfile();
-    void qSlotExportProfile();
-    void qSlotImportProfile();
-    void qSlotNewSceneCollection();
-    void qSlotDupSceneCollection();
-    void qSlotRenameSceneCollection();
-    void qSlotDeleteSceneCollection();
-    void qSlotImportSceneCollection();
-    void qSlotExportSceneCollection();
-    void qSlotShowMissingFiles();
+    // [freecshot uninstall]
+    void qslotUninstallFreecshotAccept();
+
+
+    void qslotCheckVersionLimit();
+    void qslotGetVersionLimit(QNetworkReply *reply);
 
 signals:
     void qsignalRefreshTimerTick();
     void qsignalToggleUseVideo(bool);
-#pragma endregion QT Field
+    void qsignalMainResized(QSize oldSize, QSize newSize);
+    void qsignalMainShowEventTriggered();
+    void firstTutorialClosedEvent();
+    void qsignalBroadToggled(bool stream);
+    void qsignalReplayBufferSaved();
 
+    void qsignalCertainMinuteBroadToggled(bool broad);
 
-#pragma region public func
-public:
-    void AFMainFrameInit(bool bShow);
-    void SetButtons();
+    void qsignalmovedOrResized();
+    void qsignalTopMenuClicked();
+
+public:    
+    bool AFMainFrameInit(bool bShow, std::string userID = "", std::string soopCookie = "", std::string Intaller_Type = "", std::string Freecshot_Type = "");
     void OnActivate(bool force = false);
     void OnDeactivate();
-    inline AFMainDynamicComposit* GetMainWindow() const { return m_DynamicCompositMainWindow.data(); }
+    void ConnectSignalForScreen();
+    QSize GetContentsArea(); //preview + frame_bottom
+    int GetFrameBottomPosY();
 
-    void CreatePropertiesPopup(obs_source_t* source);
-    void CreatePropertiesWindow(obs_source_t* source);
-    void RecvRemovedSource(OBSSceneItem item);
-    void ShowSceneSourceSelectList();
-    void ShowSystemAlert(QString channelID = "", QString alertText = "");
+    bool IsCompleteInit() { return !m_isInitialRun; }
 
-    inline AFAuth* GetAuth() { return m_auth.get(); }
-    inline void ResetAuth() { m_auth.reset(); }
-
-    inline void EnableOutputs(bool enable)
-    {
-        if(enable) {
-            if(--m_disableOutputsRef < 0)
-                m_disableOutputsRef = 0;
-        } else {
-            m_disableOutputsRef++;
-        }
-    }
-
-    // for output
-    static void OBSStreamStarting(void* data, calldata_t* params);
-    static void OBSStreamStopping(void* data, calldata_t* params);
-    static void OBSStartStreaming(void* data, calldata_t* /* params */);
-    static void OBSStopStreaming(void* data, calldata_t* params);
-    static void OBSStartRecording(void* data, calldata_t* /* params */);
-    static void OBSStopRecording(void* data, calldata_t* params);
-    static void OBSRecordStopping(void* data, calldata_t* /* params */);
-    static void OBSRecordFileChanged(void* data, calldata_t* params);
-    static void OBSStartReplayBuffer(void* data, calldata_t* /* params */);
-    static void OBSStopReplayBuffer(void* data, calldata_t* params);
-    static void OBSReplayBufferStopping(void* data, calldata_t* /* params */);
-    static void OBSReplayBufferSaved(void* data, calldata_t* /* params */);
-    void        ResetOutputs();
-
-    void        SetStreamingOutput();
-    bool        PrepareStreamingOutput(int index, obs_service_t* service);
-    bool        StartStreamingOutput(obs_service_t* service);
-    bool        IsStartStreamingOutput(obs_service_t* service);
-    bool        StopStreamingOutput(obs_service_t* service);
-    void        SetOutputHandler();
-    bool        LoadAccounts();
-    
-    QString GetChannelID(obs_output_t* output);
-    //
     static void OBSErrorMessageBox(const char* errorMsg, const char* defaultMsg, const char* errorLabel);
+    static void HotkeyTriggered(void* data, obs_hotkey_id id, bool pressed);
+    static void SetPCStateIconStyle(QLabel* label, PCStatState state);
 
-    // preview
+    // Create & Show UI
+    void RestoreMainWindow();
+
+    bool CreateSourceProperties(obs_source_t* source, bool fromDock = false);
+    bool HideSourceProperties(obs_source_t* source);
+    void CreateSceneTransitionPopup(OBSSource source, int duration);
+    void CreateFiltersWindow(obs_source_t* source);
+    void CreateEditTransformPopup(obs_sceneitem_t* item);
+    void CreateSplitEffectPopup(obs_source_t* source);
+    void CreateSoopCefDetailProperties(obs_source_t* source, QWidget* parent = nullptr);
+    void CreateSignatureAIPopup(bool reactionAble);
+    
+    bool IsSmallResolution();
+
+    int GetLeftNavigationBarWidth();
+    int GetTopAreaHeight();
+    int GetBottomAreaHeight();
+
+    void ResetDockUI();
+
+    int BottomControlHeight();
+    int LNBWidth();
+
+    AFQSplitEffectDialog* GetSplitEffectDialog() { return m_splitEffectDialog; }
+
+    void ShowSceneSourceSelectList();
+    void ShowSystemAlert(QString alertText = "", QString channelID = "", 
+                        AFQSystemAlert::AlertIcon icon = AFQSystemAlert::AlertIcon::Warning);
+    void ShowMissingFilesDialog(obs_missing_files_t* files);
+    void ApplyMoveArea();
+    bool CheckSplitVodByUI();
+
+	void ShowWindowCaptureArea(obs_source_t* source);
+	
+    // [Source Control Toolbat]
+
+    void UpdateContextToolBarDeferred(bool force = false);
+
+    // [ Browser Interaction Popup ]
+    void ShowBrowserInteractionPopup(OBSSource source);
+    void HideBrowserInteractionPopup(OBSSource source);
+
+    // [Advance Audio Mixer Popup]
+    void EnableReplayBuffer(bool enable);
+    void SetReplayBufferStartStopMode(bool bufferStart);
+    void SetReplayBufferStoppingMode();
+    void SetReplayBufferReleased();
+
+    // [Broad Info Dock]
+    void ApplyBroadInfoToUI();
+    void RefreshBroadInfoDockUI(bool requestAPI = true);
+    void SplitVodSaved();
+
+    // Call Function when deleting the source
+    void RecvRemovedSource(OBSSceneItem item);
+
+    // Account & Auth( CMainFrame_Auth.cpp )
+    bool     CheckLoginSoopCookie(std::string userID, std::string cookie, bool& autoLogin);
+    void     RestoreSoopAccount(std::string userId, std::string cookie, bool loginRetain = false, bool saveID = false);
+
+    bool     LoginSoopForCookie(std::string remainID);
+    int      SelectSoopAccount(std::string newAccount, std::string currentAccount);
+    bool     ShowPopupPageYoutubeChannel(AFBasicAuth* pAFDataAuted);
+    QPixmap* MakePixmapFromChannel(AFChannelData* channelData);
+    QPixmap* MakePixmapFromAuthData(AFBasicAuth* pAFDataAuted);
+    QPixmap* DownloadPixmap(std::string urlIMG);
+
+    bool     AddStreamAccount(QWidget* parent, QString platformName = "");
+    bool     LoadAccounts();
+    int      CountSimulcast();
+    bool     FindChannelButtonWithPlatform(std::string platform, AFMainAccountButton*& outbutton);
+    void     BroadInfoTimerStart();
+    void     BroadInfoTimerStop();
+
+    void     RefreshSoopCookiTimerStart();
+
+    void     BroadStatusCheckTimerStart();
+    void     BroadStatusCheckTimerStop();
+    
+    QString  GetChannelID(obs_output_t* output);
+
+    void     LogoutMainAccount(bool tokenExpired = false);
+
+    // For BroadCasting
+    int      PrepareBroadStart();
+    bool     BroadCastEnd(bool banStop = false);
+    bool     CheckSoopBroadStatus(const QByteArray& responseData);
+
+    void SetMainStreaming(bool main) { m_isMainStreaming = main; }
+    bool IsMainStreaming() { return m_isMainStreaming; }
+    void OffBroadStartAPICheck();
+
+    void ShutDown();
+
+    // ===============================
+    // Preview UI
+    // ===============================
+    bool IsPreviewProgramMode();
     void EnablePreviewDisplay(bool enable);
-    bool GetPreviewEnable() { return m_bPreviewEnabled; }
+    bool GetPreviewEnable() { return m_previewEnabled; }
+    void SetStudioModeStatus(bool studioMode);
 
-    // scene source
-    void        RefreshSceneUI();
-    void        CreateSourcePopupMenu(int idx, bool preview = false);
-    void        AddSourceMenuButton(const char* id, QWidget* popup);
-    AFQCustomMenu*      CreateAddSourcePopupMenu();
-    AFQCustomMenu*      AddBackgroundColorMenu(AFQCustomMenu* menu,
-                                       QWidgetAction* widgetAction,
-                                       AFQColorSelect* select,
-                                       obs_sceneitem_t* item);
-    void        CreateFiltersWindow(obs_source_t* source);
-    void        CreateEditTransformPopup(obs_sceneitem_t* item);
-    void        SetSceneBottomButtonStyleSheet(OBSSource scene);
-    QAction*    GetRemoveSourceAction();
+    // =================================================
+    // [Scene Source]
+    // Exist Function Code in CMainFrame_SceneSource.cpp
+    // ==================================================
+    void RefreshSceneUI();
+    void SetCurrentScene(OBSSource scene, bool force = false);
+    void ClearSceneData(bool init = false);
+    void RefreshVideoBalloonSource();
 
-    void        UpdateEditMenu();
-  
+    // =================================================
+    // [Audio UI]
+    // Exist Function Code in CMainFrame_AudioSource.cpp
+    // ==================================================
+    void ToggleMixerLayout(bool vertical);
 
-    void        ClearSceneData(bool init = false);
-    void        ClearSceneBottomButtons();
+    // =================================================
+    // [System Tray]
+    // Exist Function Code in CMainFrame_SceneSource.cpp
+    // ==================================================
 
+    // [ Scene Transition ]
+    void        EnableTransitionState(bool enable);
+    void        EnableTransitionWidgets();
+
+#ifdef _WIN32
+    void        AddRegStartProcessWindows();
+    void        UpdaterKill();
+#endif
 
     //void ToggleVisibleBottomLayerForDock(bool show);
 
-    void SetAudioButtonEnabled(bool enabled);
-    void SetMicButtonEnabled(bool enabled);
-    void SetAudioVolume(int volume);
-    void SetMicVolume(int volume);
-    void SetAudioSliderEnabled(bool Enabled);
-    void SetMicSliderEnabled(bool Enabled);
-    void SetAudioVolumeSliderSignalsBlock(bool block);
-    void SetMicVolumeSliderSignalsBlock(bool block);
-    void SetAudioMeter(float peak);
-    void SetMicMeter(float peak);
-    void SetAudioButtonMute(bool bMute);
-    void SetAudioSliderMute(bool bMute);
-    void SetMicButtonMute(bool bMute);
-    void SetMicSliderMute(bool bMute);
-    bool IsAudioMuted();
-    bool IsMicMuted();
     void SystemTray(bool firstStarted);
     void SystemTrayInit();
+    void RestoreGeometry(bool firstRun);
 
-    static void HotkeyTriggered(void* data, obs_hotkey_id id, bool pressed);
-
-    static void SetPCStateIconStyle(QLabel* label, PCStatState state);
-
-    //
-    bool IsActive();
-    bool IsStreamActive();
-    bool GetStreamingCheck() { return os_atomic_load_bool(&m_streaming_active); };
-    bool IsReplayBufferActive();
-    bool IsRecordingActive();
-    bool IsPreviewProgramMode();
+    // [Call HotKey]
     bool EnableStartStreaming();
     bool EnableStopStreaming();
     bool EnableStartRecording();
@@ -453,46 +788,61 @@ public:
     bool EnablePauseRecording();
     bool EnableUnPauseRecording();
 
+    void ChangeStreamStateUI(bool enable, bool checked, QString title, int width);
+    void ChangeRecordStateUI(bool enable, bool checked, QString title, int width);
+    bool CheckSplitVodAvailable();
+    void ToggleBroadTimerUI(bool start);
+    QString GetBroadTimerUITime();
     void StartStreaming();
     void StopStreaming();
     void ForceStopStreaming();
     void StartRecording();
     void StopRecording();
-    void PauseRecording();
-    void UnPauseRecording();
+    //void PauseRecording();
+    //void UnPauseRecording();
     void StartReplayBuffer();
     void StopReplayBuffer();
+    //
+    obs_output_t* GetVirtualCamOutput();
+    VCamConfig& VirtualCamConfig() { return m_vcamConfig; }
+    void SetVirtualCamOutputType(const VCamOutputType type);
+    void UpdateVirtualCamConfig(const VCamConfig& config);
+    void RestartVirtualCam(const VCamConfig& config);
+    void RestartingVirtualCam();
     void EnablePreview();
     void DisablePreview();
     void EnablePreviewProgam();
     void DiablePreviewProgam();
 
-    void RecvHotkeyTransition();
-    void RecvHotkeyResetStats();
-    void RecvHotkeyScreenShotSelectedSource();
+    // virtual cam
+    bool VirtualCamEnabled() { return m_vcamEnabled; }
 
+    void VerifyEmailBeforeBroad(std::string failMsg, std::string url);
+    void NavigateDefaultBrowser(QString Url);
+
+    // Custom Browser
     void ReloadCustomBrowserMenu();
-    void CustomBrowserClosed(QString uuid);
+    AFQCustomMenu* CreateCustomBrowserMenu();
+
+    //
+    AFQCustomMenu* CreateFullScreenProjectorMenu();
+    template <typename Receiver, typename... Args>
+    void AddProjectorMenuMonitors(QMenu* parent, Receiver* target, void (Receiver::* slot)(Args...));
+    QList<QString> GetProjectorMenuMonitorsFormatted();
+
+    void CustomBrowserStateChanged(QString uuid, bool isOpen);
+    void CustomBrowserStateAllChanged(bool isOpen);
+
+    void SetSceneCollectionEnabled(bool enable);
 
     void SetDisplayAffinity(QWindow* window);
 
     void ResetStudioModeUI(bool changeLayout);
 
-    // Load/Save
-    void            RefreshProfiles();
-    bool            CreateProfile(const std::string &newName, bool create_new,
-                                  bool showWizardChecked, bool rename = false);
-    bool            AddProfile(bool create_new, const char *title, const char *text,
-                               const char *init_text = nullptr, bool rename = false);
-    void            DeleteProfile(const char* profileName, const char* profileDir);
-    
-    void            WaitDevicePropertiesThread();
-    bool            AddSceneCollection(bool create_new,
-                                       const QString& qname = QString());
-    void            RefreshSceneCollections();
-    void            ShowMissingFilesDialog(obs_missing_files_t* files);
+    void ShowPresetGuide();    
 
     // for undo/redo
+    void _RegisterUndoRedoShortCut();
     static OBSData BackupScene(obs_scene_t* scene,
                                std::vector<obs_source_t*>* sources = nullptr);
     static inline OBSData BackupScene(obs_source_t* sceneSource,
@@ -507,283 +857,244 @@ public:
                                          obs_source_t* source,
                                          obs_data_array_t* undo_array,
                                          obs_data_array_t* redo_array);
-    //
-    
-    // Auth
-    bool            ShowPopupPageYoutubeChannel(AFBasicAuth* pAFDataAuted);
-    QPixmap*        MakePixmapFromAuthData(AFBasicAuth* pAFDataAuted);
-    //
-#pragma endregion public func
 
-#pragma region protected func
+    // [Settings]
+    void IsRestartConfirmationNeeded(bool needConfirm) { m_restartWidthoutConfirm = needConfirm; }
+
+    // [freecshot uninstall]
+    void ShowUninstallFreecShotAlert();
+    bool IsInEventPeriod(const EventTime& start, const EventTime& end) const;
+
 protected:
     virtual void closeEvent(QCloseEvent* event) override;
     virtual void paintEvent(QPaintEvent* event) override;
     virtual void showEvent(QShowEvent* event) override;
     virtual void moveEvent(QMoveEvent* event) override;
-    void changeWidgetBorder(bool isMaximized) override;
-#pragma endregion protected func
+    virtual void dragEnterEvent(QDragEnterEvent* event) override;
+    virtual void dragLeaveEvent(QDragLeaveEvent* event) override;
+    virtual void dragMoveEvent(QDragMoveEvent* event) override;
+    virtual void dropEvent(QDropEvent* event) override;
+    virtual void resizeEvent(QResizeEvent* event) override;
 
-#pragma region private func
+    //void changeWidgetBorder(bool isMaximized) override;
+
 private:
-    void _SetupBlock();
-    void _MoveBlocks();
-    bool _SetupChatPage();
-    bool _SetupNewsfeedPage();
-    void _MoveSystemAlert(AFQSystemAlert* systemAlert, bool isMainMinimized = false);
-    void _MoveProgramGuide();
-    void _PopupRequest(bool show, int type);
+    // ================================
+    // [ UI ]
+    // ==================================
+    void _ConnectStatisticsSignals();
+    void _SetMainFrameUI();
+
     void _CreateTopMenu();
     void _ToggleTopMenu();
-    void _AccountButtonStreamingToggle(bool stream);
     AFQCustomMenu* _FindSubMenuByTitle(AFQCustomMenu* menu, const QString& name);
-
-    void _ShowBlockArea(int animateSpeed = 300);
-    void _HideBlockArea(int animateSpeed = 300);
-
-    void _StopRecording(bool bRecord = false);
-    void SetupAutoRemux(const char*& container);
-    std::string GetRecordingFilename(
-        const char* path, const char* container, bool noSpace, bool overwrite,
-        const char* format, bool ffmpeg);
-
-    void _ShowSettingPopup(int tabPage = 0);
-    void _ShowSettingPopupWithID(QString id);
-    QString _AccountButtonsStyling(bool stream);
-
-    void _SetupAccountUI();
-    
-    void EnumDialogs();
-    bool _OutputPathValid();
-    void _OutputPathInvalidMessage();
-
-    void _AutoRemux(QString input, bool no_show = false);
-
-    void _UpdatePause(bool activate = true);
-    void _UpdateReplayBuffer(bool activate = true);
-
-    void _SetResourceCheckTimer(int time = 2000);
-    bool _LowDiskSpace();
-    void _DiskSpaceMessage();
-
-    void _ChangeStreamState(bool enable, bool checked, QString title, int width);
-    void _ToggleBroadTimer(bool start);
-    void _ChangeRecordState(bool check = false);
 
     void _RegisterSourceControlAction();
 
-    // Load/Save
-    bool            _CopyProfile(const char* fromPartial, const char* to);
-    void            _CheckForSimpleModeX264Fallback();
-    bool            _ProfileNeedsRestart(config_t* newConfig, QString& settings);
-    void            _ResetProfileData();
-    bool            _FindSafeProfileDirName(const std::string &profileName,
-                                            std::string &dirName);
-    bool            _AskForProfileName(QWidget *parent, std::string &name,
-                                       const char *title, const char *text,
-                                       const bool showWizard, bool &wizardChecked,
-                                       const char *oldName = nullptr);
-    
-    bool            _GetSceneCollectionName(QWidget* parent, std::string& name,
-                                            std::string& file,
-                                            const char* oldName = nullptr);
-    void            _ChangeSceneCollection();
-    //
-    
+    void _ShowSettingPopup(int tabPage = 0);
+    void _ShowSettingPopupWithID(QString id, QString platform);
+
+    void _MoveSystemAlert(AFQSystemAlert* systemAlert, bool isMainMinimized = false);
+
+    void _RestartApp();
+
+    void _AccountButtonStreamingToggle(bool stream);
+
+    // ============================================
+    // [ Resource and System Checking ]
+    // ============================================
+    void _SetResourceCheckTimer(int time = 2000);
+    bool _LowDiskSpace();
+    void _DiskSpaceMessage();
+    bool _OutputPathValid();
+    void _OutputPathInvalidMessage();
+
     template<typename SlotFunc>
-    void _connectAndAddAction(QAction* sender, const typename QtPrivate::FunctionPointer<SlotFunc>::Object* receiver, SlotFunc slot);
+    void _connectAndAddAction(QAction* sender, const typename QtPrivate::FunctionPointer<SlotFunc>::Object* receiver, SlotFunc slot, bool addActionToMain = true);
 
-    QColor _GetSourceListBackgroundColor(int preset);
+    //==================================
+    // [ Guide ] - Preset
+    //==================================
+    void _AddBroadPreset();
+    void _AddBroadPresetSource(const char* sourceId, float width, float height, float posX, float posY, obs_bounds_type boundType);
+    void _AddSceneDefaultName();
 
-    //int _ResetVideo();
+    void _DeleteBroadInfoData();
 
-    //void _GetFPSCommon(uint32_t& num, uint32_t& den) const;
-    //void _GetConfigFPS(uint32_t& num, uint32_t& den) const;
-    //void _GetFPSInteger(uint32_t& num, uint32_t& den) const;
-    //void _GetFPSFraction(uint32_t& num, uint32_t& den) const;
-    //void ResizePreview(uint32_t cx, uint32_t cy);
-
-    obs_frontend_callbacks* _InitializeAPIInterface(AFMainFrame* main);
-
-
-    // Use Context Source Menu
-    AFQCustomMenu* _AddScaleFilteringMenu(AFQCustomMenu* menu, obs_sceneitem_t* item);
-    AFQCustomMenu* _AddBlendingModeMenu(AFQCustomMenu* menu, obs_sceneitem_t* item);
-    AFQCustomMenu* _AddBlendingMethodMenu(AFQCustomMenu* menu, obs_sceneitem_t* item);
-    AFQCustomMenu* _AddDeinterlacingMenu(AFQCustomMenu* menu, obs_source_t* source);
-    
-    enum DropType {
-        DropType_RawText,
-        DropType_Text,
-        DropType_Image,
-        DropType_Media,
-        DropType_Html,
-        DropType_Url,
-    };
-
-    void _AddDropSource(const char* file, DropType image);
-    void _AddDropURL(const char* url, QString& name, obs_data_t* settings,
-                     const obs_video_info& ovi);
-    void _ConfirmDropUrl(const QString& url);
-
-    void dragEnterEvent(QDragEnterEvent* event) override;
-    void dragLeaveEvent(QDragLeaveEvent* event) override;
-    void dragMoveEvent(QDragMoveEvent* event) override;
-    void dropEvent(QDropEvent* event) override;
-
-    void _ClearAllStreamSignals();
-#pragma endregion private func
-
-#pragma region public member var
 public:
+    std::string m_freecshotType;
+    std::string m_installType;
+
+    // SOOP Frontend API
+    soop_frontend_callbacks* api = nullptr;
+
+private:
+    // User Interface
+    Ui::AFMainFrame* ui;
+    //
+    QScreen*                        m_pCurrentScreen = nullptr;
+    QMovie*                         m_pBroadMovie = nullptr;
+    QPointer<QObject>               m_shortcutFilter;
+    //QScopedPointer<QThread>         m_devicePropertiesThread; 
+    QPointer<QTimer>                m_broadStartTimer;
+    QPointer<QTimer>                m_resourceRefreshTimer;
+    QPointer<QTimer>                m_receiveBroadInfoTimer;
+    QPointer<QTimer>                m_refreshSoopCookieTimer;
+    QPointer<QTimer>                m_refreshVideoBallonTimer;
+    QPointer<QTimer>                m_BroadStatusCheckTimer;
+    QPointer<QTimer>                m_CheckBroadStartAPITimer;
+
+    // Manager
+    QPointer<AFQBlockManager>        m_blockManager;
+    QNetworkAccessManager*           m_pNetworkManager;
+
+    QPointer<SOOPApiHandler>        m_soopApiHandler;
+
+    
+    // DynamicComposit( Dock, Main Preview ) 
+    QPointer<AFMainDynamicComposit>     m_dynamicCompositMainWindow;
+
+    // SOOPStudio Popup  
+    QPointer<AFQStudioSettingDialog>    m_studioSettingPopup;
+    QPointer<AFQCefPopupDialog>         m_cefPopupProperties;
+    QPointer<AFQBasicTransform>         m_transformPopup;
+    QPointer<AFQBasicFilters>           m_sourceFilters;
+    QPointer<AFQSceneTransitionsDialog> m_sceneTransitionPopup;
+    QPointer<AFResourceExtension>       m_resourceExtensionWidget;
+    QPointer<AFQProgramInfoDialog>      m_programInfoDialog;
+
+    QPointer<AFQMissingFilesDialog>         m_missDialog;
+    QPointer<AFQAudioAdvSettingDialog>      m_advAudioSettingPopup = nullptr;
+    QPointer<QWidget>                       m_mainGuideWidget;
+    QPointer<AFQLeftNavigationBar>          m_leftNavigationBar;
+    QPointer<AFQSplitEffectDialog>          m_splitEffectDialog;
+    QPointer<AFQSignaturePopup>             m_signatureAIPopup;
+    QPointer<WindowCaptureAreaWidget>       m_WindowCaptureAreaWidget;
+    QPointer<AFQStudioUpdateLogDialog>      m_updateLogPopup;
+    QPointer<AFQFreecshotUninstallAlert>    m_uninstallFreecshotAlert;
+    
+    QPointer<QWidget>                   m_mainTutorialWidget;
+    QPointer<AFMainFrameGuide>          m_mainTutorialContents;
+
+    QPointer<AFAddStreamWidget>         m_AddStreamWidget;
+
+    MAP_BROWSER_INTERACTION             m_mapBrowserInteraction;
+
+    // SOOP Source Props
+    QPointer<AFQSourceProperties> m_sourceProperties;
+    QPointer<AFQCefPopupDialog>   m_soopCefDetailProperties;
+    std::unordered_map<std::string, QPointer<QDialog>> m_sourcePropsPtr;
+
+    //
+    QPointer<AFQSystemAlert> m_systemAlert;
+
+    // SOOPStudio Menus
+    QPointer<AFQCustomMenu> m_topMenu;
+    QPointer<AFQCustomMenu> m_addonMenu;
+    QPointer<AFQCustomMenu> m_trayMenu;
+    QPointer<AFQCustomMenu> m_previewProjector;
+    QPointer<AFQCustomMenu> m_studioProgramProjector;
+    QPointer<QAction> m_loginAction;
+
+    QMetaObject::Connection m_SetPassword;
+
+    // SOOPStudio UI Component
+    AFMainAccountButton* m_pCurrentAccountButton = nullptr;
+
+    bool m_bFirstOpen = false;
+    bool m_isInitialRun = true;
+
+    // SOOPStudio Status
+    bool m_topMenuTriggered = false;
+    bool m_clearingFailed = false;
+    bool m_previewEnabled = true;
+    bool m_broadcastReady = false; //YOUTUBE
+    bool m_logOut = false;
+    bool m_checkBroadStartAPI = false;
+
+    // [Settings]
+    bool m_restartWidthoutConfirm = false;
+    bool m_normalInit = true;
+
+    // [ Scene Transition ]
+    bool m_transitionWidgetEnabled = true;
+
+    bool m_isMainStreaming = true;
+    
     /* `undo_s` needs to be declared after `ui` to prevent an uninitialized
      * warning for `ui` while initializing `undo_s`. */
     AFUndoStack m_undo_s;
 
-#pragma region public member var
+    std::unique_ptr<AFServiceManager>   m_serviceManager;
+    std::unique_ptr<AFSceneContext>     m_scene;
+    std::unique_ptr<AFOBSOutputContext> m_outputContext;
+    std::unique_ptr<AFGraphicsContext>  m_graphicContext;
+    std::unique_ptr<BreaktimeManager>   m_breakTimeManager;
+    std::unique_ptr<OverlayManager>     m_overlayManager;
 
-#pragma region private member var
-private:
-    Ui::AFMainFrame* ui;
+    std::unique_ptr<SOOPMediaSourceManager> m_soopSrcManager;
+    std::unique_ptr<AFCefManager>       m_cefManager;
+    //AFProfileUtil m_profileUtil;
 
+    // [ DragDrop ]
+    CMainDragDrop* m_pMainDragDrop = nullptr;
+
+    // [ Profile ]
+    AFMainProfile* m_mainProfile = nullptr;
+    AFMainSceneCollection* m_mainSceneCollection = nullptr;
+
+    // [ Guide ] - Preset
+    QVector<QPair<QString, QRectF>> m_presetSourcesGeometry;
+
+    // [ Output ] - Streaming, Recording, ReplayBuffer, StatusBarTemp ...
+    CMainOutput* m_pMainOutput = nullptr;
+
+    // [ Output ] - virtual cam
+    bool m_vcamEnabled = false;
+    VCamConfig m_vcamConfig;
+    bool m_restartingVCam = false;
+
+    // [ Audio Source ] - MainFrame Audio UI ...
+    CMainAudioSource* m_pMainAudioSource = nullptr;
+
+    // [ Scene & Source ]
+    CMainSceneSource* m_pMainSceneSource = nullptr;
+
+    // [ Resource & System Checking ]
+
+    // [ Updater Logic ]
+    CMainUpdate* m_pMainUpdate = nullptr;
+    QNetworkAccessManager* m_VersionLimit = nullptr;
+    ///////////////////////////////////////////
+    // [ Not Used ]
+    // ///////////////////////////////////////
+    // System Tray
+    QScopedPointer<QSystemTrayIcon> m_trayIcon;
+    QPointer<QAction> m_systemTrayStreamAction;
+    QPointer<QAction> m_systemTrayRecordAction;
+    QPointer<QAction> m_systemTrayReplayBufferAction;
+    QPointer<QAction> m_mainShowHideAction;
+    QPointer<QAction> m_exitAction;
+
+    MainSignalFlags m_signalFlags;
+
+
+    // 
+public: 
+    void InitLnbMenuItems();
+
+    QVector<LnbMenuItem>& GetLnbMenuItems();
+    LnbMenuItem* FindLnbMenuItem(const QString& menuId);
+    bool TriggerLnbMenu(const QString& menuId);
+
+    void SetLnbMenuDisabled(const QString& menuId, bool disabled);
+    bool SetFavoriteLnbMenu(const QString& menuId, bool favorite);
+    void RefreshFavoriteLnbMenus();
+    void UpdateFavoirteLnbMenus(const QString& menuId);
+
+public slots:
+    void ShowLnbMenuPopup(const QString& menuId, ENUM_WINDOW_TYPE type);
     
-    QScopedPointer<QThread>             m_pDevicePropertiesThread;
-    
-    QMovie* m_qBroadMovie = nullptr;
-    QMovie* m_qBroadHoverMovie = nullptr;
-    
-    QPointer<AFMainDynamicComposit>  m_DynamicCompositMainWindow;
-    QPointer<AFQStudioSettingDialog> m_StudioSettingPopup;
-    QPointer<AFQSourceProperties>    m_SourceProperties;
-    QPointer<AFQBasicTransform>      m_transformPopup;
-    QPointer<AFQBasicFilters>        m_dialogFilters;
-    QPointer<AFResourceExtension>    m_ResourceExtensionWidget;
-    QPointer<AFQProgramInfoDialog>   m_programInfoDialog;
-    QPointer<AFVideoUtil> m_VideoUtil;
-    QPointer<AFAudioUtil> m_AudioUtil;
-
-    std::vector<AFQSceneBottomButton*>  m_vSceneButton;
-
-    QScopedPointer<QSystemTrayIcon> m_TrayIcon;
-    QPointer<QAction> m_qSystemTrayStreamAction;
-    QPointer<QAction> m_qSystemTrayRecordAction;
-    QPointer<QAction> m_qSystemTrayReplayBufferAction;
-    //QPointer<QAction> sysTrayVirtualCam;
-    QPointer<QAction> m_qMainShowHideAction;
-    QPointer<QAction> m_qExitAction;
-    QPointer<AFQCustomMenu> m_qTopMenu;
-    QPointer<AFQCustomMenu> m_qTrayMenu;
-    QPointer<AFQCustomMenu> m_qPreviewProjector;
-    QPointer<AFQCustomMenu> m_qStudioProgramProjector;
-
-    QPointer<AFQProgramGuideWidget> m_ProgramGuideWidget;
-    QPointer<QWidget> m_MainGuideWidget;
-    //QPointer<AFQSystemAlert> m_SystemAlert;
-    QPointer<AFQBlockPopup> m_BlockPopup;
-    QPointer<AFQSliderFrame> m_VolumeSliderFrame;
-    QPointer<AFQSliderFrame> m_MicSliderFrame;
-    QPointer<AFQStatWidget> m_StatFrame;
-    QPointer<AFQRemux> m_remux;
-    //QPointer<QWidget> m_qBroadCountDownWidget;
-    QPointer<QLabel> m_qBroadLabel;
-
-    QPointer<AFQBorderPopupBaseWidget> m_GlobalSoopChatWidget;
-    QPointer<AFQBorderPopupBaseWidget> m_GlobalSoopNewsfeedWidget;
-
-    QPointer<QObject> m_shortcutFilter;
-
-    QPointer<QTimer> m_VolumeTimer;
-    QPointer<QTimer> m_Mictimer;
-    QPointer<QTimer> m_AudioPeakUpdateTimer;
-    QPointer<QTimer> m_MicPeakUpdateTimer;
-    QPointer<QTimer> m_BroadStartTimer;
-    QPointer<QTimer> m_ResourceRefreshTimer;
-
-    QSize m_BlockPopupSize = QSize();
-
-    bool m_bBlockAnimating = false;
-    bool m_bIsBlockPopup = true;
-
-    bool m_bTopMenuTriggered = false;
-
-    bool m_bClosing = false;
-    bool m_bClearingFailed = false;
-    bool m_bPreviewEnabled = true;
-
-    int m_streamingOuputRef = 0;
-
-    int m_disableOutputsRef = 0;
-    int m_iBroadTimerRemaining = 0;
-
-    bool m_hasCopiedTransform = false;
-
-    obs_frontend_callbacks* api = nullptr;
-
-    std::shared_ptr<AFAuth> m_auth;
-    AFMainAccountButton* m_qCurrentAccountButton = nullptr;
-    //
-    OBSService m_service;
-    OUTPUT_HANDLER_LIST m_outputHandlers;
-    bool m_streamingStopping = false;
-    bool m_recordingStopping = false;
-    bool m_replayBufferStopping = false;
-
-    volatile bool m_streaming_active = false;
-    volatile bool m_recording_active = false;
-    volatile bool m_recording_paused = false;
-    volatile bool m_replaybuf_active = false;
-
-    OBSOutputAutoRelease fileOutput;
-    OBSOutputAutoRelease streamOutput;
-    OBSEncoder videoRecording;
-    OBSEncoder videoStreaming;
-    OBSEncoder recordTrack[6];
-    OBSEncoder streamAudioEnc;
-    OBSEncoder streamArchiveEnc;
-    
-    QString m_serverUpdateTime;
-    QString m_updateTimeFilePath;
-    QString m_localUpdateHashStr;
-    QString m_serverUpdatehash;
-    QString m_localAppdataPath;
-
-    bool ffmpegOutput = false;
-    bool ffmpegRecording = false;
-    bool useStreamEncoder = false;
-    bool useStreamAudioEncoder = false;
-    bool usesBitrate = false;
-
-    std::vector<int> fallbackBitrates;
-    std::map<std::string, std::vector<int>> encoderBitrates;
-
-    std::string lastRecordingPath;
- 
-    // Source Popup Menu
-    std::deque<SourceCopyInfo>  m_clipboard;
-
-    QPointer<QWidgetAction>     m_widgetActionColor;
-    QPointer<AFQColorSelect>    m_widgetColorSelect;
-
-    QPointer<AFQCustomMenu>             m_menuScaleFiltering;
-    QPointer<AFQCustomMenu>             m_menuBlendingMode;
-    QPointer<AFQCustomMenu>             m_menuBlendingMethodMode;
-    QPointer<AFQCustomMenu>             m_menuDeinterlace;
-
-    QPointer<QObject>           m_ScreenshotData;
-    
-    
-    // Load/Save
-    QPointer<AFQMissingFilesDialog>   m_MissDialog;
-    //
-    
-    QWidget* chatWidget = nullptr;
-    QScreen* currentScreen = nullptr;
-
-    // temp
-    AFStatusbarTemp m_statusbar;
-    
-#pragma endregion private member var
-
+public:
+    QVector<LnbMenuItem> lnbMenuItems;
 };
-
-extern void undo_redo(const std::string& data);

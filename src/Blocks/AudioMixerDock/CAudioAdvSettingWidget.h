@@ -4,8 +4,9 @@
 #include <QWidget>
 #include <vector>
 #include <memory>
-#include "UIComponent/CRoundedDialogBase.h"
+#include "UIComponent/CTopBaseWindow.h"
 
+// [window-basic-adv-audio.hpp]
 class AFQAdvAudioCtrl;
 
 namespace Ui
@@ -13,51 +14,39 @@ namespace Ui
 	class AFQAudioAdvSettingDialog;
 }
 
-class AFQAudioAdvSettingDialog : public AFQRoundedDialogBase
+class AFQAudioAdvSettingDialog : public AFTTopBaseDialog
 {
-#pragma region QT Field
 	Q_OBJECT
 
+private:
+	std::vector<OBSSignal> sigs;
+
+	bool showInactive = false;
+	bool showVisible = false;
+
+	std::vector<AFQAdvAudioCtrl*> controls;
+
+	inline void AddAudioSource(obs_source_t* source);
+	static bool EnumSources(void* param, obs_source_t* source);
+	static void OBSSourceAdded(void* param, calldata_t* calldata);
+	static void OBSSourceRemoved(void* param, calldata_t* calldata);
+	static void OBSSourceActivated(void* param, calldata_t* calldata);
+
+	std::unique_ptr<Ui::AFQAudioAdvSettingDialog> ui;
+
 private slots:
-	void qslotSourceAdded(OBSSource source);
-	void qslotSourceRemoved(OBSSource source);
+	void SourceAdded(OBSSource source);
+	void SourceRemoved(OBSSource source);
 
-	void qslotOnUsePercentToggled(bool checked);
-	void qslotOnActiveOnlyToggled(bool checked);
+	void OnUsePercentToggled(bool checked);
+	void OnActiveOnlyToggled(bool checked);
 
-	void qslotCloseButtonClicked();
-#pragma endregion QT Field
+	void CloseButtonClicked();
 
-#pragma region class initializer, destructor
 public:
 	explicit AFQAudioAdvSettingDialog(QWidget* parent);
 	~AFQAudioAdvSettingDialog();
-#pragma endregion class initializer, destructor
-
-#pragma region public func
-public:
 	void SetShowInactive(bool showInactive);
-#pragma endregion public func
+	void SetIconsVisible(bool visible);
 
-#pragma region private func
-private:
-	void _ChangeLanguage();
-
-	inline void _AddAudioSource(obs_source_t* source);
-	static bool _EnumSources(void* param, obs_source_t* source);
-	static void _OBSSourceAdded(void* param, calldata_t* calldata);
-	static void _OBSSourceRemoved(void* param, calldata_t* calldata);
-#pragma region private func
-
-#pragma region private member var
-private:
-	OBSSignal m_sourceAddedSignal;
-	OBSSignal m_sourceRemovedSignal;
-
-	bool m_bShowInactive;
-	bool m_bShowVisible;
-
-	std::vector<AFQAdvAudioCtrl*> m_vControls;
-	Ui::AFQAudioAdvSettingDialog* ui;
-#pragma endregion private member var
 };

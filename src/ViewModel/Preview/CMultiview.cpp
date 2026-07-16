@@ -6,33 +6,30 @@
 
 #include <obs.hpp>
 
+#include "display-helpers.hpp"
+
 
 #include "Application/CApplication.h"
 #include "Blocks/SceneSourceDock/CSceneSourceDockWidget.h"
-//
-
-
 
 #include "Common/MathMiscUtils.h"
 #include "CoreModel/Config/CStateAppContext.h"
 #include "CoreModel/Config/CConfigManager.h"
-#include "CoreModel/Graphics/CGraphicsMiscUtils.inl"
 #include "CoreModel/Graphics/CGraphicsContext.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
-#include "CoreModel/Scene/CScene.h"
 #include "CoreModel/Scene/CSceneContext.h"
 #include "CoreModel/Source/CSource.h"
 
 
 AFMultiview::AFMultiview()
 {
-    AFGraphicsContext::InitSafeAreas(&actionSafeMargin, &graphicsSafeMargin,
-                                     &fourByThreeSafeMargin, &leftLine, &topLine, &rightLine);
+    InitSafeAreas(&m_pActionSafeMargin, &m_pGraphicsSafeMargin,
+                  &m_pFourByThreeSafeMargin, &m_pLeftLine, &m_pTopLine, &m_pRightLine);
 }
 
 AFMultiview::~AFMultiview()
 {
-    for (OBSWeakSource &weakSrc : multiviewScenes)
+    for (OBSWeakSource &weakSrc : m_multiviewScenes)
     {
         OBSSource src = OBSGetStrongRef(weakSrc);
         if (src)
@@ -40,38 +37,35 @@ AFMultiview::~AFMultiview()
     }
 
     obs_enter_graphics();
-    gs_vertexbuffer_destroy(actionSafeMargin);
-    gs_vertexbuffer_destroy(graphicsSafeMargin);
-    gs_vertexbuffer_destroy(fourByThreeSafeMargin);
-    gs_vertexbuffer_destroy(leftLine);
-    gs_vertexbuffer_destroy(topLine);
-    gs_vertexbuffer_destroy(rightLine);
+    gs_vertexbuffer_destroy(m_pActionSafeMargin);
+    gs_vertexbuffer_destroy(m_pGraphicsSafeMargin);
+    gs_vertexbuffer_destroy(m_pFourByThreeSafeMargin);
+    gs_vertexbuffer_destroy(m_pLeftLine);
+    gs_vertexbuffer_destroy(m_pTopLine);
+    gs_vertexbuffer_destroy(m_pRightLine);
     obs_leave_graphics();
 }
 
 void AFMultiview::Update(bool drawLabel)
 {
-    auto& textManager = AFLocaleTextManager::GetSingletonInstance();
-    m_bRenderLabel = drawLabel;
+    m_renderLabel = drawLabel;
     
-    multiviewScenes.clear();
-    multiviewLabels.clear();
+    m_multiviewScenes.clear();
+    m_multiviewLabels.clear();
 
     struct obs_video_info ovi;
     obs_get_video_info(&ovi);
 
     uint32_t w = ovi.base_width;
     uint32_t h = ovi.base_height;
-    fw = float(w);
-    fh = float(h);
-    ratio = fw / fh;
+    m_w = float(w);
+    m_h = float(h);
+    m_ratio = m_w / m_h;
 
     struct obs_frontend_source_list scenes = {};
     //obs_frontend_get_scenes(&scenes);
 
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    SceneItemVector& sceneItems = sceneContext.GetSceneItemVector();
+    SceneItemVector& sceneItems = SCENE_CONTEXT.GetSceneItemVector();
     if (sceneItems.empty() == false)
     {
         size_t sceneCount = sceneItems.size();
@@ -87,55 +81,55 @@ void AFMultiview::Update(bool drawLabel)
     //
 
     //std::string textPreview = "Preview";
-    std::string textPreview = textManager.Str("StudioMode.Preview");
+    std::string textPreview = Str("StudioMode.Preview");
     
-    LabelSourceData textData(labelSize);
+    LabelSourceData textData(m_labelSize);
     textData.labelSetText = true;
     textData.labelText = textPreview.c_str();
     textData.labelRatioSize = (float)(1.f / 9.81f);
     textData.labelOutline = false;
     textData.labelFontFlag = 0;
-    textData.labelColor1 = 0xFFFFE000;
-    textData.labelColor2 = 0xFFFFE000;  // abgr : previewColor
+    textData.labelColor1 = 0xFFFFFFFF;
+    textData.labelColor2 = 0xFFFFFFFF;  // abgr : previewColor
     
-    multiviewLabels.emplace_back(AFSourceUtil::CreateLabelSource(textData));
+    m_multiviewLabels.emplace_back(AFSourceUtil::CreateLabelSource(textData));
     
     //std::string textProgram = "Program";
-    std::string textProgram = textManager.Str("StudioMode.Program");
+    std::string textProgram = Str("StudioMode.Program");
     textData.labelText = textProgram.c_str();
-    textData.labelColor1 = 0xFF01FFD1;
-    textData.labelColor2 = 0xFF01FFD1;  // abgr : programColor
+    textData.labelColor1 = 0xFFFFE000;
+    textData.labelColor2 = 0xFFFFE000;  // abgr : programColor
     
-    multiviewLabels.emplace_back(AFSourceUtil::CreateLabelSource(textData));
+    m_multiviewLabels.emplace_back(AFSourceUtil::CreateLabelSource(textData));
 
 
-    pvwprgCX = fw / 2;
-    pvwprgCY = fh / 2;
+    m_pvwprgCX = m_w / 2;
+    m_pvwprgCY = m_h / 2;
 
-    maxSrcs = 8;
-    
-
-    ppiCX = pvwprgCX - thicknessx2;
-    ppiCY = pvwprgCY - thicknessx2;
-    ppiScaleX = (pvwprgCX - thicknessx2) / fw;
-    ppiScaleY = (pvwprgCY - thicknessx2) / fh;
-
-
-    scenesCX = pvwprgCX / 2;
-    scenesCY = pvwprgCY / 2;
+    m_maxSrcs = 8;
     
 
-    siCX = scenesCX - thicknessx2;
-    siCY = scenesCY - thicknessx2;
-    siScaleX = (scenesCX - thicknessx2) / fw;
-    siScaleY = (scenesCY - thicknessx2) / fh;
+    m_ppiCX = m_pvwprgCX - m_thicknessx2;
+    m_ppiCY = m_pvwprgCY - m_thicknessx2;
+    m_ppiScaleX = (m_pvwprgCX - m_thicknessx2) / m_w;
+    m_ppiScaleY = (m_pvwprgCY - m_thicknessx2) / m_h;
 
-    numSrcs = 0;
+
+    m_scenesCX = m_pvwprgCX / 2;
+    m_scenesCY = m_pvwprgCY / 2;
+    
+
+    m_cX = m_scenesCX - m_thicknessx2;
+    m_cY = m_scenesCY - m_thicknessx2;
+    m_scaleX = (m_scenesCX - m_thicknessx2) / m_w;
+    m_scaleY = (m_scenesCY - m_thicknessx2) / m_h;
+
+    m_numSrcs = 0;
     size_t i = 0;
     textData.labelRatioSize = (float)(1.f / 9.81f);
     textData.labelColor1 = 0;
     textData.labelColor2 = 0;
-    while (i < scenes.sources.num && numSrcs < maxSrcs)
+    while (i < scenes.sources.num && m_numSrcs < m_maxSrcs)
     {
         obs_source_t *src = scenes.sources.array[i++];
         OBSDataAutoRelease data = obs_source_get_private_settings(src);
@@ -145,9 +139,9 @@ void AFMultiview::Update(bool drawLabel)
             continue;
 
         // We have a displayable source.
-        numSrcs++;
+        m_numSrcs++;
 
-        multiviewScenes.emplace_back(OBSGetWeakRef(src));
+        m_multiviewScenes.emplace_back(OBSGetWeakRef(src));
         obs_source_inc_showing(src);
 
 
@@ -155,10 +149,9 @@ void AFMultiview::Update(bool drawLabel)
         text += " ";
         text += obs_source_get_name(src);
         text += " ";
-
         textData.labelText = text.c_str();
 
-        multiviewLabels.emplace_back(AFSourceUtil::CreateLabelSource(textData));
+        m_multiviewLabels.emplace_back(AFSourceUtil::CreateLabelSource(textData));
     }
 
     obs_frontend_source_list_free(&scenes);
@@ -175,30 +168,26 @@ static inline uint32_t labelOffset(obs_source_t *label, uint32_t cx)
 }
 
 void AFMultiview::Render(uint32_t cx, uint32_t cy)
-{
-    auto& sceneContext =  AFSceneContext::GetSingletonInstance();
-    
+{   
     uint32_t targetCX, targetCY;
     int x, y;
     float scale;
 
-    targetCX = (uint32_t)fw;
-    targetCY = (uint32_t)fh;
+    targetCX = (uint32_t)m_w;
+    targetCY = (uint32_t)m_h;
 
     GetScaleAndCenterPos(targetCX, targetCY, cx, cy, x, y, scale);
     
-    float fixRatio = 1.f / scale * m_fDpi;
+    float fixRatio = 1.f / scale * m_dpi;
     
-    OBSSource previewSrc = AFSceneUtil::CnvtToOBSSource(sceneContext.GetCurrOBSScene());
-    OBSSource programSrc = OBSGetStrongRef(sceneContext.GetProgramOBSScene());
+    OBSSource previewSrc = AFSceneUtil::CnvtToOBSSource(SCENE_CONTEXT.GetCurrentScene());
+    OBSSource programSrc = OBSGetStrongRef(SCENE_CONTEXT.GetProgramScene());
     
     
     
-    AFStateAppContext* tmpStateApp = AFConfigManager::GetSingletonInstance().GetStates();
     bool studioMode = false;
-    if (tmpStateApp)
-        //studioMode = tmpStateApp->IsPreviewProgramMode();
-        studioMode = tmpStateApp->JustCheckPreviewProgramMode();
+    //studioMode = STATEAPP.IsPreviewProgramMode();
+    studioMode = STATEAPP.JustCheckPreviewProgramMode();
 
     
     auto drawBox = [&](float cx, float cy, uint32_t colorVal) {
@@ -222,51 +211,51 @@ void AFMultiview::Render(uint32_t cx, uint32_t cy)
         float oR = (bx + cx);
         float oB = (by + cy);
 
-        StartGraphicsViewRegion(vX, vY, vCX, vCY, oL, oR, oT, oB);
+        startRegion(vX, vY, vCX, vCY, oL, oR, oT, oB);
     };
 
     auto calcBaseSource = [&](size_t i) {
         if (i < 4)
         {
-            sourceX = (float(i) * scenesCX);
+            m_sourceX = (float(i) * m_scenesCX);
 
-//            if (m_bRenderOnlySource)
-//                sourceY = pvwprgCY / 2;
+//            if (m_renderOnlySource)
+//                m_sourceY = m_pvwprgCY / 2;
 //            else
-                sourceY = pvwprgCY;
+            m_sourceY = m_pvwprgCY;
         }
         else 
         {
-            sourceX = (float(i - 4) * scenesCX);
+            m_sourceX = (float(i - 4) * m_scenesCX);
             
-//            if (m_bRenderOnlySource)
-//                sourceY = pvwprgCY / 2 + scenesCY;
+//            if (m_renderOnlySource)
+//                m_sourceY = m_pvwprgCY / 2 + m_scenesCY;
 //            else
-                sourceY = pvwprgCY + scenesCY;
+            m_sourceY = m_pvwprgCY + m_scenesCY;
         }
         
-        siX = sourceX + thickness;
-        siY = sourceY + thickness;
+        m_x = m_sourceX + m_thickness;
+        m_y = m_sourceY + m_thickness;
     };
 
     auto calcPreviewProgram = [&](bool program) {
         if(studioMode)
         {
-            sourceX = thickness;
-            sourceY = thickness;
-            labelX = thickness;
-            labelY = thickness;
+            m_sourceX = m_thickness;
+            m_sourceY = m_thickness;
+            m_labelX = m_thickness;
+            m_labelY = m_thickness;
             if (program) {
-                sourceX += pvwprgCX;
-                labelX += pvwprgCX;
+                m_sourceX += m_pvwprgCX;
+                m_labelX += m_pvwprgCX;
             }
         }
         else
         {
-            sourceX = thickness + pvwprgCX / 2;
-            sourceY = thickness;
-            labelX = pvwprgCX / 2 + thickness;
-            labelY = thickness;
+            m_sourceX = m_thickness + m_pvwprgCX / 2;
+            m_sourceY = m_thickness;
+            m_labelX = m_pvwprgCX / 2 + m_thickness;
+            m_labelY = m_thickness;
         }
         
     };
@@ -286,148 +275,145 @@ void AFMultiview::Render(uint32_t cx, uint32_t cy)
     };
 
     // Define the whole usable region for the multiview
-    StartGraphicsViewRegion(x, y, targetCX * scale, targetCY * scale, 0.0f, fw, 0.0f,
-            fh);
+    startRegion(x, y, targetCX * scale, targetCY * scale, 0.0f, m_w, 0.0f, m_h);
 
     // Change the background color to highlight all sources
-    drawBox(fw, fh, outerColor);
+    drawBox(m_w, m_h, s_outerColor);
 
     /* ----------------------------- */
     /* draw sources                  */
 
-    for (size_t i = 0; i < maxSrcs; i++)
+    for (size_t i = 0; i < m_maxSrcs; i++)
     {
         // Handle all the offsets
         calcBaseSource(i);
 
-        if (i >= numSrcs)
+        if (i >= m_numSrcs)
         {
             // Just paint the background and continue
-            paintAreaWithColor(sourceX, sourceY, scenesCX, scenesCY,
-                               outerColor);
-            paintAreaWithColor(siX - guideLineSize,
-                               siY - guideLineSize,
-                               siCX + guideLineSizex2,
-                               siCY + guideLineSizex2,
-                               blackColor);
-            paintAreaWithColor(siX, siY, siCX, siCY,
-                               backgroundColor);
+            paintAreaWithColor(m_sourceX, m_sourceY, m_scenesCX, m_scenesCY, s_outerColor);
+            paintAreaWithColor(m_x - m_guideLineSize,
+                               m_y - m_guideLineSize,
+                               m_cX + m_guideLineSizex2,
+                               m_cY + m_guideLineSizex2,
+                               s_blackColor);
+            paintAreaWithColor(m_x, m_y, m_cX, m_cY, s_backgroundColor);
             continue;
         }
 
-        OBSSource src = OBSGetStrongRef(multiviewScenes[i]);
+        OBSSource src = OBSGetStrongRef(m_multiviewScenes[i]);
 
         // We have a source. Now chose the proper highlight color
-        uint32_t colorVal = blackColor;
+        uint32_t colorVal = s_blackColor;
         if (src == programSrc)
-            colorVal = programColor;
+            colorVal = s_programColor;
         else if (src == previewSrc)
-            colorVal = studioMode ? previewColor : programColor;
+            colorVal = studioMode ? s_previewColor : s_programColor;
 
         // Paint the background
-        paintAreaWithColor(siX - guideLineSize,
-                           siY - guideLineSize,
-                           siCX + guideLineSizex2,
-                           siCY + guideLineSizex2,
+        paintAreaWithColor(m_x - m_guideLineSize,
+                           m_y - m_guideLineSize,
+                           m_cX + m_guideLineSizex2,
+                           m_cY + m_guideLineSizex2,
                            colorVal);
-        paintAreaWithColor(siX, siY, siCX, siCY, backgroundColor);
-
+        paintAreaWithColor(m_x, m_y, m_cX, m_cY, s_backgroundColor);
         /* ----------- */
 
         // Render the source
         gs_matrix_push();
-        gs_matrix_translate3f(siX, siY, 0.0f);
-        gs_matrix_scale3f(siScaleX, siScaleY, 1.0f);
-        setRegion(siX, siY, siCX, siCY);
+        gs_matrix_translate3f(m_x, m_y, 0.0f);
+        gs_matrix_scale3f(m_scaleX, m_scaleY, 1.0f);
+        setRegion(m_x, m_y, m_cX, m_cY);
         obs_source_video_render(src);
-        EndGraphicsViewRegion();
+        endRegion();
         gs_matrix_pop();
 
         /* ----------- */
 
         // Render the label
-        if (!m_bRenderLabel)
+        if (!m_renderLabel)
             continue;
 
-        obs_source *label = multiviewLabels[i + 2];
+        obs_source *label = m_multiviewLabels[i + 2];
         if (!label)
             continue;
 
-        offset = labelOffset(label, scenesCX);
+        m_offset = labelOffset(label, m_scenesCX);
 
         gs_matrix_push();
-        gs_matrix_translate3f(sourceX + thickness,
-                              sourceY + thickness, 0.0f);
-        gs_matrix_scale3f(ppiScaleX, ppiScaleY, 1.0f);
+        gs_matrix_translate3f(m_sourceX + m_thickness,
+                              m_sourceY + m_thickness, 0.0f);
+        gs_matrix_scale3f(m_ppiScaleX, m_ppiScaleY, 1.0f);
         gs_matrix_scale3f(fixRatio, fixRatio, 1.0f);
-        drawBox(obs_source_get_width(label) / ppiScaleX +
-                 labelLeftMarginx2 + labelLeftMarginx2 + guideLineSize,
-                obs_source_get_height(label) / ppiScaleY +
-                 labeTopMarginx2 + labeTopMarginx2 +
-                int(sourceY * 0.015f),
-                labelColor);
+        drawBox(obs_source_get_width(label) / m_ppiScaleX +
+                m_labelLeftMarginx2 + m_labelLeftMarginx2 + m_guideLineSize,
+                obs_source_get_height(label) / m_ppiScaleY +
+                m_labeTopMarginx2 + m_labeTopMarginx2 +
+                int(m_sourceY * 0.015f),
+                s_labelColor);
         gs_matrix_pop();
         
         gs_matrix_push();
-        gs_matrix_translate3f(sourceX + thickness + (labelLeftMargin / scale * m_fDpi),
-                              sourceY + thickness + (labeTopMargin / scale * m_fDpi), 0.0f);
+        gs_matrix_translate3f(m_sourceX + m_thickness + (m_labelLeftMargin / scale * m_dpi),
+                              m_sourceY + m_thickness + (m_labeTopMargin / scale * m_dpi), 0.0f);
         gs_matrix_scale3f(fixRatio, fixRatio, 1.0f);
         obs_source_video_render(label);
         gs_matrix_pop();
     }
 
 
-    if (m_bRenderOnlySource)
+    if (m_renderOnlySource)
         return;
     
 
     /* ----------------------------- */
     /* draw preview                  */
 
-    obs_source_t *previewLabel = multiviewLabels[0];
-    offset = labelOffset(previewLabel, pvwprgCX);
+    obs_source_t *previewLabel = m_multiviewLabels[0];
+    m_offset = labelOffset(previewLabel, m_pvwprgCX);
     calcPreviewProgram(false);
 
-    paintAreaWithColor(sourceX - guideLineSize,
-                       sourceY - guideLineSize,
-                       ppiCX + guideLineSizex2,
-                       ppiCY + guideLineSizex2,
-                       blackColor);
+    // guide Line
+    paintAreaWithColor(m_sourceX - m_guideLineSize,
+                       m_sourceY - m_guideLineSize,
+                       m_ppiCX + m_guideLineSizex2,
+                       m_ppiCY + m_guideLineSizex2,
+                       s_blackColor);
     
     // Paint the background
-    paintAreaWithColor(sourceX, sourceY, ppiCX, ppiCY, backgroundColor);
+    paintAreaWithColor(m_sourceX, m_sourceY, m_ppiCX, m_ppiCY, s_backgroundColor);
 
     // Scale and Draw the preview
     if (studioMode)
     {
         gs_matrix_push();
-        gs_matrix_translate3f(sourceX, sourceY, 0.0f);
-        gs_matrix_scale3f(ppiScaleX, ppiScaleY, 1.0f);
-        setRegion(sourceX, sourceY, ppiCX, ppiCY);
+        gs_matrix_translate3f(m_sourceX, m_sourceY, 0.0f);
+        gs_matrix_scale3f(m_ppiScaleX, m_ppiScaleY, 1.0f);
+        setRegion(m_sourceX, m_sourceY, m_ppiCX, m_ppiCY);
         
         obs_source_video_render(previewSrc);
         
-        EndGraphicsViewRegion();
+        endRegion();
         gs_matrix_pop();
         
         /* ----------- */
         
         // Draw the Label
         gs_matrix_push();
-        gs_matrix_translate3f(labelX, labelY, 0.0f);
-        gs_matrix_scale3f(ppiScaleX, ppiScaleY, 1.0f);
+        gs_matrix_translate3f(m_labelX, m_labelY, 0.0f);
+        gs_matrix_scale3f(m_ppiScaleX, m_ppiScaleY, 1.0f);
         gs_matrix_scale3f(fixRatio, fixRatio, 1.0f);
-        drawBox(obs_source_get_width(previewLabel) / ppiScaleX+
-                 labelLeftMarginx2 + labelLeftMarginx2 + guideLineSize,
-                obs_source_get_height(previewLabel) / ppiScaleY+
-                 labeTopMarginx2 + labeTopMarginx2 +
-                 int(pvwprgCX * 0.015f),
-                labelColor);
+        drawBox(obs_source_get_width(previewLabel) / m_ppiScaleX+
+                m_labelLeftMarginx2 + m_labelLeftMarginx2 + m_guideLineSize,
+                obs_source_get_height(previewLabel) / m_ppiScaleY+
+                m_labeTopMarginx2 + m_labeTopMarginx2 +
+                 int(m_pvwprgCX * 0.015f),
+                s_labelColor);
         gs_matrix_pop();
         
         gs_matrix_push();
-        gs_matrix_translate3f(labelX + (labelLeftMargin / scale * m_fDpi),
-                              labelY + (labeTopMargin / scale * m_fDpi), 0.0f);
+        gs_matrix_translate3f(m_labelX + (m_labelLeftMargin / scale * m_dpi),
+                              m_labelY + (m_labeTopMargin / scale * m_dpi), 0.0f);
         gs_matrix_scale3f(fixRatio, fixRatio, 1.0f);
         obs_source_video_render(previewLabel);
         gs_matrix_pop();
@@ -437,55 +423,55 @@ void AFMultiview::Render(uint32_t cx, uint32_t cy)
     /* ----------------------------- */
     /* draw program                  */
 
-    obs_source_t *programLabel = multiviewLabels[1];
-    offset = labelOffset(programLabel, pvwprgCX);
+    obs_source_t *programLabel = m_multiviewLabels[1];
+    m_offset = labelOffset(programLabel, m_pvwprgCX);
     calcPreviewProgram(true);
 
-    paintAreaWithColor(sourceX - guideLineSize,
-                       sourceY - guideLineSize,
-                       ppiCX + guideLineSizex2,
-                       ppiCY + guideLineSizex2,
-                       blackColor);
+    // guide Line
+    paintAreaWithColor(m_sourceX - m_guideLineSize,
+                       m_sourceY - m_guideLineSize,
+                       m_ppiCX + m_guideLineSizex2,
+                       m_ppiCY + m_guideLineSizex2,
+                       s_blackColor);
     
-    paintAreaWithColor(sourceX, sourceY, ppiCX, ppiCY, backgroundColor);
+    paintAreaWithColor(m_sourceX, m_sourceY, m_ppiCX, m_ppiCY, s_backgroundColor);
 
     // Scale and Draw the mainPreview or program
     gs_matrix_push();
-    gs_matrix_translate3f(sourceX, sourceY, 0.0f);
-    gs_matrix_scale3f(ppiScaleX, ppiScaleY, 1.0f);
-    setRegion(sourceX, sourceY, ppiCX, ppiCY);
+    gs_matrix_translate3f(m_sourceX, m_sourceY, 0.0f);
+    gs_matrix_scale3f(m_ppiScaleX, m_ppiScaleY, 1.0f);
+    setRegion(m_sourceX, m_sourceY, m_ppiCX, m_ppiCY);
     obs_render_main_texture();
-    EndGraphicsViewRegion();
+    endRegion();
     gs_matrix_pop();
     
 
     /* ----------- */
 
     // Draw the Label
-    if (m_bRenderLabel)
+    if (m_renderLabel)
     {
         gs_matrix_push();
-        gs_matrix_translate3f(labelX, labelY, 0.0f);
-        gs_matrix_scale3f(ppiScaleX, ppiScaleY, 1.0f);
+        gs_matrix_translate3f(m_labelX, m_labelY, 0.0f);
+        gs_matrix_scale3f(m_ppiScaleX, m_ppiScaleY, 1.0f);
         gs_matrix_scale3f(fixRatio, fixRatio, 1.0f);
-        drawBox(obs_source_get_width(programLabel) / ppiScaleX +
-                 labelLeftMarginx2 + labelLeftMarginx2 + guideLineSize,
-                obs_source_get_height(programLabel) / ppiScaleY +
-                 labeTopMarginx2 + labeTopMarginx2 +
-                 int(pvwprgCX * 0.015f),
-                labelColor);
+        drawBox(obs_source_get_width(programLabel) / m_ppiScaleX +
+                m_labelLeftMarginx2 + m_labelLeftMarginx2 + m_guideLineSize,
+                obs_source_get_height(programLabel) / m_ppiScaleY +
+                m_labeTopMarginx2 + m_labeTopMarginx2 +
+                 int(m_pvwprgCX * 0.015f),
+                s_labelColor);
         gs_matrix_pop();
 
         gs_matrix_push();
-        gs_matrix_translate3f(labelX + (labelLeftMargin / scale * m_fDpi),
-            labelY + (labeTopMargin / scale * m_fDpi), 0.0f);
+        gs_matrix_translate3f(m_labelX + (m_labelLeftMargin / scale * m_dpi),
+                              m_labelY + (m_labeTopMargin / scale * m_dpi), 0.0f);
         gs_matrix_scale3f(fixRatio, fixRatio, 1.0f);
         obs_source_video_render(programLabel);
         gs_matrix_pop();
     }
 
-
-    EndGraphicsViewRegion();
+    endRegion();
 }
 
 OBSSource AFMultiview::GetSourceByPosition(int x, int y, QWidget* rectWidget/* = nullptr*/)
@@ -506,12 +492,12 @@ OBSSource AFMultiview::GetSourceByPosition(int x, int y, QWidget* rectWidget/* =
     int maxY = cy;
 
    
-    if (float(cx) / float(cy) > ratio) {
-        int validX = cy * ratio;
+    if (float(cx) / float(cy) > m_ratio) {
+        int validX = cy * m_ratio;
         minX = (cx / 2) - (validX / 2);
         maxX = (cx / 2) + (validX / 2);
     } else {
-        int validY = cx / ratio;
+        int validY = cx / m_ratio;
         maxY = (cy / 2) + (validY / 2);
     }
 
@@ -525,8 +511,8 @@ OBSSource AFMultiview::GetSourceByPosition(int x, int y, QWidget* rectWidget/* =
     }
     
 
-    if (pos < 0 || pos >= (int)numSrcs)
+    if (pos < 0 || pos >= (int)m_numSrcs)
         return nullptr;
     
-    return OBSGetStrongRef(multiviewScenes[pos]);
+    return OBSGetStrongRef(m_multiviewScenes[pos]);
 }

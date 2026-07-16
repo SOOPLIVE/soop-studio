@@ -6,24 +6,16 @@
 #include <algorithm>
 
 
-
+#include "Application/CApplication.h"
 
 #include "CMouseStaterPreview.h"
 #include "CDrawLinePreview.h"
 #include "UIComponent/CBasicPreview.h"
 
-
-
-
-
 #include "Common/MathMiscUtils.h"
-#include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Graphics/CGraphicsContext.h"
-#include "CoreModel/Scene/CScene.h"
+#include "CoreModel/Source/CSource.h"
 #include "CoreModel/Scene/CSceneContext.h"
-
-
-
 
 struct HandleFindData
 {
@@ -77,8 +69,19 @@ struct OffsetData
     vec3 tl, br, offset;
 };
 
+CModelPreview::CModelPreview()
+{
+    StartBrowserResizeThread();
+}
 
-bool AFModelPreview::FindSelected(obs_scene_t* scene, obs_sceneitem_t* item, void* param)
+CModelPreview::~CModelPreview()
+{
+    workBrowserThread = false;
+    if (browserUpdateThread.joinable())
+        browserUpdateThread.join();
+}
+
+bool CModelPreview::FindSelected(obs_scene_t* scene, obs_sceneitem_t* item, void* param)
 {
 	SceneFindBoxData* data = reinterpret_cast<SceneFindBoxData*>(param);
 
@@ -88,7 +91,7 @@ bool AFModelPreview::FindSelected(obs_scene_t* scene, obs_sceneitem_t* item, voi
 	return true;
 }
 
-bool AFModelPreview::FindItemsInBox(obs_scene_t* /*scene*/, obs_sceneitem_t* item, void* param)
+bool CModelPreview::FindItemsInBox(obs_scene_t* /*scene*/, obs_sceneitem_t* item, void* param)
 {
     SceneFindBoxData *data = reinterpret_cast<SceneFindBoxData *>(param);
     matrix4 transform;
@@ -173,7 +176,7 @@ bool AFModelPreview::FindItemsInBox(obs_scene_t* /*scene*/, obs_sceneitem_t* ite
         return true;
     }
 
-    if (_IntersectBox(transform, x1, x2, y1, y2))
+    if (IntersectBox(transform, x1, x2, y1, y2))
     {
         data->sceneItems.push_back(item);
         return true;
@@ -182,10 +185,17 @@ bool AFModelPreview::FindItemsInBox(obs_scene_t* /*scene*/, obs_sceneitem_t* ite
     return true;
 }
 
-bool AFModelPreview::NudgeCallBack(obs_scene_t* /*scene*/, obs_sceneitem_t* item, void* param)
+bool CModelPreview::NudgeCallBack(obs_scene_t* /*scene*/, obs_sceneitem_t* item, void* param)
 {
     if (obs_sceneitem_locked(item))
         return true;
+
+    obs_source_t* source = obs_sceneitem_get_source(item);
+    if (source) {
+        const char* id = obs_source_get_id(source);
+        if (0 == strcmp(id, "painter_source"))
+            return true;
+    }
 
     struct vec2 &offset = *reinterpret_cast<struct vec2 *>(param);
     struct vec2 pos;
@@ -212,11 +222,14 @@ bool AFModelPreview::NudgeCallBack(obs_scene_t* /*scene*/, obs_sceneitem_t* item
 
     obs_sceneitem_get_pos(item, &pos);
     vec2_add(&pos, &pos, &offset);
+
+    pos = AdjustScreenInItems(item, pos);
+
     obs_sceneitem_set_pos(item, &pos);
     return true;
 }
 
-vec2 AFModelPreview::GetItemSize(obs_sceneitem_t* item)
+vec2 CModelPreview::GetItemSize(obs_sceneitem_t* item)
 {
 	obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(item);
 	vec2 size;
@@ -244,134 +257,114 @@ vec2 AFModelPreview::GetItemSize(obs_sceneitem_t* item)
 	return size;
 }
 
-void AFModelPreview::ClearSelectedItems()
+void CModelPreview::ClearSelectedItems()
 {
-    std::lock_guard<std::mutex> lock(m_SelectMutex);
-    m_vecSelectedItems.clear();
+    std::lock_guard<std::mutex> lock(selectMutex);
+    selectedItems.clear();
 }
 
-void AFModelPreview::SetSelectedItems()
+void CModelPreview::SetSelectedItems()
 {
-    if (m_pInitedContextScene == nullptr)
-        return;
-    
-    
     vec2 s;
     SceneFindBoxData data(s, s);
 
-    obs_scene_enum_items(m_pInitedContextScene->GetCurrOBSScene(), 
+    obs_scene_enum_items(SCENE_CONTEXT.GetCurrentScene(), 
                          FindSelected, &data);
 
-    std::lock_guard<std::mutex> lock(m_SelectMutex);
-    m_vecSelectedItems = data.sceneItems;
+    std::lock_guard<std::mutex> lock(selectMutex);
+    selectedItems = data.sceneItems;
 }
 
-void AFModelPreview::ClearHoveredItems(bool selectionBox)
+void CModelPreview::ClearHoveredItems(bool selectionBox)
 {
-    std::lock_guard<std::mutex> lock(m_SelectMutex);
-    m_vecHoveredPreviewItems.clear();
+    std::lock_guard<std::mutex> lock(selectMutex);
+    hoveredPreviewItems.clear();
 }
 
-void AFModelPreview::EnumSelecedHoveredItems(const bool altDown,
+void CModelPreview::EnumSelecedHoveredItems(const bool altDown,
                                              const bool shiftDown,
                                              const bool ctrlDown)
 {
-    std::lock_guard<std::mutex> lock(m_SelectMutex);
+    std::lock_guard<std::mutex> lock(selectMutex);
     if (altDown || ctrlDown || shiftDown)
     {
-        for (size_t i = 0; i < m_vecSelectedItems.size(); i++)
-            obs_sceneitem_select(m_vecSelectedItems[i], true);
+        for (size_t i = 0; i < selectedItems.size(); i++)
+            obs_sceneitem_select(selectedItems[i], true);
         
     }
 
-    for (size_t i = 0; i < m_vecHoveredPreviewItems.size(); i++)
+    for (size_t i = 0; i < hoveredPreviewItems.size(); i++)
     {
         bool select = true;
-        obs_sceneitem_t* item = m_vecHoveredPreviewItems[i];
+        obs_sceneitem_t* item = hoveredPreviewItems[i];
 
         if (altDown)
             select = false;
         else if (ctrlDown)
             select = !obs_sceneitem_selected(item);
         
-        obs_sceneitem_select(m_vecHoveredPreviewItems[i], select);
+        obs_sceneitem_select(hoveredPreviewItems[i], select);
     }
 }
 
-uint32_t AFModelPreview::MakeHoveredItem(const vec2& pos)
+uint32_t CModelPreview::MakeHoveredItem(const vec2& pos)
 {
     OBSSceneItem item = GetItemAtPos(pos, true);
 
-    std::lock_guard<std::mutex> lock(m_SelectMutex);
-    m_vecHoveredPreviewItems.clear();
-    m_vecHoveredPreviewItems.push_back(item);
+    std::lock_guard<std::mutex> lock(selectMutex);
+    hoveredPreviewItems.clear();
+    hoveredPreviewItems.push_back(item);
     
-    uint32_t n = (uint32_t)m_vecHoveredPreviewItems.size();
+    uint32_t n = (uint32_t)hoveredPreviewItems.size();
     
     return n;
 }
 
-void AFModelPreview::MakeLastHoveredItem(const vec2& pos)
+void CModelPreview::MakeLastHoveredItem(const vec2& pos)
 {
     OBSSceneItem item = GetItemAtPos(pos, true);
 
-    std::lock_guard<std::mutex> lock(m_SelectMutex);
-    m_vecHoveredPreviewItems.clear();
-    m_vecHoveredPreviewItems.push_back(item);
-    m_vecSelectedItems.clear();
+    std::lock_guard<std::mutex> lock(selectMutex);
+    hoveredPreviewItems.clear();
+    hoveredPreviewItems.push_back(item);
+    selectedItems.clear();
 }
-//
 
-void AFModelPreview::SetUnsafeAccessContext(AFGraphicsContext* pGraphicsContext,
-											AFSceneContext* pSceneContext)
+void CModelPreview::Reset()
 {
-	if (m_pInitedContextGraphics == nullptr)
-		m_pInitedContextGraphics = pGraphicsContext;
+    if (stretchGroup)
+        obs_sceneitem_defer_group_resize_end(stretchGroup);
 
-	if (m_pInitedContextScene == nullptr)
-		m_pInitedContextScene = pSceneContext;
+    stretchItem = nullptr;
+    stretchGroup = nullptr;
 }
 
-void AFModelPreview::Reset()
+bool CModelPreview::IsLocked()
 {
-    if (m_obsStretchGroup)
-        obs_sceneitem_defer_group_resize_end(m_obsStretchGroup);
-
-    m_obsStretchItem = nullptr;
-    m_obsStretchGroup = nullptr;
+	return obs_sceneitem_locked(stretchItem);
 }
 
-bool AFModelPreview::IsLocked()
-{
-	return obs_sceneitem_locked(m_obsStretchItem);
-}
-
-void AFModelPreview::GetStretchHandleData(const vec2& pos, bool ignoreGroup,
-                                          AFMouseStaterPreview& mouseState, float dpiValue/* = 1.f*/)
+void CModelPreview::GetStretchHandleData(const vec2& pos, bool ignoreGroup,
+                                          CMouseStatePreview& mouseState, float dpiValue/* = 1.f*/)
 {
 	OBSScene scene = nullptr;
-
-	if (m_pInitedContextScene != nullptr)
-		scene = m_pInitedContextScene->GetCurrOBSScene();
-
+    scene = SCENE_CONTEXT.GetCurrentScene();
 	if (!scene)
 		return;
 
 	float scale = 1.f;
-	
-	if ( m_pInitedContextGraphics != nullptr )
-		scale = m_pInitedContextGraphics->GetMainPreviewScale() / dpiValue;
+	scale = GRAPHIC_CONTEXT.GetMainPreviewScale() / dpiValue;
 	vec2 scaled_pos = pos;
 	vec2_divf(&scaled_pos, &scaled_pos, scale);
 	HandleFindData data(scaled_pos, scale);
-	obs_scene_enum_items(scene, _FindHandleAtPos, &data);
+	obs_scene_enum_items(scene, FindHandleAtPos, &data);
 
-	m_obsStretchItem = std::move(data.item);
+    stretchItem = std::move(data.item);
 	mouseState.SetCurrStateHandle(data.handle);
     
-    m_fRotateAngle = data.angle;
-    m_vec2RotatePoint = data.rotatePoint;
-    m_vec2OffsetPoint = data.offsetPoint;
+    rotateAngle = data.angle;
+    rotatePoint = data.rotatePoint;
+    offsetPoint = data.offsetPoint;
 
 	if (mouseState.GetCurrStateHandle() != ItemHandle::None)
 	{
@@ -379,90 +372,81 @@ void AFModelPreview::GetStretchHandleData(const vec2& pos, bool ignoreGroup,
 		vec3 itemUL;
 		float itemRot;
 
-		m_vec2StretchSize = GetItemSize(m_obsStretchItem);
+        stretchItemSize = GetItemSize(stretchItem);
 
-		obs_sceneitem_get_box_transform(m_obsStretchItem, &boxTransform);
-		itemRot = obs_sceneitem_get_rot(m_obsStretchItem);
+		obs_sceneitem_get_box_transform(stretchItem, &boxTransform);
+		itemRot = obs_sceneitem_get_rot(stretchItem);
 		vec3_from_vec4(&itemUL, &boxTransform.t);
 
 		/* build the item space conversion matrices */
-		matrix4_identity(&m_matItemToScreen);
-		matrix4_rotate_aa4f(&m_matItemToScreen, &m_matItemToScreen, 0.0f, 0.0f,
+		matrix4_identity(&itemToScreen);
+		matrix4_rotate_aa4f(&itemToScreen, &itemToScreen, 0.0f, 0.0f,
 							1.0f, RAD(itemRot));
-		matrix4_translate3f(&m_matItemToScreen, &m_matItemToScreen, itemUL.x,
+		matrix4_translate3f(&itemToScreen, &itemToScreen, itemUL.x,
 							itemUL.y, 0.0f);
 
-		matrix4_identity(&m_matScreenToItem);
-		matrix4_translate3f(&m_matScreenToItem, &m_matScreenToItem, -itemUL.x,
+		matrix4_identity(&screenToItem);
+		matrix4_translate3f(&screenToItem, &screenToItem, -itemUL.x,
 							-itemUL.y, 0.0f);
-		matrix4_rotate_aa4f(&m_matScreenToItem, &m_matScreenToItem, 0.0f, 0.0f,
+		matrix4_rotate_aa4f(&screenToItem, &screenToItem, 0.0f, 0.0f,
 							1.0f, RAD(-itemRot));
         
-        obs_sceneitem_get_crop(m_obsStretchItem, &m_obsStartCrop);
-        obs_sceneitem_get_pos(m_obsStretchItem, &m_vec2StartItemPos);
+        obs_sceneitem_get_crop(stretchItem, &startCrop);
+        obs_sceneitem_get_pos(stretchItem, &startItemPos);
         
-        obs_source_t *source = obs_sceneitem_get_source(m_obsStretchItem);
-        m_vec2CropSize.x = float(obs_source_get_width(source) -
-                           m_obsStartCrop.left - m_obsStartCrop.right);
-        m_vec2CropSize.y = float(obs_source_get_height(source) -
-                                 m_obsStartCrop.top - m_obsStartCrop.bottom);
+        obs_source_t *source = obs_sceneitem_get_source(stretchItem);
+        cropSize.x = float(obs_source_get_width(source) -
+                            startCrop.left - startCrop.right);
+        cropSize.y = float(obs_source_get_height(source) -
+                            startCrop.top - startCrop.bottom);
         
-        m_obsStretchGroup = obs_sceneitem_get_group(scene, m_obsStretchItem);
-        if (m_obsStretchGroup && !ignoreGroup)
+        stretchGroup = obs_sceneitem_get_group(scene, stretchItem);
+        if (stretchGroup && !ignoreGroup)
         {
-            obs_sceneitem_get_draw_transform(m_obsStretchGroup,
-                                             &m_matInvGroupTransform);
-            matrix4_inv(&m_matInvGroupTransform, &m_matInvGroupTransform);
-            obs_sceneitem_defer_group_resize_begin(m_obsStretchGroup);
+            obs_sceneitem_get_draw_transform(stretchGroup,
+                                             &invGroupTransform);
+            matrix4_inv(&invGroupTransform, &invGroupTransform);
+            obs_sceneitem_defer_group_resize_begin(stretchGroup);
         }
         else
-            m_obsStretchGroup = nullptr;
+            stretchGroup = nullptr;
 	}
 }
 
-OBSSceneItem AFModelPreview::GetItemAtPos(const vec2& pos, bool selectBelow)
+OBSSceneItem CModelPreview::GetItemAtPos(const vec2& pos, bool selectBelow)
 {
 	OBSScene scene = nullptr;
-
-	if (m_pInitedContextScene != nullptr)
-		scene = m_pInitedContextScene->GetCurrOBSScene();
-
+    scene = SCENE_CONTEXT.GetCurrentScene();
 	if (!scene)
 		return OBSSceneItem();
 
 	SceneFindData data(pos, selectBelow);
-	obs_scene_enum_items(scene, _FindItemAtPos, &data);
+	obs_scene_enum_items(scene, FindItemAtPos, &data);
 	return data.item;
 }
 
-bool AFModelPreview::SelectedAtPos(const vec2& pos)
+bool CModelPreview::SelectedAtPos(const vec2& pos)
 {
 	OBSScene scene = nullptr;
-
-	if (m_pInitedContextScene != nullptr)
-		scene = m_pInitedContextScene->GetCurrOBSScene();
-
+    scene = SCENE_CONTEXT.GetCurrentScene();
 	if (!scene)
 		return false;
 
 	SceneFindData data(pos, false);
-	obs_scene_enum_items(scene, _CheckItemSelected, &data);
+	obs_scene_enum_items(scene, CheckItemSelected, &data);
 	return !!data.item;
 }
 
-void AFModelPreview::DoSelect(const vec2& pos)
+void CModelPreview::DoSelect(const vec2& pos)
 {
 	OBSScene scene = nullptr;
-
-	if (m_pInitedContextScene != nullptr)
-		scene = m_pInitedContextScene->GetCurrOBSScene();
-
+    scene = SCENE_CONTEXT.GetCurrentScene();
 	OBSSceneItem item = GetItemAtPos(pos, true);
 
-	obs_scene_enum_items(scene, _SelectOne, (obs_sceneitem_t*)item);
+	obs_scene_enum_items(scene, SelectOne, (obs_sceneitem_t*)item);
 }
 
-void AFModelPreview::DoCtrlSelect(const vec2 &pos)
+void CModelPreview::DoCtrlSelect(const vec2 &pos)
 {
     OBSSceneItem item = GetItemAtPos(pos, false);
     if (!item)
@@ -472,24 +456,28 @@ void AFModelPreview::DoCtrlSelect(const vec2 &pos)
     obs_sceneitem_select(item, !selected);
 }
 
-void AFModelPreview::CropItem(const vec2& pos, AFMouseStaterPreview& mouseState)
+void CModelPreview::CropItem(const vec2& pos, CMouseStatePreview& mouseState)
 {
-    obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(m_obsStretchItem);
+    obs_source_t* source = obs_sceneitem_get_source(stretchItem);
+    if (SCENE_CONTEXT.IsMustInSizePreview(source))
+        return;
+
+    obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(stretchItem);
     ItemHandle stretchHandle = mouseState.GetCurrStateHandle();
     uint32_t stretchFlags = (uint32_t)stretchHandle;
-    uint32_t align = obs_sceneitem_get_alignment(m_obsStretchItem);
+    uint32_t align = obs_sceneitem_get_alignment(stretchItem);
     vec3 tl, br, pos3;
 
     vec3_zero(&tl);
-    vec3_set(&br, m_vec2StretchSize.x, m_vec2StretchSize.y, 0.0f);
+    vec3_set(&br, stretchItemSize.x, stretchItemSize.y, 0.0f);
 
     vec3_set(&pos3, pos.x, pos.y, 0.0f);
-    vec3_transform(&pos3, &pos3, &m_matScreenToItem);
+    vec3_transform(&pos3, &pos3, &screenToItem);
 
-    obs_sceneitem_crop crop = m_obsStartCrop;
+    obs_sceneitem_crop crop = startCrop;
     vec2 scale, rawscale;
 
-    obs_sceneitem_get_scale(m_obsStretchItem, &rawscale);
+    obs_sceneitem_get_scale(stretchItem, &rawscale);
     vec2_set(&scale,
              boundsType == OBS_BOUNDS_NONE ? rawscale.x : fabsf(rawscale.x),
              boundsType == OBS_BOUNDS_NONE ? rawscale.y
@@ -499,9 +487,9 @@ void AFModelPreview::CropItem(const vec2& pos, AFMouseStaterPreview& mouseState)
     vec2 max_br;
 
     vec2_set(&max_tl, float(-crop.left) * scale.x,
-             float(-crop.top) * scale.y);
-    vec2_set(&max_br, m_vec2StretchSize.x + crop.right * scale.x,
-             m_vec2StretchSize.y + crop.bottom * scale.y);
+                float(-crop.top) * scale.y);
+    vec2_set(&max_br, stretchItemSize.x + crop.right * scale.x,
+                stretchItemSize.y + crop.bottom * scale.y);
 
     typedef std::function<float(float, float)> minmax_func_t;
 
@@ -534,7 +522,7 @@ void AFModelPreview::CropItem(const vec2& pos, AFMouseStaterPreview& mouseState)
     pos3.y = max_y(pos3.y, max_tl.y);
 
     if (stretchFlags & ITEM_LEFT) {
-        float maxX = m_vec2StretchSize.x - (2.0 * scale.x);
+        float maxX = stretchItemSize.x - (2.0 * scale.x);
         pos3.x = tl.x = min_x(pos3.x, maxX);
 
     } else if (stretchFlags & ITEM_RIGHT) {
@@ -543,7 +531,7 @@ void AFModelPreview::CropItem(const vec2& pos, AFMouseStaterPreview& mouseState)
     }
 
     if (stretchFlags & ITEM_TOP) {
-        float maxY = m_vec2StretchSize.y - (2.0 * scale.y);
+        float maxY = stretchItemSize.y - (2.0 * scale.y);
         pos3.y = tl.y = min_y(pos3.y, maxY);
 
     } else if (stretchFlags & ITEM_BOTTOM) {
@@ -561,34 +549,34 @@ void AFModelPreview::CropItem(const vec2& pos, AFMouseStaterPreview& mouseState)
     if (align_x == (stretchFlags & ALIGN_X) && align_x != 0)
         newPos.x = pos3.x;
     else if (align & ITEM_RIGHT)
-        newPos.x = m_vec2StretchSize.x;
+        newPos.x = stretchItemSize.x;
     else if (!(align & ITEM_LEFT))
-        newPos.x = m_vec2StretchSize.x * 0.5f;
+        newPos.x = stretchItemSize.x * 0.5f;
 
     if (align_y == (stretchFlags & ALIGN_Y) && align_y != 0)
         newPos.y = pos3.y;
     else if (align & ITEM_BOTTOM)
-        newPos.y = m_vec2StretchSize.y;
+        newPos.y = stretchItemSize.y;
     else if (!(align & ITEM_TOP))
-        newPos.y = m_vec2StretchSize.y * 0.5f;
+        newPos.y = stretchItemSize.y * 0.5f;
 #undef ALIGN_X
 #undef ALIGN_Y
 
-    crop = m_obsStartCrop;
+    crop = startCrop;
 
     if (stretchFlags & ITEM_LEFT)
         crop.left += int(std::round(tl.x / scale.x));
     else if (stretchFlags & ITEM_RIGHT)
         crop.right +=
-            int(std::round((m_vec2StretchSize.x - br.x) / scale.x));
+            int(std::round((stretchItemSize.x - br.x) / scale.x));
 
     if (stretchFlags & ITEM_TOP)
         crop.top += int(std::round(tl.y / scale.y));
     else if (stretchFlags & ITEM_BOTTOM)
         crop.bottom +=
-            int(std::round((m_vec2StretchSize.y - br.y) / scale.y));
+            int(std::round((stretchItemSize.y - br.y) / scale.y));
 
-    vec3_transform(&newPos, &newPos, &m_matItemToScreen);
+    vec3_transform(&newPos, &newPos, &itemToScreen);
     newPos.x = std::round(newPos.x);
     newPos.y = std::round(newPos.y);
 
@@ -604,26 +592,56 @@ void AFModelPreview::CropItem(const vec2& pos, AFMouseStaterPreview& mouseState)
             crop.right, crop.bottom);
 #endif
 
-    obs_sceneitem_defer_update_begin(m_obsStretchItem);
-    obs_sceneitem_set_crop(m_obsStretchItem, &crop);
+    obs_sceneitem_defer_update_begin(stretchItem);
+    obs_sceneitem_set_crop(stretchItem, &crop);
     if (boundsType == OBS_BOUNDS_NONE)
-        obs_sceneitem_set_pos(m_obsStretchItem, (vec2 *)&newPos);
-    obs_sceneitem_defer_update_end(m_obsStretchItem);
+        obs_sceneitem_set_pos(stretchItem, (vec2 *)&newPos);
+    obs_sceneitem_defer_update_end(stretchItem);
 }
 
-void AFModelPreview::StretchItem(const vec2& pos, AFMouseStaterPreview& mouseState,
+static inline float AlignOriginX(uint32_t align)
+{
+    if (align & OBS_ALIGN_RIGHT)  return 1.0f;
+    if (align & OBS_ALIGN_CENTER) return 0.5f;
+    return 0.0f; // LEFT
+}
+
+static inline float AlignOriginY(uint32_t align)
+{
+    if (align & OBS_ALIGN_BOTTOM) return 1.0f;
+    if (align & OBS_ALIGN_CENTER) return 0.5f;
+    return 0.0f; // TOP
+}
+
+static inline float ClampF(float v, float lo, float hi)
+{
+    return std::max(lo, std::min(v, hi));
+}
+
+void CModelPreview::StretchItem(const vec2& pos, CMouseStatePreview& mouseState,
                                  bool shiftDown, bool controlDown)
 {
-	obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(m_obsStretchItem);
+    obs_source_t* source = obs_sceneitem_get_source(stretchItem);
+
+    if (shiftDown || controlDown) {
+        if (SCENE_CONTEXT.IsMustInSizePreview(source))
+            return;
+    }
+
+	obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(stretchItem);
+    std::string id = obs_source_get_id(source);
+    if (0 == id.compare("painter_source"))
+        return;
+
 	ItemHandle stretchHandle = mouseState.GetCurrStateHandle();
 	uint32_t stretchFlags = (uint32_t)stretchHandle;
 	vec3 tl, br, pos3;
 
 	vec3_zero(&tl);
-	vec3_set(&br, m_vec2StretchSize.x, m_vec2StretchSize.y, 0.0f);
+	vec3_set(&br, stretchItemSize.x, stretchItemSize.y, 0.0f);
 
 	vec3_set(&pos3, pos.x, pos.y, 0.0f);
-	vec3_transform(&pos3, &pos3, &m_matScreenToItem);
+	vec3_transform(&pos3, &pos3, &screenToItem);
 
 	if (stretchFlags & ITEM_LEFT)
 		tl.x = pos3.x;
@@ -636,9 +654,7 @@ void AFModelPreview::StretchItem(const vec2& pos, AFMouseStaterPreview& mouseSta
 		br.y = pos3.y;
 
 	if (controlDown == false)
-        _SnapStretchingToScreen(tl, br, stretchFlags);
-
-	obs_source_t* source = obs_sceneitem_get_source(m_obsStretchItem);
+        SnapStretchingToScreen(tl, br, stretchFlags);
 
 	uint32_t source_cx = obs_source_get_width(source);
 	uint32_t source_cy = obs_source_get_height(source);
@@ -646,8 +662,15 @@ void AFModelPreview::StretchItem(const vec2& pos, AFMouseStaterPreview& mouseSta
 	/* if the source's internal size has been set to 0 for whatever reason
 	 * while resizing, do not update transform, otherwise source will be
 	 * stuck invisible until a complete transform reset */
-	if (!source_cx || !source_cy)
-		return;
+
+    OBSDataAutoRelease data = obs_source_get_settings(source);
+    bool is_add_preset = obs_data_get_bool(data, "preset");
+
+    if (!is_add_preset) 
+    {
+        if (!source_cx || !source_cy)
+            return;
+    }
 
 	vec2 baseSize;
 	vec2_set(&baseSize, float(source_cx), float(source_cy));
@@ -655,9 +678,11 @@ void AFModelPreview::StretchItem(const vec2& pos, AFMouseStaterPreview& mouseSta
 	vec2 size;
 	vec2_set(&size, br.x - tl.x, br.y - tl.y);
 
+    bool pos_pass = false;
+    bool scale_pass = false;
 	if (boundsType != OBS_BOUNDS_NONE) {
 		if (shiftDown)
-			_ClampAspect(tl, br, size, baseSize, mouseState);
+			ClampAspect(tl, br, size, baseSize, mouseState);
 
 		if (tl.x > br.x)
 			std::swap(tl.x, br.x);
@@ -666,43 +691,113 @@ void AFModelPreview::StretchItem(const vec2& pos, AFMouseStaterPreview& mouseSta
 
 		vec2_abs(&size, &size);
 
-		obs_sceneitem_set_bounds(m_obsStretchItem, &size);
+		obs_sceneitem_set_bounds(stretchItem, &size);
+
+        obs_source_t* source = obs_sceneitem_get_source(stretchItem);
+        obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(stretchItem);
+
+        if (boundsType == OBS_BOUNDS_STRETCH) {
+            std::string id = obs_source_get_id(source);
+            if (AFSourceUtil::IsBrowserSizeStretch(id.c_str())) {
+
+                std::lock_guard<std::mutex> lock(queueBrowserSizeMutex);
+                pendingBrowserSizeUpdate = std::make_shared<PendingBrowserSizeUpdate>(
+                    PendingBrowserSizeUpdate{ source, static_cast<int>(size.x), static_cast<int>(size.y) }
+                );
+            }
+        }
 	}
 	else {
 		obs_sceneitem_crop crop;
-		obs_sceneitem_get_crop(m_obsStretchItem, &crop);
+		obs_sceneitem_get_crop(stretchItem, &crop);
 
 		baseSize.x -= float(crop.left + crop.right);
 		baseSize.y -= float(crop.top + crop.bottom);
 
 		if (!shiftDown)
-			_ClampAspect(tl, br, size, baseSize, mouseState);
+			ClampAspect(tl, br, size, baseSize, mouseState);
 
-		vec2_div(&size, &size, &baseSize);
-		obs_sceneitem_set_scale(m_obsStretchItem, &size);
+        vec2_div(&size, &size, &baseSize);
+
+        obs_sceneitem_set_scale(stretchItem, &size);
 	}
 
-	pos3 = _CalculateStretchPos(tl, br);
-	vec3_transform(&pos3, &pos3, &m_matItemToScreen);
+	pos3 = CalculateStretchPos(tl, br);
+	vec3_transform(&pos3, &pos3, &itemToScreen);
 
 	vec2 newPos;
 	vec2_set(&newPos, std::round(pos3.x), std::round(pos3.y));
-	obs_sceneitem_set_pos(m_obsStretchItem, &newPos);
+
+    if (SCENE_CONTEXT.IsMustInSizePreview(source)) {
+
+        bool hitMinSize = false;
+        OBSSource previewSrc = SCENE_CONTEXT.GetCurrentSceneSource();
+
+        const float sceneW = (float)obs_source_get_width(previewSrc);
+        const float sceneH = (float)obs_source_get_height(previewSrc);
+
+        newPos.x = ClampF(newPos.x, 0.0f, sceneW);
+        newPos.y = ClampF(newPos.y, 0.0f, sceneH);
+
+        const uint32_t align = obs_sceneitem_get_alignment(stretchItem);
+        const float ox = AlignOriginX(align);
+        const float oy = AlignOriginY(align);
+
+        float maxW_byLeft = (ox > 0.0f) ? (newPos.x / ox) : INFINITY;
+        float maxW_byRight = ((1.0f - ox) > 0.0f) ? ((sceneW - newPos.x) / (1.0f - ox)) : INFINITY;
+        float maxAllowedW = std::min(maxW_byLeft, maxW_byRight);
+
+        float maxH_byTop = (oy > 0.0f) ? (newPos.y / oy) : INFINITY;
+        float maxH_byBottom = ((1.0f - oy) > 0.0f) ? ((sceneH - newPos.y) / (1.0f - oy)) : INFINITY;
+        float maxAllowedH = std::min(maxH_byTop, maxH_byBottom);
+
+        float desiredW = size.x * baseSize.x;
+        float desiredH = size.y * baseSize.y;
+
+        if (baseSize.x <= 0.0f || baseSize.y <= 0.0f)
+            return;
+
+        float scaleClamp = 1.0f;
+        if (desiredW > maxAllowedW && desiredW > 0.0f)
+            scaleClamp = std::min(scaleClamp, maxAllowedW / desiredW);
+        if (desiredH > maxAllowedH && desiredH > 0.0f)
+            scaleClamp = std::min(scaleClamp, maxAllowedH / desiredH);
+
+        if (scaleClamp < 1.0f) {
+            size.x *= scaleClamp;
+            size.y *= scaleClamp;
+            desiredW = size.x * baseSize.x;
+            desiredH = size.y * baseSize.y;
+        }
+
+        if (size.x < 0.2f || size.y < 0.2f) {
+            size.x = size.y = 0.2f;
+            hitMinSize = true;
+        }
+        obs_sceneitem_set_scale(stretchItem, &size);
+
+        if (hitMinSize)
+            return;
+    }
+    
+    obs_sceneitem_set_pos(stretchItem, &newPos);
 }
 
-void AFModelPreview::RotateItem(const vec2& pos, bool shiftDown, bool controlDown)
+void CModelPreview::RotateItem(const vec2& pos, bool shiftDown, bool controlDown)
 {
-    OBSScene scene = nullptr;
+	obs_source_t* source = obs_sceneitem_get_source(stretchItem);
+	if (SCENE_CONTEXT.IsMustInSizePreview(source))
+		return;
 
-    if (m_pInitedContextScene != nullptr)
-        scene = m_pInitedContextScene->GetCurrOBSScene();
+    OBSScene scene = nullptr;
+    scene = SCENE_CONTEXT.GetCurrentScene();
 
     vec2 pos2;
     vec2_copy(&pos2, &pos);
 
     float angle =
-        std::atan2(pos2.y - m_vec2RotatePoint.y,
-                   pos2.x - m_vec2RotatePoint.x) + RAD(90);
+        std::atan2(pos2.y - rotatePoint.y,
+                   pos2.x - rotatePoint.x) + RAD(90);
 
 #define ROT_SNAP(rot, thresh)                      \
     if (abs(angle - RAD(rot)) < RAD(thresh)) { \
@@ -716,7 +811,7 @@ void AFModelPreview::RotateItem(const vec2& pos, bool shiftDown, bool controlDow
     }
     else if (!controlDown)
     {
-        ROT_SNAP(m_fRotateAngle, 5)
+        ROT_SNAP(rotateAngle, 5)
 
         ROT_SNAP(-90, 5)
         ROT_SNAP(-45, 5)
@@ -732,21 +827,19 @@ void AFModelPreview::RotateItem(const vec2& pos, bool shiftDown, bool controlDow
 #undef ROT_SNAP
 
     vec2 pos3;
-    vec2_copy(&pos3, &m_vec2OffsetPoint);
+    vec2_copy(&pos3, &offsetPoint);
     RotatePos(&pos3, angle);
-    pos3.x += m_vec2RotatePoint.x;
-    pos3.y += m_vec2RotatePoint.y;
+    pos3.x += rotatePoint.x;
+    pos3.y += rotatePoint.y;
 
-    obs_sceneitem_set_rot(m_obsStretchItem, DEG(angle));
-    obs_sceneitem_set_pos(m_obsStretchItem, &pos3);
+    obs_sceneitem_set_rot(stretchItem, DEG(angle));
+    obs_sceneitem_set_pos(stretchItem, &pos3);
 }
 
-void AFModelPreview::MoveItems(const vec2& pos, vec2& lastMoveOffset, vec2& startPos, bool controlDown)
+void CModelPreview::MoveItems(const vec2& pos, vec2& lastMoveOffset, vec2& startPos, bool controlDown)
 {
 	OBSScene scene = nullptr;
-
-	if (m_pInitedContextScene != nullptr)
-		scene = m_pInitedContextScene->GetCurrOBSScene();
+    scene = SCENE_CONTEXT.GetCurrentScene();
 
 	vec2 offset, moveOffset;
 	vec2_sub(&offset, &pos, &startPos);
@@ -754,43 +847,40 @@ void AFModelPreview::MoveItems(const vec2& pos, vec2& lastMoveOffset, vec2& star
 
     
     if (controlDown == false)
-        _SnapItemMovement(moveOffset);
-    
-    
+        SnapItemMovement(moveOffset);
+     
 	vec2_add(&lastMoveOffset, &lastMoveOffset, &moveOffset);
 
-	obs_scene_enum_items(scene, _MoveItems, &moveOffset);
+	obs_scene_enum_items(scene, MoveItems, &moveOffset);
 }
 
-void AFModelPreview::BoxItems(OBSScene scene, const vec2 &startPos, const vec2 &pos)
+void CModelPreview::BoxItems(OBSScene scene, const vec2 &startPos, const vec2 &pos)
 {
     SceneFindBoxData data(startPos, pos);
     obs_scene_enum_items(scene, FindItemsInBox, &data);
 
-
-    std::lock_guard<std::mutex> lock(m_SelectMutex);
-    m_vecHoveredPreviewItems = data.sceneItems;
+    std::lock_guard<std::mutex> lock(selectMutex);
+    hoveredPreviewItems = data.sceneItems;
 }
 
-bool AFModelPreview::CheckNowHovered(obs_sceneitem_t* item)
+bool CModelPreview::CheckNowHovered(obs_sceneitem_t* item)
 {
     bool hovered = false;
     
     if (item == nullptr) return hovered;
     
-    std::lock_guard<std::mutex> lock(m_SelectMutex);
-    for (size_t i = 0; i < m_vecHoveredPreviewItems.size(); i++)
-        if (m_vecHoveredPreviewItems[i] == item)
+    std::lock_guard<std::mutex> lock(selectMutex);
+    for (size_t i = 0; i < hoveredPreviewItems.size(); i++)
+        if (hoveredPreviewItems[i] == item)
         {
             hovered = true;
             break;
         }
-
-    
+ 
     return hovered;
 }
 
-bool AFModelPreview::_FindItemAtPos(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param)
+bool CModelPreview::FindItemAtPos(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param)
 {
 	SceneFindData* data = reinterpret_cast<SceneFindData*>(param);
 	matrix4 transform;
@@ -831,7 +921,7 @@ bool AFModelPreview::_FindItemAtPos(obs_scene_t* /* scene */, obs_sceneitem_t* i
 	return true;
 }
 
-bool AFModelPreview::_FindHandleAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
+bool CModelPreview::FindHandleAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
 {
 	HandleFindData& data = *reinterpret_cast<HandleFindData*>(param);
 
@@ -842,7 +932,7 @@ bool AFModelPreview::_FindHandleAtPos(obs_scene_t*, obs_sceneitem_t* item, void*
 			HandleFindData newData(data, item);
 			newData.angleOffset = obs_sceneitem_get_rot(item);
 
-			obs_sceneitem_group_enum_items(item, _FindHandleAtPos, &newData);
+			obs_sceneitem_group_enum_items(item, FindHandleAtPos, &newData);
 
 			data.item = newData.item;
 			data.handle = newData.handle;
@@ -936,18 +1026,18 @@ bool AFModelPreview::_FindHandleAtPos(obs_scene_t*, obs_sceneitem_t* item, void*
 	return true;
 }
 
-bool AFModelPreview::_SelectOne(obs_scene_t*, obs_sceneitem_t* item, void* param)
+bool CModelPreview::SelectOne(obs_scene_t*, obs_sceneitem_t* item, void* param)
 {
 	obs_sceneitem_t* selectedItem = reinterpret_cast<obs_sceneitem_t*>(param);
 	if (obs_sceneitem_is_group(item))
-		obs_sceneitem_group_enum_items(item, _SelectOne, param);
+		obs_sceneitem_group_enum_items(item, SelectOne, param);
 
 	obs_sceneitem_select(item, (selectedItem == item));
 
 	return true;
 }
 
-bool AFModelPreview::_CheckItemSelected(obs_scene_t*, obs_sceneitem_t* item, void* param)
+bool CModelPreview::CheckItemSelected(obs_scene_t*, obs_sceneitem_t* item, void* param)
 {
 	SceneFindData* data = reinterpret_cast<SceneFindData*>(param);
 	matrix4 transform;
@@ -961,7 +1051,7 @@ bool AFModelPreview::_CheckItemSelected(obs_scene_t*, obs_sceneitem_t* item, voi
 	if (obs_sceneitem_is_group(item))
 	{
 		data->group = item;
-		obs_sceneitem_group_enum_items(item, _CheckItemSelected, param);
+		obs_sceneitem_group_enum_items(item, CheckItemSelected, param);
 		data->group = nullptr;
 
 
@@ -998,10 +1088,15 @@ bool AFModelPreview::_CheckItemSelected(obs_scene_t*, obs_sceneitem_t* item, voi
 	return true;
 }
 
-bool AFModelPreview::_MoveItems(obs_scene_t*, obs_sceneitem_t* item, void* param)
+bool CModelPreview::MoveItems(obs_scene_t*, obs_sceneitem_t* item, void* param)
 {
 	if (obs_sceneitem_locked(item))
 		return true;
+
+    obs_source_t* source = obs_sceneitem_get_source(item);
+    std::string id = obs_source_get_id(source);
+    if (0 == id.compare("painter_source"))
+        return true;
 
 	bool selected = obs_sceneitem_selected(item);
 	vec2* offset = reinterpret_cast<vec2*>(param);
@@ -1015,20 +1110,23 @@ bool AFModelPreview::_MoveItems(obs_scene_t*, obs_sceneitem_t* item, void* param
 		vec4_set(&transform.t, 0.0f, 0.0f, 0.0f, 1.0f);
 		matrix4_inv(&transform, &transform);
 		vec3_transform(&new_offset, &new_offset, &transform);
-		obs_sceneitem_group_enum_items(item, _MoveItems, &new_offset);
+		obs_sceneitem_group_enum_items(item, MoveItems, &new_offset);
 	}
 
 	if (selected) {
 		vec2 pos;
 		obs_sceneitem_get_pos(item, &pos);
 		vec2_add(&pos, &pos, offset);
+
+        pos = AdjustScreenInItems(item, pos);
+
 		obs_sceneitem_set_pos(item, &pos);
 	}
 
 	return true;
 }
 
-bool AFModelPreview::_AddItemBounds(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param)
+bool CModelPreview::AddItemBounds(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param)
 {
     SelectedItemBounds *data =
         reinterpret_cast<SelectedItemBounds *>(param);
@@ -1054,7 +1152,7 @@ bool AFModelPreview::_AddItemBounds(obs_scene_t* /* scene */, obs_sceneitem_t* i
     if (obs_sceneitem_is_group(item))
     {
         SelectedItemBounds sib;
-        obs_sceneitem_group_enum_items(item, _AddItemBounds, &sib);
+        obs_sceneitem_group_enum_items(item, AddItemBounds, &sib);
 
         if (!sib.first)
         {
@@ -1087,7 +1185,7 @@ bool AFModelPreview::_AddItemBounds(obs_scene_t* /* scene */, obs_sceneitem_t* i
     return true;
 }
 
-bool AFModelPreview::_GetSourceSnapOffset(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param)
+bool CModelPreview::GetSourceSnapOffset(obs_scene_t* /* scene */, obs_sceneitem_t* item, void* param)
 {
     OffsetData *data = reinterpret_cast<OffsetData *>(param);
 
@@ -1138,7 +1236,7 @@ bool AFModelPreview::_GetSourceSnapOffset(obs_scene_t* /* scene */, obs_sceneite
     return true;
 }
 
-bool AFModelPreview::_IntersectBox(matrix4 transform,
+bool CModelPreview::IntersectBox(matrix4 transform,
                                   float x1, float x2,
                                   float y1, float y2)
 {
@@ -1206,30 +1304,48 @@ bool AFModelPreview::_IntersectBox(matrix4 transform,
     return false;
 }
 
-void AFModelPreview::_SnapItemMovement(vec2& offset)
+vec2 CModelPreview::AdjustScreenInItems(obs_sceneitem_t* item, vec2 pos)
 {
-    if (m_pInitedContextGraphics == nullptr ||
-        m_pInitedContextScene == nullptr)
-        return;
-    
-    auto& confManager = AFConfigManager::GetSingletonInstance();
-    
-    OBSScene scene = m_pInitedContextScene->GetCurrOBSScene();
+    vec2 newPos = pos;
+
+    obs_source_t* source = obs_sceneitem_get_source(item);
+    if (SCENE_CONTEXT.IsMustInSizePreview(source))
+    {
+        if (pos.x <= 0)
+            newPos.x = 0;
+        if (pos.y <= 0)
+            newPos.y = 0;
+
+        OBSSource previewSrc = SCENE_CONTEXT.GetCurrentSceneSource();
+        const uint32_t scene_width = obs_source_get_width(previewSrc);
+        const uint32_t scene_height = obs_source_get_height(previewSrc);
+
+        vec2 scale;
+        obs_sceneitem_get_box_scale(item, &scale);
+        if (pos.x + scale.x >= scene_width)
+            newPos.x = scene_width - scale.x;
+        if (pos.y + scale.y >= scene_height)
+            newPos.y = scene_height - scale.y;
+    }
+
+    return newPos;
+}
+
+void CModelPreview::SnapItemMovement(vec2& offset)
+{   
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
     
     SelectedItemBounds data;
-    obs_scene_enum_items(scene, _AddItemBounds, &data);
+    obs_scene_enum_items(scene, AddItemBounds, &data);
 
     data.tl.x += offset.x;
     data.tl.y += offset.y;
     data.br.x += offset.x;
     data.br.y += offset.y;
 
-    vec3 snapOffset = _GetSnapOffset(data.tl, data.br);
-
-    const bool snap = config_get_bool(confManager.GetGlobal(), "BasicWindow",
-                                      "SnappingEnabled");
-    const bool sourcesSnap = config_get_bool(confManager.GetGlobal(),
-                                             "BasicWindow", "SourceSnapping");
+    vec3 snapOffset = GetSnapOffset(data.tl, data.br);
+    const bool snap = config_get_bool(USERCONFIG, "BasicWindow", "SnappingEnabled");
+    const bool sourcesSnap = config_get_bool(USERCONFIG, "BasicWindow", "SourceSnapping");
     if (snap == false)
         return;
     if (sourcesSnap == false)
@@ -1239,10 +1355,7 @@ void AFModelPreview::_SnapItemMovement(vec2& offset)
         return;
     }
 
-    const float clampDist = config_get_double(confManager.GetGlobal(),
-                                              "BasicWindow",
-                                              "SnapDistance") /
-                                                m_pInitedContextGraphics->GetMainPreviewScale();
+    const float clampDist = config_get_double(USERCONFIG, "BasicWindow", "SnapDistance") / GRAPHIC_CONTEXT.GetMainPreviewScale();
 
     OffsetData offsetData;
     offsetData.clampDist = clampDist;
@@ -1250,7 +1363,7 @@ void AFModelPreview::_SnapItemMovement(vec2& offset)
     offsetData.br = data.br;
     vec3_copy(&offsetData.offset, &snapOffset);
 
-    obs_scene_enum_items(scene, _GetSourceSnapOffset, &offsetData);
+    obs_scene_enum_items(scene, GetSourceSnapOffset, &offsetData);
 
     if (fabsf(offsetData.offset.x) > EPSILON ||
         fabsf(offsetData.offset.y) > EPSILON) {
@@ -1262,16 +1375,11 @@ void AFModelPreview::_SnapItemMovement(vec2& offset)
     }
 }
 
-vec3 AFModelPreview::_GetSnapOffset(const vec3& tl, const vec3& br)
+vec3 CModelPreview::GetSnapOffset(const vec3& tl, const vec3& br)
 {
     vec3 clampOffset;
     vec3_zero(&clampOffset);
 
-    if (m_pInitedContextGraphics == nullptr)
-        return clampOffset;
-    
-    auto& confManager = AFConfigManager::GetSingletonInstance();
- 
     vec2 screenSize;
     vec2_zero(&screenSize);
 
@@ -1281,21 +1389,16 @@ vec3 AFModelPreview::_GetSnapOffset(const vec3& tl, const vec3& br)
         screenSize.x = float(ovi.base_width);
         screenSize.y = float(ovi.base_height);
     }
-    
-    const bool snap = config_get_bool(confManager.GetGlobal(), "BasicWindow",
-                                      "SnappingEnabled");
+
+    auto userConfig = USERCONFIG;
+    //
+    const bool snap = config_get_bool(userConfig, "BasicWindow", "SnappingEnabled");
     if (snap == false)
         return clampOffset;
 
-    const bool screenSnap = config_get_bool(confManager.GetGlobal(),
-                                            "BasicWindow", "ScreenSnapping");
-    const bool centerSnap = config_get_bool(confManager.GetGlobal(),
-                                            "BasicWindow", "CenterSnapping");
-
-    const float clampDist = config_get_double(confManager.GetGlobal(),
-                                              "BasicWindow",
-                                              "SnapDistance") /
-                                                m_pInitedContextGraphics->GetMainPreviewScale();
+    const bool screenSnap = config_get_bool(userConfig, "BasicWindow", "ScreenSnapping");
+    const bool centerSnap = config_get_bool(userConfig, "BasicWindow", "CenterSnapping");
+    const float clampDist = config_get_double(userConfig, "BasicWindow", "SnapDistance") / GRAPHIC_CONTEXT.GetMainPreviewScale();
     const float centerX = br.x - (br.x - tl.x) / 2.0f;
     const float centerY = br.y - (br.y - tl.y) / 2.0f;
 
@@ -1326,12 +1429,12 @@ vec3 AFModelPreview::_GetSnapOffset(const vec3& tl, const vec3& br)
     return clampOffset;
 }
 
-void AFModelPreview::_SnapStretchingToScreen(vec3& tl, vec3& br, uint32_t stretchFlags)
+void CModelPreview::SnapStretchingToScreen(vec3& tl, vec3& br, uint32_t stretchFlags)
 {
-    vec3 newTL = GetTransformedPos(tl.x, tl.y, m_matItemToScreen);
-    vec3 newTR = GetTransformedPos(br.x, tl.y, m_matItemToScreen);
-    vec3 newBL = GetTransformedPos(tl.x, br.y, m_matItemToScreen);
-    vec3 newBR = GetTransformedPos(br.x, br.y, m_matItemToScreen);
+    vec3 newTL = GetTransformedPos(tl.x, tl.y, itemToScreen);
+    vec3 newTR = GetTransformedPos(br.x, tl.y, itemToScreen);
+    vec3 newBL = GetTransformedPos(tl.x, br.y, itemToScreen);
+    vec3 newBR = GetTransformedPos(br.x, br.y, itemToScreen);
     vec3 boundingTL;
     vec3 boundingBR;
 
@@ -1345,9 +1448,9 @@ void AFModelPreview::_SnapStretchingToScreen(vec3& tl, vec3& br, uint32_t stretc
     vec3_max(&boundingBR, &boundingBR, &newBL);
     vec3_max(&boundingBR, &boundingBR, &newBR);
 
-    vec3 offset = _GetSnapOffset(boundingTL, boundingBR);
+    vec3 offset = GetSnapOffset(boundingTL, boundingBR);
     vec3_add(&offset, &offset, &newTL);
-    vec3_transform(&offset, &offset, &m_matScreenToItem);
+    vec3_transform(&offset, &offset, &screenToItem);
     vec3_sub(&offset, &offset, &tl);
 
     if (stretchFlags & ITEM_LEFT)
@@ -1361,8 +1464,8 @@ void AFModelPreview::_SnapStretchingToScreen(vec3& tl, vec3& br, uint32_t stretc
         br.y += offset.y;
 }
 
-void AFModelPreview::_ClampAspect(vec3& tl, vec3& br, vec2& size, const vec2& baseSize,
-								  AFMouseStaterPreview& mouseState)
+void CModelPreview::ClampAspect(vec3& tl, vec3& br, vec2& size, const vec2& baseSize,
+								  CMouseStatePreview& mouseState)
 {
 	float baseAspect = baseSize.x / baseSize.y;
 	float aspect = size.x / size.y;
@@ -1421,9 +1524,9 @@ void AFModelPreview::_ClampAspect(vec3& tl, vec3& br, vec2& size, const vec2& ba
 		br.y = tl.y + size.y;
 }
 
-vec3 AFModelPreview::_CalculateStretchPos(const vec3& tl, const vec3& br)
+vec3 CModelPreview::CalculateStretchPos(const vec3& tl, const vec3& br)
 {
-	uint32_t alignment = obs_sceneitem_get_alignment(m_obsStretchItem);
+	uint32_t alignment = obs_sceneitem_get_alignment(stretchItem);
 	vec3 pos;
 
 	vec3_zero(&pos);
@@ -1443,4 +1546,38 @@ vec3 AFModelPreview::_CalculateStretchPos(const vec3& tl, const vec3& br)
 		pos.y = (br.y - tl.y) * 0.5f + tl.y;
 
 	return pos;
+}
+
+
+void CModelPreview::StartBrowserResizeThread()
+{
+    workBrowserThread = true;
+
+	browserUpdateThread = std::thread([this]() {
+		while (workBrowserThread.load()) {
+			ProcessPendingBrowserSize();
+			std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 200ms
+		}
+		});
+}
+
+
+void CModelPreview::ProcessPendingBrowserSize()
+{
+    std::shared_ptr<PendingBrowserSizeUpdate> update;
+
+    {
+        std::lock_guard<std::mutex> lock(queueBrowserSizeMutex);
+        if (pendingBrowserSizeUpdate) {
+            update = std::move(pendingBrowserSizeUpdate);
+            pendingBrowserSizeUpdate.reset();
+        }
+    }
+
+    if (update) {
+        OBSDataAutoRelease settings = obs_source_get_settings(update->source);
+        obs_data_set_int(settings, "width", update->width);
+        obs_data_set_int(settings, "height", update->height);
+        obs_source_update(update->source, settings);
+    }
 }

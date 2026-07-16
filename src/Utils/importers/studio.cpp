@@ -1,4 +1,4 @@
-/******************************************************************************
+﻿/******************************************************************************
     Copyright (C) 2019-2020 by Dillon Pentz <dillon@vodbox.io>
 
     This program is free software: you can redistribute it and/or modify
@@ -16,6 +16,9 @@
 ******************************************************************************/
 
 #include "importers.hpp"
+#if !defined(_WIN32) && !defined(__APPLE__)
+#include <obs-nix-platform.h>
+#endif
 
 using namespace std;
 using namespace json11;
@@ -31,14 +34,14 @@ void TranslateOSStudio(Json &res)
 
 		string id = source["id"].string_value();
 
-#define DirectTranslation(before, after)                                      \
-	if (id == before) {                                                   \
+#define DirectTranslation(before, after)                              \
+	if (id == before) {                                               \
 		source["id"] = after;                                         \
 		source["versioned_id"] = obs_get_latest_input_type_id(after); \
 	}
 
-#define ClearTranslation(before, after)                                       \
-	if (id == before) {                                                   \
+#define ClearTranslation(before, after)                               \
+	if (id == before) {                                               \
 		source["id"] = after;                                         \
 		source["settings"] = Json::object{};                          \
 		source["versioned_id"] = obs_get_latest_input_type_id(after); \
@@ -49,19 +52,13 @@ void TranslateOSStudio(Json &res)
 
 		ClearTranslation("game_capture", "syphon-input");
 
-		ClearTranslation("wasapi_input_capture",
-				 "coreaudio_input_capture");
-		ClearTranslation("wasapi_output_capture",
-				 "coreaudio_output_capture");
-		ClearTranslation("pulse_input_capture",
-				 "coreaudio_input_capture");
-		ClearTranslation("pulse_output_capture",
-				 "coreaudio_output_capture");
+		ClearTranslation("wasapi_input_capture", "coreaudio_input_capture");
+		ClearTranslation("wasapi_output_capture", "coreaudio_output_capture");
+		ClearTranslation("pulse_input_capture", "coreaudio_input_capture");
+		ClearTranslation("pulse_output_capture", "coreaudio_output_capture");
 
-		ClearTranslation("jack_output_capture",
-				 "coreaudio_output_capture");
-		ClearTranslation("alsa_input_capture",
-				 "coreaudio_input_capture");
+		ClearTranslation("jack_output_capture", "coreaudio_output_capture");
+		ClearTranslation("alsa_input_capture", "coreaudio_input_capture");
 
 		ClearTranslation("dshow_input", "av_capture_input");
 		ClearTranslation("v4l2_input", "av_capture_input");
@@ -69,10 +66,8 @@ void TranslateOSStudio(Json &res)
 		ClearTranslation("xcomposite_input", "window_capture");
 
 		if (id == "monitor_capture") {
-			if (settings["show_cursor"].is_null() &&
-			    !settings["capture_cursor"].is_null()) {
-				bool cursor =
-					settings["capture_cursor"].bool_value();
+			if (settings["show_cursor"].is_null() && !settings["capture_cursor"].is_null()) {
+				bool cursor = settings["capture_cursor"].bool_value();
 
 				settings["show_cursor"] = cursor;
 			}
@@ -84,16 +79,12 @@ void TranslateOSStudio(Json &res)
 
 		ClearTranslation("syphon-input", "game_capture");
 
-		ClearTranslation("coreaudio_input_capture",
-				 "wasapi_input_capture");
-		ClearTranslation("coreaudio_output_capture",
-				 "wasapi_output_capture");
+		ClearTranslation("coreaudio_input_capture", "wasapi_input_capture");
+		ClearTranslation("coreaudio_output_capture", "wasapi_output_capture");
 		ClearTranslation("pulse_input_capture", "wasapi_input_capture");
-		ClearTranslation("pulse_output_capture",
-				 "wasapi_output_capture");
+		ClearTranslation("pulse_output_capture", "wasapi_output_capture");
 
-		ClearTranslation("jack_output_capture",
-				 "wasapi_output_capture");
+		ClearTranslation("jack_output_capture", "wasapi_output_capture");
 		ClearTranslation("alsa_input_capture", "wasapi_input_capture");
 
 		ClearTranslation("av_capture_input", "dshow_input");
@@ -103,8 +94,7 @@ void TranslateOSStudio(Json &res)
 
 		if (id == "monitor_capture" || id == "xshm_input") {
 			if (!settings["show_cursor"].is_null()) {
-				bool cursor =
-					settings["show_cursor"].bool_value();
+				bool cursor = settings["show_cursor"].bool_value();
 
 				settings["capture_cursor"] = cursor;
 			}
@@ -114,26 +104,27 @@ void TranslateOSStudio(Json &res)
 #else
 		DirectTranslation("text_gdiplus", "text_ft2_source");
 
-		ClearTranslation("coreaudio_input_capture",
-				 "pulse_input_capture");
-		ClearTranslation("coreaudio_output_capture",
-				 "pulse_output_capture");
+		ClearTranslation("coreaudio_input_capture", "pulse_input_capture");
+		ClearTranslation("coreaudio_output_capture", "pulse_output_capture");
 		ClearTranslation("wasapi_input_capture", "pulse_input_capture");
-		ClearTranslation("wasapi_output_capture",
-				 "pulse_output_capture");
+		ClearTranslation("wasapi_output_capture", "pulse_output_capture");
 
 		ClearTranslation("av_capture_input", "v4l2_input");
 		ClearTranslation("dshow_input", "v4l2_input");
 
-		ClearTranslation("window_capture", "xcomposite_input");
+		if(obs_get_nix_platform() == OBS_NIX_PLATFORM_X11_EGL) {
+			ClearTranslation("game_capture", "xcomposite_input");
+			ClearTranslation("window_capture", "xcomposite_input");
+		} else {
+			ClearTranslation("game_capture", "pipewire-screen-capture-source");
+			ClearTranslation("window_capture", "pipewire-screen-capture-source");
+		}
 
 		if (id == "monitor_capture") {
 			source["id"] = "xshm_input";
 
-			if (settings["show_cursor"].is_null() &&
-			    !settings["capture_cursor"].is_null()) {
-				bool cursor =
-					settings["capture_cursor"].bool_value();
+			if (settings["show_cursor"].is_null() && !settings["capture_cursor"].is_null()) {
+				bool cursor = settings["capture_cursor"].bool_value();
 
 				settings["show_cursor"] = cursor;
 			}
@@ -158,8 +149,7 @@ static string CheckPath(const string &path, const string &rootDir)
 
 	char absPath[512];
 	*absPath = 0;
-	size_t len = os_get_abs_path((rootDir + path).c_str(), absPath,
-				     sizeof(absPath));
+	size_t len = os_get_abs_path((rootDir + path).c_str(), absPath, sizeof(absPath));
 
 	if (len == 0)
 		return path;
@@ -185,8 +175,7 @@ void TranslatePaths(Json &res, const string &rootDir)
 				if (val.string_value().rfind("./", 0) != 0)
 					continue;
 
-				out[it->first] =
-					CheckPath(val.string_value(), rootDir);
+				out[it->first] = CheckPath(val.string_value(), rootDir);
 			} else if (val.is_array() || val.is_object()) {
 				TranslatePaths(val, rootDir);
 				out[it->first] = val;
@@ -278,7 +267,34 @@ int StudioImporter::ImportScenes(const string &path, string &name, Json &res)
 	else
 		obj["name"] = "OBS Studio Import";
 
-	res = obj;
+	// set first scene setting : favorite_scene 
+	std::string firstSceneName;
+	if (obj["scene_order"].is_array()) {
+		const Json::array& sceneOrder = obj["scene_order"].array_items();
 
+		if (!sceneOrder.empty() && sceneOrder[0]["name"].is_string()) {
+			firstSceneName = sceneOrder[0]["name"].string_value();
+		}
+	}
+
+	if (obj["sources"].is_array()) {
+		Json::array sources = obj["sources"].array_items();
+		for (size_t i = 0; i < sources.size(); ++i) {
+			if (sources[i]["id"].string_value() == "scene") {
+				if (sources[i]["name"].string_value() == firstSceneName) {
+					Json::object sceneObj = sources[i].object_items();
+					Json::object settings = sceneObj["settings"].object_items();
+					settings["favorite_scene"] = 1;
+					sceneObj["settings"] = Json(settings);
+					sources[i] = sceneObj;
+					break;
+				}
+			}
+		}
+		obj["sources"] = sources;
+	}
+
+	res = obj;
+	
 	return IMPORTER_SUCCESS;
 }

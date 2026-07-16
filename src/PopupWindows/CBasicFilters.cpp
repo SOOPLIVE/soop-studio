@@ -1,14 +1,12 @@
 ﻿#include "CBasicFilters.h"
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN 1
-#include <Windows.h>
-#endif
-
 #include <QPushButton>
 #include <QVariant>
 
-#include "qt-wrapper.h"
+#include "qt-wrappers.hpp"
+#include "display-helpers.hpp"
+
+#include "Application/CApplication.h"
 
 #include "Common/MathMiscUtils.h"
 
@@ -18,27 +16,26 @@
 #include "UIComponent/CQtDisplay.h"
 #include "UIComponent/CNameDialog.h"
 #include "UIComponent/CItemWidgetHelper.h"
-#include "UIComponent/CVisibilityItemWidget.h"
 #include "UIComponent/CMessageBox.h"
+#include "visibility-item-widget.hpp"
 
-#include "PopupWindows/SourceDialog/CPropertiesView.h"
+#include "properties-view.hpp"
 #include "UIComponent/CCustomMenu.h"
 
-#include "Application/CApplication.h"
 #include "MainFrame/CMainFrame.h"
+#include "MainFrame/SceneSource/CMainSceneSource.h"
 
 using namespace std;
 
 Q_DECLARE_METATYPE(OBSSource);
 
+#define SOOP_SPLIT_EFFECT_SOURCE "soop_shader_filter"
 
 inline void FilterChangeUndoRedo(void* vp, obs_data_t* nd_old_settings, obs_data_t* new_settings)
 {
 	obs_source_t* source = reinterpret_cast<obs_source_t*>(vp);
 	const char* source_uuid = obs_source_get_uuid(source);
 	const char* name = obs_source_get_name(source);
-
-	AFMainFrame* main = App()->GetMainView();
 
 	OBSDataAutoRelease redo_wrapper = obs_data_create();
 	obs_data_set_string(redo_wrapper, "uuid", source_uuid);
@@ -48,8 +45,7 @@ inline void FilterChangeUndoRedo(void* vp, obs_data_t* nd_old_settings, obs_data
 	obs_data_set_string(undo_wrapper, "uuid", source_uuid);
 	obs_data_set_string(undo_wrapper, "settings", obs_data_get_json(nd_old_settings));
 
-	auto undo_redo = [](const std::string& data)
-	{
+	auto undo_redo = [](const std::string& data) {
 		OBSDataAutoRelease dat = obs_data_create_from_json(data.c_str());
 		const char* filter_uuid = obs_data_get_string(dat, "uuid");
 		OBSSourceAutoRelease filter = obs_get_source_by_uuid(filter_uuid);
@@ -62,49 +58,49 @@ inline void FilterChangeUndoRedo(void* vp, obs_data_t* nd_old_settings, obs_data
 		obs_source_update_properties(filter);
 	};
 
-	main->m_undo_s.Enable();
+	UNDO_STACK.Enable();
 
 	std::string undo_data = obs_data_get_json(undo_wrapper);
 	std::string redo_data = obs_data_get_json(redo_wrapper);
-	main->m_undo_s.AddAction(QTStr("Undo.Filters").arg(name),
-							 undo_redo, undo_redo, undo_data, redo_data);
+	UNDO_STACK.AddAction(QTStr("Undo.Filters").arg(name), undo_redo, undo_redo, undo_data, redo_data);
 	obs_source_update(source, new_settings);
 }
 
 AFQBasicFilters::AFQBasicFilters(QWidget* parent, OBSSource source) :
-	AFQRoundedDialogBase(parent, Qt::WindowFlags(), false),
+	AFTTopBaseDialog(parent, Qt::WindowFlags()),
 	ui(new Ui::AFQBasicFilters),
 	m_obsSource(source),
-	m_signalAdd(obs_source_get_signal_handler(source), "filter_add",
-				AFQBasicFilters::OBSSourceFilterAdded, this),
-	m_signalRemove(obs_source_get_signal_handler(source), "filter_remove",
-				   AFQBasicFilters::OBSSourceFilterRemoved, this),
-	m_signalReorder(obs_source_get_signal_handler(source),
-					"reorder_filters", AFQBasicFilters::OBSSourceReordered,
-					this),
-	m_signalRemoveSource(obs_source_get_signal_handler(source), "remove",
-						 AFQBasicFilters::SourceRemoved, this),
-	m_signalRenameSource(obs_source_get_signal_handler(source), "rename",
-						 AFQBasicFilters::SourceRenamed, this)
+	m_signalAdd(obs_source_get_signal_handler(source), "filter_add", AFQBasicFilters::OBSSourceFilterAdded, this),
+	m_signalRemove(obs_source_get_signal_handler(source), "filter_remove", AFQBasicFilters::OBSSourceFilterRemoved, this),
+	m_signalReorder(obs_source_get_signal_handler(source), "reorder_filters", AFQBasicFilters::OBSSourceReordered, this),
+	m_signalRemoveSource(obs_source_get_signal_handler(source), "remove", AFQBasicFilters::SourceRemoved, this),
+	m_signalRenameSource(obs_source_get_signal_handler(source), "rename", AFQBasicFilters::SourceRenamed, this)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-	this->SetHeightFixed(true);
-	this->SetWidthFixed(true);
+	SetWidthResizeEnabled(false);
+	SetHeightResizeEnabled(false);
+	setModal(false);
 
 	ui->setupUi(this);
+    
+#ifdef __APPLE__
+    ui->titleFrame->hide();
+#endif
+
+	if(MAINFRAME->IsSmallResolution())
+		setFixedSize(800, 550);
+	else
+		setFixedSize(940, 760);
+
 
 	QPushButton* resetButton = ui->buttonBox->button(QDialogButtonBox::RestoreDefaults);
 	ChangeStyleSheet(resetButton, STYLESHEET_RESET_BUTTON);
 
-	ui->asyncFilters->setItemDelegate(
-			new VisibilityItemDelegate(ui->asyncFilters));
-	ui->effectFilters->setItemDelegate(
-			new VisibilityItemDelegate(ui->effectFilters));
+	ui->asyncFilters->setItemDelegate(new VisibilityItemDelegate(ui->asyncFilters));
+	ui->effectFilters->setItemDelegate(new VisibilityItemDelegate(ui->effectFilters));
 	
-	QString title = locale.Str("Basic.Filters.Title");
+	QString title = Str("Basic.Filters.Title");
 	const char* name = obs_source_get_name(source);
 
 	installEventFilter(CreateShortcutFilter());
@@ -120,7 +116,7 @@ AFQBasicFilters::AFQBasicFilters(QWidget* parent, OBSSource source) :
 		ui->asyncWidget->setVisible(false);
 	}
 	if (audioOnly) {
-		ui->asyncWidget->setStyleSheet("#asyncWidget {border-bottom: none;}");
+		ui->asyncWidget->setProperty("audioOnly", true);
 		ui->effectWidget->setVisible(false);
 		UpdateSplitter(false);
 	}
@@ -131,7 +127,7 @@ AFQBasicFilters::AFQBasicFilters(QWidget* parent, OBSSource source) :
 	}
 
 	if (audioOnly || (audio && !async))
-		ui->asyncLabel->setText(locale.Str("Basic.Filters.AudioFilters"));
+		ui->asyncLabel->setText(Str("Basic.Filters.AudioFilters"));
 
 	if (async && audio && ui->asyncFilters->count() == 0) {
 		UpdateSplitter(false);
@@ -143,21 +139,18 @@ AFQBasicFilters::AFQBasicFilters(QWidget* parent, OBSSource source) :
 	obs_source_inc_showing(m_obsSource);
 
 	auto addDrawCallback = [this]() {
-		obs_display_add_draw_callback(ui->preview->GetDisplay(),
-									  AFQBasicFilters::DrawPreview,
-									  this);
+		obs_display_add_draw_callback(ui->preview->GetDisplay(), AFQBasicFilters::DrawPreview, this);
 	};
 
 	enum obs_source_type type = obs_source_get_type(source);
-	bool drawable_type = type == OBS_SOURCE_TYPE_INPUT ||
-		type == OBS_SOURCE_TYPE_SCENE;
+	bool drawable_type = type == OBS_SOURCE_TYPE_INPUT || type == OBS_SOURCE_TYPE_SCENE;
 
-	if ((caps & OBS_SOURCE_VIDEO) != 0) {
+	if ((caps & OBS_SOURCE_NOT_DRAW_PREVIEW) == 0 &&
+		(caps & OBS_SOURCE_VIDEO) != 0) {
 		ui->previewFrame->show();
 		//ui->preview->show();
 		if (drawable_type)
-			connect(ui->preview, &AFQTDisplay::qsignalDisplayCreated,
-					addDrawCallback);
+			connect(ui->preview, &AFQTDisplay::qsignalDisplayCreated, addDrawCallback);
 	}
 	else {
 		ui->previewFrame->hide();
@@ -178,18 +171,19 @@ AFQBasicFilters::~AFQBasicFilters()
 
 static bool ConfirmReset(QWidget* parent)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
-		parent,
-		locale.Str("ConfirmReset.Title"),
-		locale.Str("ConfirmReset.Text"));
+											parent,
+											Str("ConfirmReset.Title"),
+											Str("ConfirmReset.Text"));
 
 	return (result == QDialog::Accepted);
 }
 
 void AFQBasicFilters::AddFilter(OBSSource filter, bool focus)
 {
+	if (strcmp(obs_source_get_id(filter), SOOP_SPLIT_EFFECT_SOURCE) == 0)
+		return;
+
 	uint32_t flags = obs_source_get_output_flags(filter);
 	bool async = (flags & OBS_SOURCE_ASYNC) != 0;
 	QListWidget* list = async ? ui->asyncFilters : ui->effectFilters;
@@ -199,6 +193,8 @@ void AFQBasicFilters::AddFilter(OBSSource filter, bool focus)
 
 	item->setFlags(itemFlags | Qt::ItemIsEditable);
 	item->setData(Qt::UserRole, QVariant::fromValue(filter));
+
+	item->setForeground(QColor("#D5D7DC"));
 
 	list->addItem(item);
 	if (focus)
@@ -224,10 +220,12 @@ void AFQBasicFilters::ReorderFilters()
 	obs_source_enum_filters(
 		m_obsSource,
 		[](obs_source_t*, obs_source_t* filter, void* p) {
-			FilterOrderInfo* info =
-				reinterpret_cast<FilterOrderInfo*>(p);
+			FilterOrderInfo* info = reinterpret_cast<FilterOrderInfo*>(p);
 			uint32_t flags;
 			bool async;
+
+			if (strcmp(obs_source_get_id(filter), SOOP_SPLIT_EFFECT_SOURCE) == 0)
+				return;
 
 			flags = obs_source_get_output_flags(filter);
 			async = (flags & OBS_SOURCE_ASYNC) != 0;
@@ -276,10 +274,10 @@ void AFQBasicFilters::ResetFilters()
 
 	obs_data_clear(settings);
 
-	if (!m_propsView->DeferUpdate())
+	if (!m_pPropsView->DeferUpdate())
 		obs_source_update(filter, nullptr);
 
-	m_propsView->ReloadProperties();
+	m_pPropsView->ReloadProperties();
 }
 
 void AFQBasicFilters::RenameFiltersTitle(QString title)
@@ -291,22 +289,20 @@ void AFQBasicFilters::RenameFiltersTitle(QString title)
 
 static bool QueryRemove(QWidget* parent, obs_source_t* source)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	const char* name = obs_source_get_name(source);
 
-	QString text = locale.Str("ConfirmRemove.Text");
+	QString text = Str("ConfirmRemove.Text");
 	text = text.arg(QT_UTF8(name));
 
 	int result = AFQMessageBox::ShowMessage(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
 											parent,
-											locale.Str("ConfirmRemove.Title"),
+											Str("ConfirmRemove.Title"),
 											text);
 
 	return (result == QDialog::Accepted);
 }
 
-void AFQBasicFilters::qSlotAddAsyncFilterClicked()
+void AFQBasicFilters::qslotAddAsyncFilterClicked()
 {
 	ui->asyncFilters->setFocus();
 	QScopedPointer<AFQCustomMenu> popup(CreateAddFilterPopupMenu(true));
@@ -314,7 +310,7 @@ void AFQBasicFilters::qSlotAddAsyncFilterClicked()
 		popup->exec(QCursor::pos());
 }
 
-void AFQBasicFilters::qSlotRemoveAsyncFilterClicked()
+void AFQBasicFilters::qslotRemoveAsyncFilterClicked()
 {
 	OBSSource filter = GetFilter(ui->asyncFilters->currentRow(), true);
 	if (filter) {
@@ -323,7 +319,7 @@ void AFQBasicFilters::qSlotRemoveAsyncFilterClicked()
 	}
 }
 
-void AFQBasicFilters::qSlotMoveUpAsyncFilterClicked()
+void AFQBasicFilters::qslotMoveUpAsyncFilterClicked()
 {
 	OBSSource filter = GetFilter(ui->asyncFilters->currentRow(), true);
 	if (filter)
@@ -331,7 +327,7 @@ void AFQBasicFilters::qSlotMoveUpAsyncFilterClicked()
 
 }
 
-void AFQBasicFilters::qSlotMoveDownAsyncFilterClicked()
+void AFQBasicFilters::qslotMoveDownAsyncFilterClicked()
 {
 	OBSSource filter = GetFilter(ui->asyncFilters->currentRow(), true);
 	if (filter)
@@ -339,33 +335,33 @@ void AFQBasicFilters::qSlotMoveDownAsyncFilterClicked()
 									OBS_ORDER_MOVE_DOWN);
 }
 
-void AFQBasicFilters::qSlotAsyncFiltersCurrentRowChanged(int row)
+void AFQBasicFilters::qslotAsyncFiltersCurrentRowChanged(int row)
 {
 	UpdateItemFontColor(row, true);
 	UpdatePropertiesView(row, true);
 }
 
-void AFQBasicFilters::qSlotAsyncFiltersGotFocus()
+void AFQBasicFilters::qslotAsyncFiltersGotFocus()
 {
 	UpdateItemFontColor(ui->asyncFilters->currentRow(), true);
 	UpdatePropertiesView(ui->asyncFilters->currentRow(), true);
 	m_isAsync = true;
 }
 
-void AFQBasicFilters::qSlotAsyncFiltersCustomContextMenuRequested(const QPoint& pos)
+void AFQBasicFilters::qslotAsyncFiltersCustomContextMenuRequested(const QPoint& pos)
 {
 	CustomContextMenu(pos, true);
 }
 
-void AFQBasicFilters::qSlotAddEffectFilterClicked()
+void AFQBasicFilters::qslotAddEffectFilterClicked()
 {
-	ui->asyncFilters->setFocus();
+	ui->effectFilters->setFocus();
 	QScopedPointer<AFQCustomMenu> popup(CreateAddFilterPopupMenu(false));
 	if (popup)
 		popup->exec(QCursor::pos());
 }
 
-void AFQBasicFilters::qSlotRemoveEffectFilterClicked()
+void AFQBasicFilters::qslotRemoveEffectFilterClicked()
 {
 	OBSSource filter = GetFilter(ui->effectFilters->currentRow(), false);
 	if (filter) {
@@ -375,14 +371,14 @@ void AFQBasicFilters::qSlotRemoveEffectFilterClicked()
 	}
 }
 
-void AFQBasicFilters::qSlotMoveUpEffectFilterClicked()
+void AFQBasicFilters::qslotMoveUpEffectFilterClicked()
 {
 	OBSSource filter = GetFilter(ui->effectFilters->currentRow(), false);
 	if (filter)
 		obs_source_filter_set_order(m_obsSource, filter, OBS_ORDER_MOVE_UP);
 }
 
-void AFQBasicFilters::qSlotMoveDownEffectFilterClicked()
+void AFQBasicFilters::qslotMoveDownEffectFilterClicked()
 {
 	OBSSource filter = GetFilter(ui->effectFilters->currentRow(), false);
 	if (filter)
@@ -390,25 +386,25 @@ void AFQBasicFilters::qSlotMoveDownEffectFilterClicked()
 									OBS_ORDER_MOVE_DOWN);
 }
 
-void AFQBasicFilters::qSlotEffectFiltersCurrentRowChanged(int row)
+void AFQBasicFilters::qslotEffectFiltersCurrentRowChanged(int row)
 {
 	UpdateItemFontColor(row, false);
 	UpdatePropertiesView(row, false);
 }
 
-void AFQBasicFilters::qSlotEffectFiltersGotFocus()
+void AFQBasicFilters::qslotEffectFiltersGotFocus()
 {
 	UpdateItemFontColor(ui->effectFilters->currentRow(), false);
 	UpdatePropertiesView(ui->effectFilters->currentRow(), false);
 	m_isAsync = false;
 }
 
-void AFQBasicFilters::qSlotEffectFiltersCustomContextMenuRequested(const QPoint& pos)
+void AFQBasicFilters::qslotEffectFiltersCustomContextMenuRequested(const QPoint& pos)
 {
 	CustomContextMenu(pos, false);
 }
 
-void AFQBasicFilters::qSlotRenameFilterTriggered()
+void AFQBasicFilters::qslotRenameFilterTriggered()
 {
 	if (ui->asyncFilters->hasFocus())
 		RenameAsyncFilter();
@@ -416,28 +412,28 @@ void AFQBasicFilters::qSlotRenameFilterTriggered()
 		RenameEffectFilter();
 }
 
-void AFQBasicFilters::qSlotRemoveFilterTriggered()
+void AFQBasicFilters::qslotRemoveFilterTriggered()
 {
 	if (ui->asyncFilters->hasFocus())
-			qSlotRemoveAsyncFilterClicked();
+			qslotRemoveAsyncFilterClicked();
 	else if (ui->effectFilters->hasFocus())
-			qSlotRemoveEffectFilterClicked();
+			qslotRemoveEffectFilterClicked();
 }
 
-void AFQBasicFilters::qSlotMoveUpFilterTriggered()
+void AFQBasicFilters::qslotMoveUpFilterTriggered()
 {
 	if (ui->asyncFilters->hasFocus())
-			qSlotMoveUpAsyncFilterClicked();
+			qslotMoveUpAsyncFilterClicked();
 	else if (ui->effectFilters->hasFocus())
-			qSlotMoveUpEffectFilterClicked();
+			qslotMoveUpEffectFilterClicked();
 }
 
-void AFQBasicFilters::qSlotMoveDownFilterTriggered()
+void AFQBasicFilters::qslotMoveDownFilterTriggered()
 {
 	if (ui->asyncFilters->hasFocus())
-			qSlotMoveDownAsyncFilterClicked();
+			qslotMoveDownAsyncFilterClicked();
 	else if (ui->effectFilters->hasFocus())
-			qSlotMoveDownEffectFilterClicked();
+			qslotMoveDownEffectFilterClicked();
 }
 
 void AFQBasicFilters::FiltersMoved(const QModelIndex&, int srcIdxStart, int,
@@ -474,17 +470,12 @@ void AFQBasicFilters::CopyFilter()
 	else
 		filter = GetFilter(ui->effectFilters->currentRow(), false);
 
-	AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-	sceneContext.m_copyFilter = OBSGetWeakRef(filter);
+	SCENE_CONTEXT.m_copyFilter = OBSGetWeakRef(filter);
 }
 
 void AFQBasicFilters::PasteFilter()
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-	AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-	OBSSource filter = OBSGetStrongRef(sceneContext.m_copyFilter);
+	OBSSource filter = OBSGetStrongRef(SCENE_CONTEXT.m_copyFilter);
 	if (!filter)
 		return;
 
@@ -494,11 +485,10 @@ void AFQBasicFilters::PasteFilter()
 
 	const char* filterName = obs_source_get_name(filter);
 	const char* sourceName = obs_source_get_name(m_obsSource);
-	QString text = locale.Str("Undo.Filters.Paste.Single");
+	QString text = Str("Undo.Filters.Paste.Single");
 	text = text.arg(filterName, sourceName);
 
-	AFMainFrame* main = App()->GetMainView();
-	main->CreateFilterPasteUndoRedoAction(text, m_obsSource, undo_array, redo_array);
+	MAINFRAME->CreateFilterPasteUndoRedoAction(text, m_obsSource, undo_array, redo_array);
 }
 
 void AFQBasicFilters::closeEvent(QCloseEvent* event)
@@ -507,117 +497,90 @@ void AFQBasicFilters::closeEvent(QCloseEvent* event)
 	if (!event->isAccepted())
 		return;
 
-	obs_display_remove_draw_callback(ui->preview->GetDisplay(),
-									 AFQBasicFilters::DrawPreview, this);
+	obs_display_remove_draw_callback(ui->preview->GetDisplay(), AFQBasicFilters::DrawPreview, this);
 
-	App()->GetMainView()->UpdateEditMenu();
+	MAIN_SCENESOURCE->UpdateEditMenu();
 
 	//main->SaveProject();
 }
 
+void AFQBasicFilters::showEvent(QShowEvent* event)
+{
+	QRect midRect = MAIN_BLOCKMANAGER->GetMidGeometry(this->size());
+	QRect adjustRect;
+	MAIN_BLOCKMANAGER->AdjustPositionOutSideFullScreen(midRect, adjustRect);
+
+	move(adjustRect.x(), adjustRect.y());
+}
+
 void AFQBasicFilters::SetSignalSlotUI()
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
-	m_actionRenameFilter = new QAction(locale.Str("Rename"), this);
+	m_actionRenameFilter = new QAction(Str("Rename"), this);
 	m_actionRenameFilter->setShortcutContext(Qt::WidgetWithChildrenShortcut);
 	m_actionRenameFilter->setShortcut({ Qt::Key_F2 });
-	connect(m_actionRenameFilter, &QAction::triggered,
-			this, &AFQBasicFilters::qSlotRenameFilterTriggered);
+	connect(m_actionRenameFilter, &QAction::triggered, this, &AFQBasicFilters::qslotRenameFilterTriggered);
 
-	m_actionRemoveFilter = new QAction(locale.Str("Remove"), this);
+	m_actionRemoveFilter = new QAction(Str("Remove"), this);
 	m_actionRemoveFilter->setShortcutContext(Qt::WidgetWithChildrenShortcut);
 	m_actionRemoveFilter->setShortcut({ Qt::Key_Delete });
-	connect(m_actionRemoveFilter, &QAction::triggered,
-			this, &AFQBasicFilters::qSlotRemoveFilterTriggered);
+	connect(m_actionRemoveFilter, &QAction::triggered, this, &AFQBasicFilters::qslotRemoveFilterTriggered);
 
-	m_actionMoveUp = new QAction(locale.Str("Basic.MainMenu.Edit.Order.MoveUp"), this);
+	m_actionMoveUp = new QAction(Str("Basic.MainMenu.Edit.Order.MoveUp"), this);
 	m_actionMoveUp->setShortcutContext(Qt::WidgetWithChildrenShortcut);
 	m_actionMoveUp->setShortcut(QKeySequence("Ctrl+Up"));
-	connect(m_actionMoveUp, &QAction::triggered,
-			this, &AFQBasicFilters::qSlotMoveUpFilterTriggered);
+	connect(m_actionMoveUp, &QAction::triggered, this, &AFQBasicFilters::qslotMoveUpFilterTriggered);
 
-	m_actionMoveDown = new QAction(locale.Str("Basic.MainMenu.Edit.Order.MoveDown"), this);
+	m_actionMoveDown = new QAction(Str("Basic.MainMenu.Edit.Order.MoveDown"), this);
 	m_actionMoveDown->setShortcutContext(Qt::WidgetWithChildrenShortcut);
 	m_actionMoveDown->setShortcut(QKeySequence("Ctrl+Down"));
-	connect(m_actionMoveDown, &QAction::triggered,
-			this, &AFQBasicFilters::qSlotMoveDownFilterTriggered);
+	connect(m_actionMoveDown, &QAction::triggered, this, &AFQBasicFilters::qslotMoveDownFilterTriggered);
 
 	addAction(m_actionRenameFilter);
 	addAction(m_actionRemoveFilter);
 	addAction(m_actionMoveUp);
 	addAction(m_actionMoveDown);
 
-	connect(ui->asyncFilters->itemDelegate(),
-			&QAbstractItemDelegate::closeEditor, [this](QWidget* editor) {
-			FilterNameEdited(editor, ui->asyncFilters);
-		});
+	connect(ui->asyncFilters->itemDelegate(), &QAbstractItemDelegate::closeEditor,
+			[this](QWidget* editor) { FilterNameEdited(editor, ui->asyncFilters); });
 
-	connect(ui->effectFilters->itemDelegate(),
-			&QAbstractItemDelegate::closeEditor, [this](QWidget* editor) {
-			FilterNameEdited(editor, ui->effectFilters);
-		});
+	connect(ui->effectFilters->itemDelegate(), &QAbstractItemDelegate::closeEditor,
+			[this](QWidget* editor) { FilterNameEdited(editor, ui->effectFilters); });
 
 	QPushButton* close = ui->buttonBox->button(QDialogButtonBox::Close);
 	connect(close, &QPushButton::clicked, this, &AFQBasicFilters::close);
 	close->setDefault(true);
 
-	connect(ui->buttonBox->button(QDialogButtonBox::RestoreDefaults),
-		&QPushButton::clicked, this, &AFQBasicFilters::ResetFilters);
+	connect(ui->buttonBox->button(QDialogButtonBox::RestoreDefaults), &QPushButton::clicked,
+			this, &AFQBasicFilters::ResetFilters);
 
-	connect(ui->asyncFilters->model(), &QAbstractItemModel::rowsMoved, 
-			this, &AFQBasicFilters::FiltersMoved);
-	connect(ui->effectFilters->model(), &QAbstractItemModel::rowsMoved,
-			this, &AFQBasicFilters::FiltersMoved);
+	connect(ui->asyncFilters->model(), &QAbstractItemModel::rowsMoved, this, &AFQBasicFilters::FiltersMoved);
+	connect(ui->effectFilters->model(), &QAbstractItemModel::rowsMoved, this, &AFQBasicFilters::FiltersMoved);
 
 	connect(ui->closeButton, &QPushButton::clicked, this, &AFQBasicFilters::close);
 	
-	connect(ui->addAsyncFilter, &QPushButton::clicked,
-			this, &AFQBasicFilters::qSlotAddAsyncFilterClicked);
+	connect(ui->addAsyncFilter, &QPushButton::clicked, this, &AFQBasicFilters::qslotAddAsyncFilterClicked);
+	connect(ui->removeAsyncFilter, &QPushButton::clicked, this, &AFQBasicFilters::qslotRemoveAsyncFilterClicked);
 
-	connect(ui->removeAsyncFilter, &QPushButton::clicked,
-			this, &AFQBasicFilters::qSlotRemoveAsyncFilterClicked);
+	connect(ui->moveAsyncFilterUp, &QPushButton::clicked, this, &AFQBasicFilters::qslotMoveUpAsyncFilterClicked);
+	connect(ui->moveAsyncFilterDown, &QPushButton::clicked, this, &AFQBasicFilters::qslotMoveDownAsyncFilterClicked);
 
-	connect(ui->moveAsyncFilterUp, &QPushButton::clicked,
-			this, &AFQBasicFilters::qSlotMoveUpAsyncFilterClicked);
+	connect(ui->asyncFilters, &FocusList::GotFocus, this, &AFQBasicFilters::qslotAsyncFiltersGotFocus);
+	connect(ui->asyncFilters, &FocusList::currentRowChanged, this, &AFQBasicFilters::qslotAsyncFiltersCurrentRowChanged);
+	connect(ui->asyncFilters, &FocusList::customContextMenuRequested,
+			this, &AFQBasicFilters::qslotAsyncFiltersCustomContextMenuRequested);
 
-	connect(ui->moveAsyncFilterDown, &QPushButton::clicked,
-			this, &AFQBasicFilters::qSlotMoveDownAsyncFilterClicked);
+	connect(ui->addEffectFilter, &QPushButton::clicked, this, &AFQBasicFilters::qslotAddEffectFilterClicked);
+	connect(ui->removeEffectFilter, &QPushButton::clicked, this, &AFQBasicFilters::qslotRemoveEffectFilterClicked);
+	connect(ui->moveEffectFilterUp, &QPushButton::clicked, this, &AFQBasicFilters::qslotMoveUpEffectFilterClicked);
+	connect(ui->moveEffectFilterDown, &QPushButton::clicked, this, &AFQBasicFilters::qslotMoveDownEffectFilterClicked);
 
-	connect(ui->asyncFilters, &AFQFocusList::GotFocus,
-			this, &AFQBasicFilters::qSlotAsyncFiltersGotFocus);
-
-	connect(ui->asyncFilters, &AFQFocusList::currentRowChanged,
-			this, &AFQBasicFilters::qSlotAsyncFiltersCurrentRowChanged);
-
-	connect(ui->asyncFilters, &AFQFocusList::customContextMenuRequested,
-			this, &AFQBasicFilters::qSlotAsyncFiltersCustomContextMenuRequested);
-
-	connect(ui->addEffectFilter, &QPushButton::clicked,
-			this, &AFQBasicFilters::qSlotAddEffectFilterClicked);
-
-	connect(ui->removeEffectFilter, &QPushButton::clicked,
-			this, &AFQBasicFilters::qSlotRemoveEffectFilterClicked);
-
-	connect(ui->moveEffectFilterUp, &QPushButton::clicked,
-			this, &AFQBasicFilters::qSlotMoveUpEffectFilterClicked);
-
-	connect(ui->moveEffectFilterDown, &QPushButton::clicked,
-			this, &AFQBasicFilters::qSlotMoveDownEffectFilterClicked);
-
-	connect(ui->effectFilters, &AFQFocusList::GotFocus, 
-			this, &AFQBasicFilters::qSlotEffectFiltersGotFocus);
-
-	connect(ui->effectFilters, &AFQFocusList::currentRowChanged,
-			this, &AFQBasicFilters::qSlotEffectFiltersCurrentRowChanged);
-
-	connect(ui->effectFilters, &AFQFocusList::customContextMenuRequested,
-		this, &AFQBasicFilters::qSlotEffectFiltersCustomContextMenuRequested);
-
+	connect(ui->effectFilters, &FocusList::GotFocus, this, &AFQBasicFilters::qslotEffectFiltersGotFocus);
+	connect(ui->effectFilters, &FocusList::currentRowChanged, this, &AFQBasicFilters::qslotEffectFiltersCurrentRowChanged);
+	connect(ui->effectFilters, &FocusList::customContextMenuRequested,
+			this, &AFQBasicFilters::qslotEffectFiltersCustomContextMenuRequested);
 }
 
-static bool filter_compatible(bool async, uint32_t sourceFlags,
-	uint32_t filterFlags)
+static bool filter_compatible(bool async, uint32_t sourceFlags, uint32_t filterFlags)
 {
 	bool filterVideo = (filterFlags & OBS_SOURCE_VIDEO) != 0;
 	bool filterAsync = (filterFlags & OBS_SOURCE_ASYNC) != 0;
@@ -628,17 +591,14 @@ static bool filter_compatible(bool async, uint32_t sourceFlags,
 
 	if (async &&
 		((audioOnly && filterVideo) || (!audio && !asyncSource) ||
-			(filterAudio && !audio) || (!asyncSource && !filterAudio)))
+		 (filterAudio && !audio) || (!asyncSource && !filterAudio)))
 		return false;
 
-	return (async && (filterAudio || filterAsync)) ||
-		(!async && !filterAudio && !filterAsync);
+	return (async && (filterAudio || filterAsync)) || (!async && !filterAudio && !filterAsync);
 }
 
 AFQCustomMenu* AFQBasicFilters::CreateAddFilterPopupMenu(bool async)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	uint32_t sourceFlags = obs_source_get_output_flags(m_obsSource);
 	const char* type_str;
 	bool foundValues = false;
@@ -665,6 +625,8 @@ AFQCustomMenu* AFQBasicFilters::CreateAddFilterPopupMenu(bool async)
 		const char* name = obs_source_get_display_name(type_str);
 		uint32_t caps = obs_get_source_output_flags(type_str);
 
+		if (strcmp(type_str, SOOP_SPLIT_EFFECT_SOURCE) == 0)
+			continue;
 		if ((caps & OBS_SOURCE_DEPRECATED) != 0)
 			continue;
 		if ((caps & OBS_SOURCE_CAP_DISABLED) != 0)
@@ -677,19 +639,19 @@ AFQCustomMenu* AFQBasicFilters::CreateAddFilterPopupMenu(bool async)
 
 	sort(types.begin(), types.end());
 
-	AFQCustomMenu* popup = new AFQCustomMenu(locale.Str("Add"), this, true);
+	AFQCustomMenu* popup = new AFQCustomMenu(Str("Add"), this, true);
 	for (FilterInfo& type : types) {
-		uint32_t filterFlags =
-			obs_get_source_output_flags(type.type.c_str());
-
+		uint32_t filterFlags = obs_get_source_output_flags(type.type.c_str());
 		if (!filter_compatible(async, sourceFlags, filterFlags))
 			continue;
 
-		QAction* popupItem =
-			new QAction(QT_UTF8(type.name.c_str()), this);
+		QAction* popupItem = new QAction(QT_UTF8(type.name.c_str()), this);
 		popupItem->setData(QT_UTF8(type.type.c_str()));
 		connect(popupItem, &QAction::triggered,
-			[this, type]() { AddNewFilter(type.type.c_str()); });
+			[this, type, async]() { 
+				AddNewFilter(type.type.c_str());
+				m_isAsync = async;
+			});
 		popup->addAction(popupItem);
 
 		foundValues = true;
@@ -750,8 +712,7 @@ void AFQBasicFilters::UpdateFilters()
 
 void AFQBasicFilters::UpdateSplitter()
 {
-	bool show_splitter_frame =
-		ui->asyncFilters->count() + ui->effectFilters->count() > 0;
+	bool show_splitter_frame = ui->asyncFilters->count() + ui->effectFilters->count() > 0;
 	UpdateSplitter(show_splitter_frame);
 }
 
@@ -773,13 +734,13 @@ void AFQBasicFilters::UpdateSplitter(bool show_splitter_frame)
 void AFQBasicFilters::UpdatePropertiesView(int row, bool async)
 {
 	OBSSource filter = GetFilter(row, async);
-	if (filter && m_propsView && m_propsView->IsObject(filter)) {
+	if (filter && m_pPropsView && m_pPropsView->IsObject(filter)) {
 		/* do not recreate properties view if already using a view
 		 * with the same object */
 		return;
 	}
 
-	if (m_propsView) {
+	if (m_pPropsView) {
 		m_signalUpdateProperties.Disconnect();
 		ui->propertiesFrame->setVisible(false);
 		/* Deleting a filter will trigger a visibility change, which will also
@@ -797,10 +758,10 @@ void AFQBasicFilters::UpdatePropertiesView(int row, bool async)
 		 * macOS might be especially affected as it doesn't switch keyboard focus
 		 * to buttons like Windows does. */
 
-		if (m_propsView) {
-			m_propsView->hide();
-			m_propsView->deleteLater();
-			m_propsView = nullptr;
+		if (m_pPropsView) {
+			m_pPropsView->hide();
+			m_pPropsView->deleteLater();
+			m_pPropsView = nullptr;
 		}
 	}
 
@@ -810,29 +771,24 @@ void AFQBasicFilters::UpdatePropertiesView(int row, bool async)
 	OBSDataAutoRelease settings = obs_source_get_settings(filter);
 
 	auto disabled_undo = [](void* vp, obs_data_t* settings) {
-		AFMainFrame* main = App()->GetMainView();
-		main->m_undo_s.Disable();
+		UNDO_STACK.Disable();
 		obs_source_t* source = reinterpret_cast<obs_source_t*>(vp);
 		obs_source_update(source, settings);
 	};
 
-	m_propsView = new AFQPropertiesView(settings.Get(), filter,
+	m_pPropsView = new OBSPropertiesView(settings.Get(), filter,
 										(PropertiesReloadCallback)obs_source_properties,
 										(PropertiesUpdateCallback)FilterChangeUndoRedo,
-										(PropertiesVisualUpdateCb)disabled_undo);
+										(PropertiesVisualUpdateCb)disabled_undo, 200);
 
-	m_propsView->SetComboBoxFixedSize(QSize(235,40));
+	m_signalUpdateProperties.Connect(obs_source_get_signal_handler(filter), "update_properties", AFQBasicFilters::UpdateProperties, this);
 
-	m_signalUpdateProperties.Connect(obs_source_get_signal_handler(filter),
-									 "update_properties",
-									 AFQBasicFilters::UpdateProperties, this);
-
-	m_propsView->setMinimumHeight(150);
+	m_pPropsView->setLayoutMargin(16, 16, 16, 16);
+	m_pPropsView->setMinimumHeight(150);
 	UpdateSplitter();
-	ui->propertiesLayout->addWidget(m_propsView);
-	m_propsView->show();
+	ui->propertiesLayout->addWidget(m_pPropsView);
+	m_pPropsView->show();
 }
-
 
 void AFQBasicFilters::UpdateItemFontColor(int row, bool async)
 {
@@ -860,8 +816,6 @@ void AFQBasicFilters::UpdateItemFontColor(int row, bool async)
 
 void AFQBasicFilters::AddNewFilter(const char* id)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	if (id && *id) {
 		OBSSourceAutoRelease existing_filter;
 		string name = obs_source_get_display_name(id);
@@ -874,38 +828,36 @@ void AFQBasicFilters::AddNewFilter(const char* id)
 			text = QString("%1 %2").arg(placeholder).arg(i++);
 		}
 
-		bool success = AFQNameDialog::AskForName(
-			this, locale.Str("Basic.Filters.AddFilter.Title"),
-			locale.Str("Basic.Filters.AddFilter.Text"), name, text);
-		
+		bool success = AFQNameDialog::AskForName(this,
+												 Str("Basic.Filters.AddFilter.Title"),
+												 Str("Basic.Filters.AddFilter.Text"),
+												 name, text);
 		if (!success)
 			return;
 
 		if (name.empty()) {
-			AFCMessageBox::warning(this,
-								   locale.Str("NoNameEntered.Title"),
-								   locale.Str("NoNameEntered.Text"));
+			AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+									   Str("NoNameEntered.Title"),
+									   Str("NoNameEntered.Text"));
+
 			AddNewFilter(id);
 			return;
 		}
 
-		existing_filter =
-			obs_source_get_filter_by_name(m_obsSource, name.c_str());
+		existing_filter = obs_source_get_filter_by_name(m_obsSource, name.c_str());
 		if (existing_filter) {
-			AFCMessageBox::warning(this, locale.Str("NameExists.Title"),
-								   locale.Str("NameExists.Text"));
+			AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+									   Str("NameExists.Title"),
+									   Str("NameExists.Text"));
 			AddNewFilter(id);
 			return;
 		}
 
-		OBSSourceAutoRelease filter =
-			obs_source_create(id, name.c_str(), nullptr, nullptr);
+		OBSSourceAutoRelease filter = obs_source_create(id, name.c_str(), nullptr, nullptr);
 		if (filter) {
 			const char* sourceName = obs_source_get_name(m_obsSource);
 
-			blog(LOG_INFO,
-				"User added filter '%s' (%s) to source '%s'",
-				name.c_str(), id, sourceName);
+			blog(LOG_INFO, "User added filter '%s' (%s) to source '%s'", name.c_str(), id, sourceName);
 
 			obs_source_filter_add(m_obsSource, filter);
 		}
@@ -914,9 +866,8 @@ void AFQBasicFilters::AddNewFilter(const char* id)
 			return;
 		}
 
-		AFMainFrame* main = App()->GetMainView();
 		std::string parent_uuid(obs_source_get_uuid(m_obsSource));
-		std::string scene_uuid = obs_source_get_uuid(AFSourceUtil::GetCurrentSource());
+		std::string scene_uuid = obs_source_get_uuid(SCENE_CONTEXT.GetCurrentSceneSource());
 		/* In order to ensure that the UUID persists through undo/redo,
 		 * we save the source data rather than just recreating the
 		 * source from scratch. */
@@ -924,14 +875,12 @@ void AFQBasicFilters::AddNewFilter(const char* id)
 		obs_data_set_string(rwrapper, "undo_uuid", parent_uuid.c_str());
 
 		OBSDataAutoRelease uwrapper = obs_data_create();
-		obs_data_set_string(uwrapper, "fname",
-					obs_source_get_name(filter));
+		obs_data_set_string(uwrapper, "fname", obs_source_get_name(filter));
 		obs_data_set_string(uwrapper, "suuid", parent_uuid.c_str());
 
-		AFMainDynamicComposit* mainComposit = main->GetMainWindow();
-		auto undo = [scene_uuid, mainComposit](const std::string& data) {
+		auto undo = [scene_uuid](const std::string& data) {
 			OBSSourceAutoRelease ssource = obs_get_source_by_uuid(scene_uuid.c_str());
-			mainComposit->SetCurrentScene(ssource.Get(), true);
+			DYNAMIC_COMPOSIT->SetCurrentScene(ssource.Get(), true);
 
 			OBSDataAutoRelease dat = obs_data_create_from_json(data.c_str());
 			OBSSourceAutoRelease source = obs_get_source_by_uuid(obs_data_get_string(dat, "suuid"));
@@ -939,10 +888,10 @@ void AFQBasicFilters::AddNewFilter(const char* id)
 			obs_source_filter_remove(source, filter);
 		};
 
-		auto redo = [scene_uuid, mainComposit](const std::string& data)
+		auto redo = [scene_uuid](const std::string& data)
 		{
 			OBSSourceAutoRelease ssource = obs_get_source_by_uuid(scene_uuid.c_str());
-			mainComposit->SetCurrentScene(ssource.Get(), true);
+			DYNAMIC_COMPOSIT->SetCurrentScene(ssource.Get(), true);
 
 			OBSDataAutoRelease dat = obs_data_create_from_json(data.c_str());
 			OBSSourceAutoRelease source = obs_get_source_by_uuid(obs_data_get_string(dat, "undo_uuid"));
@@ -952,8 +901,8 @@ void AFQBasicFilters::AddNewFilter(const char* id)
 
 		std::string undo_data(obs_data_get_json(uwrapper));
 		std::string redo_data(obs_data_get_json(rwrapper));
-		main->m_undo_s.AddAction(QTStr("Undo.Add").arg(obs_source_get_name(filter)),
-								 undo, redo, undo_data, redo_data, false);
+		UNDO_STACK.AddAction(QTStr("Undo.Add").arg(obs_source_get_name(filter)),
+							 undo, redo, undo_data, redo_data, false);
 	}
 }
 
@@ -999,13 +948,13 @@ void AFQBasicFilters::ReorderFilter(QListWidget* list, obs_source_t* filter, siz
 
 		if (filterItem == filter) {
 			if ((int)idx != i) {
+				int tt = list->currentRow();
 				bool sel = (list->currentRow() == i);
 
 				listItem = TakeListItem(list, i);
 				if (listItem) {
 					list->insertItem((int)idx, listItem);
-					SetupVisibilityItem(list, listItem,
-						filterItem);
+					SetupVisibilityItem(list, listItem, filterItem);
 
 					if (sel)
 						list->setCurrentRow((int)idx);
@@ -1022,8 +971,7 @@ void AFQBasicFilters::OBSSourceFilterAdded(void* param, calldata_t* data)
 	AFQBasicFilters* window = reinterpret_cast<AFQBasicFilters*>(param);
 	obs_source_t* filter = (obs_source_t*)calldata_ptr(data, "filter");
 
-	QMetaObject::invokeMethod(window, "AddFilter",
-							  Q_ARG(OBSSource, OBSSource(filter)));
+	QMetaObject::invokeMethod(window, "AddFilter", Q_ARG(OBSSource, OBSSource(filter)));
 }
 
 
@@ -1032,38 +980,31 @@ void AFQBasicFilters::OBSSourceFilterRemoved(void* param, calldata_t* data)
 	AFQBasicFilters* window = reinterpret_cast<AFQBasicFilters*>(param);
 	obs_source_t* filter = (obs_source_t*)calldata_ptr(data, "filter");
 
-	QMetaObject::invokeMethod(window, "RemoveFilter",
-							  Q_ARG(OBSSource, OBSSource(filter)));
+	QMetaObject::invokeMethod(window, "RemoveFilter", Q_ARG(OBSSource, OBSSource(filter)));
 }
 
 void AFQBasicFilters::OBSSourceReordered(void* param, calldata_t* data)
 {
-	QMetaObject::invokeMethod(reinterpret_cast<AFQBasicFilters*>(param),
-						      "ReorderFilters");
+	QMetaObject::invokeMethod(reinterpret_cast<AFQBasicFilters*>(param), "ReorderFilters");
 }
 
 void AFQBasicFilters::SourceRemoved(void* param, calldata_t* data)
 {
-	QMetaObject::invokeMethod(static_cast<AFQBasicFilters*>(param),
-							  "close");
+	QMetaObject::invokeMethod(static_cast<AFQBasicFilters*>(param), "close");
 }
 
 void AFQBasicFilters::SourceRenamed(void* param, calldata_t* data)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	const char* name = calldata_string(data, "new_name");
-	QString title = locale.Str("Basic.Filters.Title");
+	QString title = Str("Basic.Filters.Title");
 	title = title.arg(QT_UTF8(name));
 
-	QMetaObject::invokeMethod(static_cast<AFQBasicFilters*>(param),
-							  "RenameFiltersTitle", Q_ARG(QString, title));
+	QMetaObject::invokeMethod(static_cast<AFQBasicFilters*>(param), "RenameFiltersTitle", Q_ARG(QString, title));
 }
 
 void AFQBasicFilters::UpdateProperties(void* data, calldata_t* params)
 {
-	QMetaObject::invokeMethod(static_cast<AFQBasicFilters*>(data)->m_propsView,
-							  "ReloadProperties");
+	QMetaObject::invokeMethod(static_cast<AFQBasicFilters*>(data)->m_pPropsView, "ReloadProperties");
 }
 
 void AFQBasicFilters::DrawPreview(void* data, uint32_t cx, uint32_t cy)
@@ -1100,9 +1041,6 @@ void AFQBasicFilters::DrawPreview(void* data, uint32_t cx, uint32_t cy)
 
 void AFQBasicFilters::CustomContextMenu(const QPoint& pos, bool async)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-	AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
 	QListWidget* list = async ? ui->asyncFilters : ui->effectFilters;
 	QListWidgetItem* item = list->itemAt(pos);
 
@@ -1114,28 +1052,26 @@ void AFQBasicFilters::CustomContextMenu(const QPoint& pos, bool async)
 
 	if (item) {
 		popup.addSeparator();
-		popup.addAction(locale.Str("Duplicate"), this, [&]() {
+		popup.addAction(Str("Duplicate"), this, [&]() {
 			DuplicateItem(async ? ui->asyncFilters->currentItem()
-				: ui->effectFilters->currentItem());
+						  : ui->effectFilters->currentItem());
 			});
 		popup.addSeparator();
 		popup.addAction(m_actionRenameFilter);
 		popup.addAction(m_actionRemoveFilter);
 		popup.addSeparator();
 
-		QAction* copyAction = new QAction(locale.Str("Copy"));
-		connect(copyAction, &QAction::triggered, this,
-			&AFQBasicFilters::CopyFilter);
+		QAction* copyAction = new QAction(Str("Copy"));
+		connect(copyAction, &QAction::triggered, this, &AFQBasicFilters::CopyFilter);
 		copyAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_C));
 		ui->effectWidget->addAction(copyAction);
 		ui->asyncWidget->addAction(copyAction);
 		popup.addAction(copyAction);
 	}
 
-	QAction* pasteAction = new QAction(locale.Str("Paste"));
-	pasteAction->setEnabled(sceneContext.m_copyFilter);
-	connect(pasteAction, &QAction::triggered, this,
-		&AFQBasicFilters::PasteFilter);
+	QAction* pasteAction = new QAction(Str("Paste"));
+	pasteAction->setEnabled(SCENE_CONTEXT.m_copyFilter);
+	connect(pasteAction, &QAction::triggered, this, &AFQBasicFilters::PasteFilter);
 	pasteAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_V));
 	ui->effectWidget->addAction(pasteAction);
 	ui->asyncWidget->addAction(pasteAction);
@@ -1164,8 +1100,6 @@ void AFQBasicFilters::EditItem(QListWidgetItem* item, bool async)
 
 void AFQBasicFilters::DuplicateItem(QListWidgetItem* item)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	OBSSource filter = item->data(Qt::UserRole).value<OBSSource>();
 	string name = obs_source_get_name(filter);
 	OBSSourceAutoRelease existing_filter;
@@ -1173,34 +1107,33 @@ void AFQBasicFilters::DuplicateItem(QListWidgetItem* item)
 	QString placeholder = QString::fromStdString(name);
 	QString text{ placeholder };
 	int i = 2;
-	while ((existing_filter = obs_source_get_filter_by_name(
-		m_obsSource, QT_TO_UTF8(text)))) {
+	while ((existing_filter = obs_source_get_filter_by_name(m_obsSource, QT_TO_UTF8(text)))) {
 		text = QString("%1 %2").arg(placeholder).arg(i++);
 	}
 
-	bool success = AFQNameDialog::AskForName(
-		this, locale.Str("Basic.Filters.AddFilter.Title"),
-		locale.Str("Basic.Filters.AddFilter.Text"), name, text);
+	bool success = AFQNameDialog::AskForName(this,
+											 Str("Basic.Filters.AddFilter.Title"),
+											 Str("Basic.Filters.AddFilter.Text"),
+											 name, text);
 	if (!success)
 		return;
 
 	if (name.empty()) {
-		AFCMessageBox::warning(this, locale.Str("NoNameEntered.Title"),
-			locale.Str("NoNameEntered.Text"));
+		AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+								   Str("NoNameEntered.Title"), Str("NoNameEntered.Text"));
 		DuplicateItem(item);
 		return;
 	}
 
 	existing_filter = obs_source_get_filter_by_name(m_obsSource, name.c_str());
 	if (existing_filter) {
-		AFCMessageBox::warning(this, locale.Str("NameExists.Title"),
-			locale.Str("NameExists.Text"));
+		AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+								   Str("NameExists.Title"), Str("NameExists.Text"));
 		DuplicateItem(item);
 		return;
 	}
 	bool enabled = obs_source_enabled(filter);
-	OBSSourceAutoRelease new_filter =
-		obs_source_duplicate(filter, name.c_str(), false);
+	OBSSourceAutoRelease new_filter = obs_source_duplicate(filter, name.c_str(), false);
 	if (new_filter) {
 		const char* sourceName = obs_source_get_name(m_obsSource);
 		const char* id = obs_source_get_id(new_filter);
@@ -1215,8 +1148,6 @@ void AFQBasicFilters::DuplicateItem(QListWidgetItem* item)
 
 void AFQBasicFilters::FilterNameEdited(QWidget* editor, QListWidget* list)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	QListWidgetItem* listItem = list->currentItem();
 	OBSSource filter = listItem->data(Qt::UserRole).value<OBSSource>();
 	QLineEdit* edit = qobject_cast<QLineEdit*>(editor);
@@ -1227,21 +1158,18 @@ void AFQBasicFilters::FilterNameEdited(QWidget* editor, QListWidget* list)
 	OBSSourceAutoRelease foundFilter = nullptr;
 
 	if (!sameName)
-		foundFilter =
-		obs_source_get_filter_by_name(m_obsSource, name.c_str());
+		foundFilter = obs_source_get_filter_by_name(m_obsSource, name.c_str());
 
 	if (foundFilter || name.empty() || sameName) {
 		listItem->setText(QT_UTF8(prevName));
 
 		if (foundFilter) {
-			AFCMessageBox::information(window(),
-									   locale.Str("NameExists.Title"),
-									   locale.Str("NameExists.Text"));
+			AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+									   Str("NameExists.Title"), Str("NameExists.Text"));
 		}
 		else if (name.empty()) {
-			AFCMessageBox::information(window(),
-									   locale.Str("NoNameEntered.Title"),
-									   locale.Str("NoNameEntered.Text"));
+			AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
+									   Str("NoNameEntered.Title"), Str("NoNameEntered.Text"));
 		}
 	}
 	else {
@@ -1254,31 +1182,26 @@ void AFQBasicFilters::FilterNameEdited(QWidget* editor, QListWidget* list)
 		listItem->setText(QT_UTF8(name.c_str()));
 		obs_source_set_name(filter, name.c_str());
 
-		AFMainFrame* main = App()->GetMainView();
-		AFMainDynamicComposit* mainComposit = main->GetMainWindow();
-		std::string scene_uuid = obs_source_get_uuid(AFSourceUtil::GetCurrentSource());
-		auto undo = [scene_uuid, prev = std::string(prevName), name, 
-			mainComposit](const std::string& uuid)
+		std::string scene_uuid = obs_source_get_uuid(SCENE_CONTEXT.GetCurrentSceneSource());
+		auto undo = [scene_uuid, prev = std::string(prevName), name](const std::string& uuid)
 		{
 			OBSSourceAutoRelease ssource = obs_get_source_by_uuid(scene_uuid.c_str());
-			mainComposit->SetCurrentScene(ssource.Get(), true);
+			DYNAMIC_COMPOSIT->SetCurrentScene(ssource.Get(), true);
 
 			OBSSourceAutoRelease filter = obs_get_source_by_uuid(uuid.c_str());
 			obs_source_set_name(filter, prev.c_str());
 		};
 
-		auto redo = [scene_uuid, prev = std::string(prevName), name,
-			mainComposit](const std::string& uuid) {
+		auto redo = [scene_uuid, prev = std::string(prevName), name](const std::string& uuid) {
 			OBSSourceAutoRelease ssource = obs_get_source_by_uuid(scene_uuid.c_str());
-			mainComposit->SetCurrentScene(ssource.Get(), true);
+			DYNAMIC_COMPOSIT->SetCurrentScene(ssource.Get(), true);
 
 			OBSSourceAutoRelease filter = obs_get_source_by_uuid(uuid.c_str());
 			obs_source_set_name(filter, name.c_str());
 		};
 
 		std::string filter_uuid(obs_source_get_uuid(filter));
-		main->m_undo_s.AddAction(QTStr("Undo.Rename").arg(name.c_str()),
-								 undo, redo, filter_uuid, filter_uuid);
+		UNDO_STACK.AddAction(QTStr("Undo.Rename").arg(name.c_str()), undo, redo, filter_uuid, filter_uuid);
 	}
 
 	listItem->setText(QString());
@@ -1292,12 +1215,10 @@ void AFQBasicFilters::delete_filter(OBSSource filter)
 	std::string parent_uuid(obs_source_get_uuid(m_obsSource));
 	obs_data_set_string(wrapper, "undo_uuid", parent_uuid.c_str());
 
-	AFMainFrame* main = App()->GetMainView();
-	AFMainDynamicComposit* mainComposit = main->GetMainWindow();
-	std::string scene_uuid = obs_source_get_uuid(AFSourceUtil::GetCurrentSource());
-	auto undo = [scene_uuid, mainComposit](const std::string& data) {
+	std::string scene_uuid = obs_source_get_uuid(SCENE_CONTEXT.GetCurrentSceneSource());
+	auto undo = [scene_uuid](const std::string& data) {
 		OBSSourceAutoRelease ssource = obs_get_source_by_uuid(scene_uuid.c_str());
-		mainComposit->SetCurrentScene(ssource.Get(), true);
+		DYNAMIC_COMPOSIT->SetCurrentScene(ssource.Get(), true);
 
 		OBSDataAutoRelease dat = obs_data_create_from_json(data.c_str());
 		OBSSourceAutoRelease source = obs_get_source_by_uuid(obs_data_get_string(dat, "undo_uuid"));
@@ -1308,9 +1229,9 @@ void AFQBasicFilters::delete_filter(OBSSource filter)
 	OBSDataAutoRelease rwrapper = obs_data_create();
 	obs_data_set_string(rwrapper, "fname", obs_source_get_name(filter));
 	obs_data_set_string(rwrapper, "suuid", parent_uuid.c_str());
-	auto redo = [scene_uuid, mainComposit](const std::string& data) {
+	auto redo = [scene_uuid](const std::string& data) {
 		OBSSourceAutoRelease ssource = obs_get_source_by_uuid(scene_uuid.c_str());
-		mainComposit->SetCurrentScene(ssource.Get(), true);
+		DYNAMIC_COMPOSIT->SetCurrentScene(ssource.Get(), true);
 
 		OBSDataAutoRelease dat = obs_data_create_from_json(data.c_str());
 		OBSSourceAutoRelease source = obs_get_source_by_uuid(obs_data_get_string(dat, "suuid"));
@@ -1320,8 +1241,8 @@ void AFQBasicFilters::delete_filter(OBSSource filter)
 
 	std::string undo_data(obs_data_get_json(wrapper));
 	std::string redo_data(obs_data_get_json(rwrapper));
-	main->m_undo_s.AddAction(QTStr("Undo.Delete").arg(obs_source_get_name(filter)),
-							 undo, redo, undo_data, redo_data, false);
+	UNDO_STACK.AddAction(QTStr("Undo.Delete").arg(obs_source_get_name(filter)),
+						 undo, redo, undo_data, redo_data, false);
 
 	obs_source_filter_remove(m_obsSource, filter);
 }

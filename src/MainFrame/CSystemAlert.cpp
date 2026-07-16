@@ -1,18 +1,22 @@
 ﻿#include "CSystemAlert.h"
-#include "include/qt-wrapper.h"
 #include "ui_system-alert.h"
 
-#define SYSTEM_ALERT_INTERVAL 3000
+#include "qt-wrappers.hpp"
+
+#define SYSTEM_ALERT_INTERVAL_WARNING 3000
+#define SYSTEM_ALERT_INTERVAL_SUCCESS 10000
 
 AFQSystemAlert::AFQSystemAlert(QWidget* parent, 
                                const QString& alertText, 
                                const QString& channelID, 
                                bool showInCorner, 
-                               int mainFrameWidth) :
+                               int mainFrameWidth,
+                               AlertIcon icon) :
     QWidget(parent),
     ui(new Ui::AFQSystemAlert)
 {
     ui->setupUi(this);
+
     setMouseTracking(true);
     installEventFilter(this);
     setWindowFlags(Qt::FramelessWindowHint | Qt::Tool | Qt::WindowDoesNotAcceptFocus);
@@ -20,9 +24,12 @@ AFQSystemAlert::AFQSystemAlert(QWidget* parent,
     setAttribute(Qt::WA_Hover);
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_DeleteOnClose, true);
+    setAttribute(Qt::WA_ShowWithoutActivating, true);
 
-    m_qTimer = new QTimer(this);
-    connect(m_qTimer, &QTimer::timeout, this, &AFQSystemAlert::hide);
+    m_showInterval = (Warning == icon ? SYSTEM_ALERT_INTERVAL_WARNING : SYSTEM_ALERT_INTERVAL_SUCCESS);
+
+    m_timer = new QTimer(this);
+    connect(m_timer, &QTimer::timeout, this, &AFQSystemAlert::hide);
 
     if (!showInCorner)
         ui->frame_SystemAlertTitle->setVisible(false);
@@ -34,7 +41,21 @@ AFQSystemAlert::AFQSystemAlert(QWidget* parent,
         ui->label_channelID->setText(ui->label_channelID->text() + " : ");
     }
 
+    ui->label_AlertIcon->setProperty("alertType", (int)icon);
+    PolishStyleSheet(ui->label_AlertIcon);
+
+    ui->label_AlertText->setMaximumWidth(mainFrameWidth * 0.7f);
     ui->label_AlertText->setText(alertText);
+    ui->label_AlertText->adjustSize();
+
+    QFontMetrics fm(ui->label_AlertText->font());
+    int textWidth = fm.horizontalAdvance(alertText);
+    int labelWidth = ui->label_AlertText->width();
+
+    if (textWidth > labelWidth) {
+        QString elided = fm.elidedText(alertText, Qt::ElideMiddle, labelWidth);
+        ui->label_AlertText->setText(elided);
+    }
     this->adjustSize();
 
     // change horizontal layout to vertical layout
@@ -58,13 +79,12 @@ AFQSystemAlert::AFQSystemAlert(QWidget* parent,
             this->adjustSize();
         }
     }
-    //
 }
 
 AFQSystemAlert::~AFQSystemAlert()
 {
-    m_qTimer->deleteLater();
-    m_qTimer = nullptr;
+    m_timer->deleteLater();
+    m_timer = nullptr;
 
     delete ui;
 }
@@ -76,10 +96,10 @@ void AFQSystemAlert::mousePressEvent(QMouseEvent* event)
 
 void AFQSystemAlert::showEvent(QShowEvent* event)
 {
-    m_qTimer->start(SYSTEM_ALERT_INTERVAL);
+    m_timer->start(m_showInterval);
 }
 
 void AFQSystemAlert::hideEvent(QHideEvent* event)
 {
-    m_qTimer->stop();
+    m_timer->stop();
 }

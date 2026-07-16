@@ -1,67 +1,38 @@
 ﻿#pragma once
 
-
-#include "Blocks/CBaseDockWidget.h"
-#include <QPushButton>
+#include <QWidget>
 
 namespace Ui
 {
-class AFAdvanceControlsDockWidget;
+class AFAdvanceControlsWidget;
 }
 
-
-class AFAdvanceControlsDockWidget final : public AFQBaseDockWidget
+class AFAdvanceControlsWidget final : public QWidget
 {
-#pragma region QT Field
 	Q_OBJECT
-    
-    enum class WidgetState {
-        Default,
-        Pressed
-    };
 
-#pragma region class initializer, destructor
 public:
-    explicit AFAdvanceControlsDockWidget(QWidget* parent = nullptr);
-    ~AFAdvanceControlsDockWidget();
-#pragma endregion class initializer, destructor
+    explicit AFAdvanceControlsWidget(QWidget* parent = nullptr);
+    ~AFAdvanceControlsWidget();
 
-#pragma region class
 public:
     void EnableReplayBuffer(bool enable);
-#pragma endregion class
-        
+
 public slots:
-    void                qslotReleasedReplayBuffer();
+    void ReplayBufferReleased();
 
 private slots:
-    void                qslotClickedStudioMode();
-    void                qslotClickedReplayBuffer();
-    void                qslotReleasedStudioMode();
-    void                qslotClickedDownloadReplayBuffer();
-#pragma endregion QT Field
+    void ReplayBufferButtonClicked();
+    void SaveReplayBufferButtonClicked();
+    void SaveReplayBufferButtonEnabled();
 
-#pragma region public function
 public:
-    void                SetStudioMode(bool isStudioMode);
-    void                SetReplayBufferStartStopStyle(bool bufferStart); // start, stop
-    void                SetReplayBufferStoppingStyle(); // stopping
-#pragma region public member
+    void SetReplayBufferStartStopStyle(bool bufferStart); // start, stop
+    void SetReplayBufferStoppingStyle(); // stopping
 
-#pragma region private function
 private:
-    void                _Initialize();    
-    void                _SetStudioModeText();    
+    void Initialize();
 
-    // Style
-    void                _ChangeStudioWidgetStyle(WidgetState state); // pressed, normal
-    void                _ChangeStudioIconStyle();
-    void                _ChangeReplayBufferStyle(WidgetState state); // pressed, normal
-#pragma region private member
-private:
-    bool                                        m_IsStudioMode = false; 
-    QPushButton*                                m_qDownloadReplayBuffer;
-    
-    Ui::AFAdvanceControlsDockWidget*            ui;
-#pragma endregion private member
+private:    
+    Ui::AFAdvanceControlsWidget* ui = nullptr;
 };

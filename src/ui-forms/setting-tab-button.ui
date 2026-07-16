@@ -33,7 +33,7 @@
     <number>20</number>
    </property>
    <item>
-    <widget class="QWidget" name="widget_Icon" native="true">
+    <widget class="QWidget" name="iconWidget" native="true">
      <layout class="QHBoxLayout" name="horizontalLayout">
       <property name="spacing">
        <number>0</number>
@@ -64,7 +64,7 @@
        </spacer>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton_Icon">
+       <widget class="QPushButton" name="iconButton">
         <property name="enabled">
          <bool>true</bool>
         </property>
@@ -114,7 +114,7 @@
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="pushButton_Title">
+    <widget class="QPushButton" name="titleButton">
      <property name="enabled">
       <bool>true</bool>
      </property>

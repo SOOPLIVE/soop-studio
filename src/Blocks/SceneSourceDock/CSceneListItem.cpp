@@ -7,9 +7,11 @@
 #include <QPainter>
 #include <QFontMetrics>
 #include <QPixmap>
+#include <QLayout>
 
-#include "qt-wrapper.h"
+#include "qt-wrappers.hpp"
 #include "platform/platform.hpp"
+#include "display-helpers.hpp"
 
 #include "CSceneListView.h"
 
@@ -37,31 +39,25 @@ AFQSceneListItem::AFQSceneListItem(QWidget* parent,
 
 	_CreateSceneItemUI(name);
 
-
-	m_timerScreenShot = new QTimer(this);
-	connect(m_timerScreenShot, &QTimer::timeout, 
-			this, &AFQSceneListItem::qSlotTimerScreenShot);
-
-	m_timerHoverPreview = new QTimer(this);
-	connect(m_timerHoverPreview, &QTimer::timeout, 
-			this, &AFQSceneListItem::qSlotTimerHoverPreview);
+	m_pTimerHoverPreview = new QTimer(this);
+	connect(m_pTimerHoverPreview, &QTimer::timeout, 
+			this, &AFQSceneListItem::qslotTimerHoverPreview);
 
 }
 
 AFQSceneListItem::~AFQSceneListItem()
 {
-	if (m_pScreenshotScene)
-		delete m_pScreenshotScene;
-
-	if (m_pScreenshotObj)
-		delete m_pScreenshotObj;
+	if (m_sceneListPreviewWidget) {
+		m_sceneListPreviewWidget->close();
+		m_sceneListPreviewWidget = nullptr;
+	}
 }
 
-void AFQSceneListItem::qSlotRenameSceneItem()
+void AFQSceneListItem::qslotRenameSceneItem()
 {
-	m_bEditSceneName = true;
+    m_editSceneName = true;
 
-	m_pSceneNameEditButton->hide();
+	m_pFavoriteSceneButton->hide();
 	m_pLabelSceneName->hide();
 
 	const char* name = GetSceneName();
@@ -71,6 +67,43 @@ void AFQSceneListItem::qSlotRenameSceneItem()
 	m_pTextEdit->selectAll();
 	m_pTextEdit->setFocus();
 	m_pTextEdit->show();
+}
+
+void AFQSceneListItem::qslotFavoriteSceneItem(bool checked)
+{
+	obs_source_t* source = obs_scene_get_source(m_obsScene);
+	obs_data_t* scene_data = obs_source_get_settings(source);
+
+	bool refreshSceneList = false;
+	bool checked_ = false;
+	int favorite_scene = obs_data_get_int(scene_data, "favorite_scene");
+	if (1 == favorite_scene) {
+		obs_data_set_int(scene_data, "favorite_scene", 0);
+		refreshSceneList = true;
+		checked_ = false;
+	}
+	else {
+		const int nMaxFavoriteSceneSize = SCENE_CONTEXT.GetFavoriteSceneMaxCount();
+		int nFavoriteSceneCount = SCENE_CONTEXT.GetFavoriteSceneCount();
+		if (nFavoriteSceneCount == nMaxFavoriteSceneSize) {
+			AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, MAINFRAME,
+				"", QTStr("Basic.Scene.FavoriteInfo"), false, true);
+			checked_ = false;
+		}
+		else {
+			obs_data_set_int(scene_data, "favorite_scene", 1);
+			refreshSceneList = true;
+			checked_ = true;
+		}
+	}
+	obs_data_release(scene_data);
+
+	// favorit scene button check -> void AFMainFrame::RefreshSceneUI()
+	if(checked != checked_)
+		m_pFavoriteSceneButton->setChecked(checked_);
+
+	if (refreshSceneList)
+		MAINFRAME->RefreshSceneUI();
 }
 
 inline void clearLayout(QLayout* layout) {
@@ -84,110 +117,93 @@ inline void clearLayout(QLayout* layout) {
 	}
 }
 
-void AFQSceneListItem::qSlotSetHoverSceneItemUI(bool hoverd)
+void AFQSceneListItem::qslotSetHoverSceneItemUI(bool hoverd)
 {
-	if (!m_pSceneNameEditButton /*|| !m_preview*/)
+	if (!m_pFavoriteSceneButton /*|| !m_preview*/)
 		return;
 
-	if(!m_bSelected)
+	if(!m_selected)
 		_SetHoverStyleSheet(hoverd);
 
 	if (hoverd) {
-		if (!m_bEditSceneName)
-			m_pSceneNameEditButton->show();
+		if (!m_editSceneName)
+			m_pFavoriteSceneButton->show();
 
-		if (!m_bSelected)
+		if (!m_selected)
 			_ShowPreview(true);
 	}
 	else {
-		m_pSceneNameEditButton->hide();
+		m_pFavoriteSceneButton->hide();
 		_ShowPreview(false);
 	}
 
-	//if (!m_bSelected)
+	//if (!m_selected)
 	//	qSignalHoverSceneItem(hoverd ? m_obsScene : nullptr);
 
 }
 
-void AFQSceneListItem::qSlotTimerScreenShot()
+void AFQSceneListItem::qslotTimerHoverPreview()
 {
-	obs_source_t* source = obs_scene_get_source(m_obsScene);
-	delete m_pScreenshotObj;
-	m_pScreenshotObj = new AFQScreenShotObj(source, 
-											AFQScreenShotObj::Type::Screenshot_SceneButton);
+	m_pTimerHoverPreview->stop();
 
-	connect(m_pScreenshotObj, &AFQScreenShotObj::qsignalSetPreview,
-			this, &AFQSceneListItem::qslotSetScreenShotPreview);
-}
+	if (m_sceneListPreviewWidget)
+		return;
 
-void AFQSceneListItem::qSlotTimerHoverPreview()
-{
-	m_timerHoverPreview->stop();
+	m_sceneListPreviewWidget = new AFQSceneListPreview(nullptr, obs_scene_get_source(m_obsScene));
 
-	QRect screenRect = QGuiApplication::primaryScreen()->geometry();
 	QPoint pos = QCursor::pos();
+
+	QRect pointInScreenRect;
+	QList<QScreen*> screens = QGuiApplication::screens();
+	for (QScreen* screen : screens) {
+		QRect rcScreen = screen->geometry();
+		if (rcScreen.contains(pos)) {
+			pointInScreenRect = rcScreen;
+			break;
+		}
+	}
 
 	int x = pos.x();
 	int y = pos.y();
 
-	if (pos.x() + m_pScreenshotScene->width() > screenRect.width())
-		x = pos.x() - m_pScreenshotScene->width() - 10;
+	if (pos.x() + m_sceneListPreviewWidget->width() > pointInScreenRect.x() + pointInScreenRect.width())
+		x = pos.x() - m_sceneListPreviewWidget->width() - 10;
 	else
 		x = pos.x() + 10;
 
-	if (pos.y() + m_pScreenshotScene->height() > screenRect.height())
-		y = pos.y() - m_pScreenshotScene->height() - 10;
+	if (pos.y() + m_sceneListPreviewWidget->height() > pointInScreenRect.y() + pointInScreenRect.height())
+		y = pos.y() - m_sceneListPreviewWidget->height() - 10;
 	else
 		y = pos.y() + 10;
 
 	pos.setX(x);
 	pos.setY(y);
 
-	m_pScreenshotScene->move(pos);
-	m_pScreenshotScene->show();
-}
-
-void AFQSceneListItem::qslotSetScreenShotPreview()
-{
-	QPixmap pixmap = m_pScreenshotObj->GetPixmap();
-	m_pScreenshotScene->setPixmap(pixmap.scaled(208, 117));
+	m_sceneListPreviewWidget->move(pos);
+	m_sceneListPreviewWidget->show();
 }
 
 void AFQSceneListItem::SelectScene(bool select)
 {
-	QColor labelFontColor = QColor(255,255,255);
-	if (m_nSceneIndex < 4)
-		labelFontColor = QColor(0, 224, 255);
+	obs_source_t* source = obs_scene_get_source(m_obsScene);
+	obs_data_t* scene_data = obs_source_get_settings(source);
 
 	if (select) {
 		setProperty("sceneBtnType", "selected");
-		m_pLabelSceneIndex->setStyleSheet(QString("QLabel {	"
-												  "color : #FFF;"
-												  "border-radius: 2px;"
-												  "border: 1px solid #67CFDF;"
-												  "font-size : 14px; font-style: normal; font-weight: 400; line-height: normal;"
-												  "padding:2px 3px 4px 3px; }"));
-
-		m_pLabelSceneName->setStyleSheet("QLabel {			\
-										   color : #FFF; padding:2px 0px 4px 0px;}");
+		m_pLabelSceneIndex->setProperty("selected", true);
+		m_pLabelSceneName->setProperty("selected", true);
 	}
 	else {
 		setProperty("sceneBtnType", "idle");
-		m_pLabelSceneIndex->setStyleSheet(QString("QLabel {"
-												  "color : %1;"
-												  "border-radius: 2px;"
-												  "border: 1px solid #3A3D42;"
-												  "font-size : 14px; font-style: normal; font-weight: 400; line-height: normal;"
-												  "padding:2px 3px 4px 3px; }").arg(labelFontColor.name()));
-
-		m_pLabelSceneName->setStyleSheet("QLabel {			\
-										   color : rgba(255, 255, 255, 70%); padding:2px 0px 4px 0px;}");
+		m_pLabelSceneIndex->setProperty("selected", false);
+		m_pLabelSceneName->setProperty("selected", "false");
 	}
 
-	m_bSelected = select;
+    m_selected = select;
 
-	style()->unpolish(this);
-	style()->polish(this);
+	PolishStyleSheet(m_pLabelSceneIndex);
+	PolishStyleSheet(m_pLabelSceneName);
+	PolishStyleSheet(this);
 }
 
 
@@ -196,15 +212,21 @@ void AFQSceneListItem::SetSceneIndexLabelNum(int index)
 	if (!m_pLabelSceneIndex)
 		return;
 
-	m_nSceneIndex = index;
+	m_sceneIndex = index;
 
 	QString sceneIndex = QString("%1").arg(index + 1);
 	m_pLabelSceneIndex->setText(sceneIndex);
 }
 
+void AFQSceneListItem::SetFavoriteSceneButton(bool favorite)
+{
+	if (m_pFavoriteSceneButton)
+		m_pFavoriteSceneButton->setChecked(favorite);
+}
+
 void AFQSceneListItem::ShowRenameSceneUI()
 {
-	emit qSignalShowRenameSceneUI();
+	emit qsignalShowRenameSceneUI();
 }
 
 OBSScene AFQSceneListItem::GetScene()
@@ -223,13 +245,13 @@ const char* AFQSceneListItem::GetSceneName()
 bool AFQSceneListItem::eventFilter(QObject* obj, QEvent* event)
 {
 	if (obj == m_pTextEdit && LineEditCanceled(event)) {
-		m_bChangingName = true;
+        m_changingName = true;
 		_ChangeSceneName(false);
 		return true;
 	}
 
-	if (obj == m_pTextEdit && LineEditChanged(event) && !m_bChangingName) {
-		m_bChangingName = true;
+	if (obj == m_pTextEdit && LineEditChanged(event) && !m_changingName) {
+        m_changingName = true;
 		_ChangeSceneName(true);
 		return true;
 	}
@@ -239,20 +261,20 @@ bool AFQSceneListItem::eventFilter(QObject* obj, QEvent* event)
 
 void AFQSceneListItem::mousePressEvent(QMouseEvent* event)
 {
-	AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-	sceneContext.SetCurSelectedSceneItem(this);
+	SCENE_CONTEXT.SetCurSelectedSceneItem(this);
 
 	m_startPos = mapToParent(event->pos());
 
 	_ShowPreview(false);
 
-	emit qSignalClickedSceneItem();
+	emit qsignalClickedSceneItem();
 }
 
 void AFQSceneListItem::mouseDoubleClickEvent(QMouseEvent* event)
 {
-	emit qSignalDoubleClickedSceneItem();
+	qslotRenameSceneItem();
+
+	emit qsignalDoubleClickedSceneItem();
 }
 
 void AFQSceneListItem::mouseReleaseEvent(QMouseEvent* event)
@@ -276,49 +298,44 @@ void AFQSceneListItem::mouseMoveEvent(QMouseEvent* event)
 
 void AFQSceneListItem::enterEvent(QEnterEvent* event)
 {
-	m_bHovered = true;
+    m_hovered = true;
 
-	qSlotSetHoverSceneItemUI(true);
+	qslotSetHoverSceneItemUI(true);
 
-	emit qSignalHoverButton(QString());
+	emit qsignalHoverButton(QString());
 
 	QFrame::enterEvent(event);
 }
 
 void AFQSceneListItem::leaveEvent(QEvent* event)
 {
-	m_bHovered = false;
+    m_hovered = false;
 
-	qSlotSetHoverSceneItemUI(false);
+	qslotSetHoverSceneItemUI(false);
 
-	emit qSignalLeaveButton();
+	emit qsignalLeaveButton();
 
 	QFrame::leaveEvent(event);
 } 
 
 void AFQSceneListItem::_CreateSceneItemUI(QString scene_name)
 {
-	AFIconContext& iconContext = AFIconContext::GetSingletonInstance();
-
 	QHBoxLayout* hSceneInfoLayout = new QHBoxLayout(this);
 	hSceneInfoLayout->setSpacing(0);
 	hSceneInfoLayout->setContentsMargins(0, 0, 0, 0);
 
 	m_pLabelSceneIndex = new QLabel(this);
-	m_pLabelSceneIndex->setProperty("labelType", "sceneIndex");
-	m_pLabelSceneIndex->setFixedHeight(20);
+	m_pLabelSceneIndex->setObjectName("label_SceneIndex");
+	m_pLabelSceneIndex->setFixedHeight(22);
 	m_pLabelSceneIndex->setText("");
 
 	m_pLabelSceneName = new AFQElidedSlideLabel(this);
-	m_pLabelSceneName->setFixedSize(110,20);
+	m_pLabelSceneName->setFixedHeight(20);
 	m_pLabelSceneName->setText(scene_name);
 	m_pLabelSceneName->setObjectName("label_SceneName");
 
-	connect(this, &AFQSceneListItem::qSignalHoverButton,
-		m_pLabelSceneName, &AFQElidedSlideLabel::qSlotHoverButton);
-
-	connect(this, &AFQSceneListItem::qSignalLeaveButton,
-		m_pLabelSceneName, &AFQElidedSlideLabel::qSlotLeaveButton);
+	connect(this, &AFQSceneListItem::qsignalHoverButton, m_pLabelSceneName, &AFQElidedSlideLabel::qslotHoverButton);
+	connect(this, &AFQSceneListItem::qsignalLeaveButton, m_pLabelSceneName, &AFQElidedSlideLabel::qslotLeaveButton);
 
 	m_pTextEdit = new QLineEdit(this);
 	m_pTextEdit->setTextMargins(4, 0, 0, 0);
@@ -328,18 +345,22 @@ void AFQSceneListItem::_CreateSceneItemUI(QString scene_name)
 	m_pTextEdit->installEventFilter(this);
 	m_pTextEdit->setObjectName("sceneNameEdit");
 
-	m_pSceneNameEditButton = new QPushButton(this);
-	m_pSceneNameEditButton->setObjectName("renameSceneEditBtn");
-	m_pSceneNameEditButton->setFixedSize(12, 12);
-	m_pSceneNameEditButton->setContentsMargins(0, 0, 0, 0);
+	m_pFavoriteSceneButton = new QPushButton(this);
+	m_pFavoriteSceneButton->setObjectName("favoriteSceneButton");
+	m_pFavoriteSceneButton->setCheckable(true);
+	m_pFavoriteSceneButton->setFixedSize(20, 20);
+	m_pFavoriteSceneButton->setIconSize(QSize(20, 20));
+	m_pFavoriteSceneButton->setContentsMargins(0, 0, 0, 0);
+	m_pFavoriteSceneButton->hide();
 
-	m_pSceneNameEditButton->hide();
+	obs_source_t* source = obs_scene_get_source(m_obsScene);
+	obs_data_t* scene_data = obs_source_get_settings(source);
 
-	connect(m_pSceneNameEditButton, &QPushButton::clicked,
-			this, &AFQSceneListItem::qSlotRenameSceneItem);
+	int favorite_scene = obs_data_get_int(scene_data, "favorite_scene");
+	m_pFavoriteSceneButton->setChecked(favorite_scene);
 
-	connect(this, &AFQSceneListItem::qSignalShowRenameSceneUI,
-			this, &AFQSceneListItem::qSlotRenameSceneItem);
+	connect(m_pFavoriteSceneButton, &QPushButton::clicked, this, &AFQSceneListItem::qslotFavoriteSceneItem);
+	connect(this, &AFQSceneListItem::qsignalShowRenameSceneUI, this, &AFQSceneListItem::qslotRenameSceneItem);
 
 	hSceneInfoLayout->addSpacerItem(new QSpacerItem(10, 0, QSizePolicy::Fixed, QSizePolicy::Expanding));
 	hSceneInfoLayout->addWidget(m_pLabelSceneIndex);
@@ -349,18 +370,10 @@ void AFQSceneListItem::_CreateSceneItemUI(QString scene_name)
 	hSceneInfoLayout->addWidget(m_pLabelSceneName);
 
 	hSceneInfoLayout->addSpacerItem(new QSpacerItem(6, 0, QSizePolicy::Expanding, QSizePolicy::Expanding));
-	hSceneInfoLayout->addWidget(m_pSceneNameEditButton);
+	hSceneInfoLayout->addWidget(m_pFavoriteSceneButton);
 	hSceneInfoLayout->addSpacerItem(new QSpacerItem(14, 0, QSizePolicy::Fixed, QSizePolicy::Expanding));
 
-	m_pScreenshotScene = new QLabel(nullptr);
-	m_pScreenshotScene->setFocusPolicy(Qt::NoFocus);
-	m_pScreenshotScene->setWindowFlags(Qt::ToolTip);
-	m_pScreenshotScene->setStyleSheet("QLabel { border: 1px solid #00E0FF; }");
-	m_pScreenshotScene->setFixedSize(208, 117);
-	m_pScreenshotScene->hide();
-
 	this->setLayout(hSceneInfoLayout);
-
 }
 
 void AFQSceneListItem::_StartDrag(QPoint pos)
@@ -369,7 +382,7 @@ void AFQSceneListItem::_StartDrag(QPoint pos)
 		return;
 
 	QMimeData* mimeData = new QMimeData;
-	QString data = QString("%1|%2|%3").arg(m_nSceneIndex).arg(pos.x()).arg(pos.y());
+	QString data = QString("%1|%2|%3").arg(m_sceneIndex).arg(pos.x()).arg(pos.y());
 	mimeData->setData(SCENE_ITEM_DRAG_MIME, data.toStdString().c_str());
 
 	QDrag* drag = new QDrag(this);
@@ -383,15 +396,13 @@ void AFQSceneListItem::_StartDrag(QPoint pos)
 
 void AFQSceneListItem::_ChangeSceneName(bool change)
 {
-	AFLocaleTextManager& locale = AFLocaleTextManager::GetSingletonInstance();
-
 	m_pTextEdit->hide();
-	if(m_bHovered)
-		m_pSceneNameEditButton->show();
+	if(m_hovered)
+		m_pFavoriteSceneButton->show();
 	m_pLabelSceneName->show();
 
-	m_bEditSceneName = false;
-	m_bChangingName = false;
+    m_editSceneName = false;
+    m_changingName = false;
 
 	if (change) {
 
@@ -409,13 +420,13 @@ void AFQSceneListItem::_ChangeSceneName(bool change)
 			if (foundSource) {
 				AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
 										   QT_UTF8(""),
-										   locale.Str("NameExists.Text"));
+										   Str("NameExists.Text"));
 
 			}
 			else if (sceneName.empty()) {
 				AFQMessageBox::ShowMessage(QDialogButtonBox::Ok, this,
 										   QT_UTF8(""),
-										   locale.Str("NameExists.Text"));
+										   Str("NameExists.Text"));
 			}
 
 		} else {
@@ -430,14 +441,13 @@ void AFQSceneListItem::_ChangeSceneName(bool change)
 			};
 
 			std::string source_uuid(obs_source_get_uuid(source));
-			AFMainFrame* main = App()->GetMainView();
-			main->m_undo_s.AddAction(QTStr("Undo.Rename").arg(sceneName.c_str()),
-									 undo, redo,
-									 source_uuid, source_uuid);
+			UNDO_STACK.AddAction(QTStr("Undo.Rename").arg(sceneName.c_str()),
+								 undo, redo,
+								 source_uuid, source_uuid);
 
 			m_pLabelSceneName->setText(QT_UTF8(sceneName.c_str()));
 			obs_source_set_name(source, sceneName.c_str());
-			emit qSignalRenameSceneItem();
+			emit qsignalRenameSceneItem();
 		}
 	}
 }
@@ -448,39 +458,162 @@ void AFQSceneListItem::_SetHoverStyleSheet(bool hover)
 		setProperty("sceneBtnType", "hover");
 	}
 	else {
-		if(m_bSelected)
+		if(m_selected)
 			setProperty("sceneBtnType", "selected");
 		else
 			setProperty("sceneBtnType", "idle");
 	}
 
-	style()->unpolish(this);
-	style()->polish(this);
+	PolishStyleSheet(this);
 }
 
 
 void AFQSceneListItem::_ShowPreview(bool on)
 {
-	if (!m_pScreenshotScene || !m_timerScreenShot)
-		return;
+	if (on) {
+		m_pTimerHoverPreview->start(300);
+	}
 
-	if (on /*&& !m_pScreenshotScene->isVisible()*/) {
-		if (!m_pScreenshotScene->isVisible()) {
-			if (!m_timerScreenShot->isActive()) {
-				qSlotTimerScreenShot();
+	if (!on) {
+		m_pTimerHoverPreview->stop();
 
-				m_timerHoverPreview->start(300);
-				m_timerScreenShot->start(1000);
-			}
+		if (m_sceneListPreviewWidget) {
+			m_sceneListPreviewWidget->close();
+			m_sceneListPreviewWidget = nullptr;
 		}
 	}
+}
 
-	if (!on /*&& m_pScreenshotScene->isVisible()*/) {
-		m_timerScreenShot->stop();
-		m_timerHoverPreview->stop();
-		m_pScreenshotScene->hide();
+OBSSource AFQSceneListItem::_GetSceneSource()
+{
+	return obs_scene_get_source(m_obsScene);
+}
 
-		if (m_pScreenshotScene)
-			m_pScreenshotScene->setPixmap(QPixmap());
-	}
+void AFQSceneListItem::_SceneListPreviewRender(void* data, uint32_t cx, uint32_t cy)
+{
+	AFQSceneListItem* window = static_cast<AFQSceneListItem*>(data);
+
+	if (!window->_GetSceneSource())
+		return;
+
+	uint32_t sourceCX = std::max(obs_source_get_width(window->_GetSceneSource()), 1u);
+	uint32_t sourceCY = std::max(obs_source_get_height(window->_GetSceneSource()), 1u);
+
+	int x, y;
+	int newCX, newCY;
+	float scale;
+
+	GetScaleAndCenterPos(sourceCX, sourceCY, cx, cy, x, y, scale);
+
+	newCX = int(scale * float(sourceCX));
+	newCY = int(scale * float(sourceCY));
+
+	gs_viewport_push();
+	gs_projection_push();
+	const bool previous = gs_set_linear_srgb(true);
+
+	gs_ortho(0.0f, float(sourceCX), 0.0f, float(sourceCY), -100.0f, 100.0f);
+	gs_set_viewport(x, y, newCX, newCY);
+
+	obs_source_video_render(window->_GetSceneSource());
+
+	gs_set_linear_srgb(previous);
+	gs_projection_pop();
+	gs_viewport_pop();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+AFQSceneListPreview::AFQSceneListPreview(QWidget* parent, OBSSource source) :
+	QWidget(parent),
+	m_sceneSource(source)
+{
+	m_weakSceneSource = OBSGetWeakRef(m_sceneSource);
+
+	setAttribute(Qt::WA_DeleteOnClose, true);
+	setFocusPolicy(Qt::NoFocus);
+	setWindowFlags(Qt::ToolTip);
+	hide();
+
+	QVBoxLayout* vLayout = new QVBoxLayout();	
+	setFixedSize(220, 129);
+	setStyleSheet("QWidget { background-color : #3A3D42; }");
+	vLayout->setContentsMargins(QMargins(7, 7, 7, 7));
+	setLayout(vLayout);
+
+	m_previewScene = new AFQTDisplay(this);
+	m_previewScene->setFixedSize(206, 115);
+
+	vLayout->addWidget(m_previewScene);
+
+	auto addDrawCallback = [this]() {
+		obs_display_add_draw_callback(
+			m_previewScene->GetDisplay(), AFQSceneListPreview::SceneListPreviewRender, this);
+		obs_display_set_background_color(m_previewScene->GetDisplay(), GREY_COLOR_BACKGROUND);
+	};
+
+	connect(m_previewScene, &AFQTDisplay::qsignalDisplayCreated, addDrawCallback);
+
+	if (m_sceneSource)
+		obs_source_inc_showing(m_sceneSource);
+
+}
+AFQSceneListPreview::~AFQSceneListPreview()
+{
+	obs_display_remove_draw_callback(m_previewScene->GetDisplay(),
+		AFQSceneListPreview::SceneListPreviewRender, this);
+
+	if (m_sceneSource)
+		obs_source_dec_showing(m_sceneSource);
+
+	m_previewScene = nullptr;
+
+	m_sceneSource = nullptr;
+}
+
+OBSSource AFQSceneListPreview::GetSceneSource()
+{
+	return OBSGetStrongRef(m_weakSceneSource);
+}
+void AFQSceneListPreview::SceneListPreviewRender(void* data, uint32_t cx, uint32_t cy)
+{
+	AFQSceneListPreview* window = static_cast<AFQSceneListPreview*>(data);
+
+	if (!window->GetSceneSource())
+		return;
+
+	uint32_t sourceCX = std::max(obs_source_get_width(window->GetSceneSource()), 1u);
+	uint32_t sourceCY = std::max(obs_source_get_height(window->GetSceneSource()), 1u);
+
+	int x, y;
+	int newCX, newCY;
+	float scale;
+
+	GetScaleAndCenterPos(sourceCX, sourceCY, cx, cy, x, y, scale);
+
+	newCX = int(scale * float(sourceCX));
+	newCY = int(scale * float(sourceCY));
+
+	gs_viewport_push();
+	gs_projection_push();
+	const bool previous = gs_set_linear_srgb(true);
+
+	gs_ortho(0.0f, float(sourceCX), 0.0f, float(sourceCY), -100.0f, 100.0f);
+	gs_set_viewport(x, y, newCX, newCY);
+
+	obs_source_video_render(window->GetSceneSource());
+
+	gs_set_linear_srgb(previous);
+	gs_projection_pop();
+	gs_viewport_pop();
 }

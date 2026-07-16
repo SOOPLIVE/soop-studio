@@ -3,23 +3,23 @@
 
 #include "Application/CApplication.h"
 
+#include "CoreModel/Statistics/CStatistics.h"
+
+#include "MainFrame/CMainFrame.h"
+
 AFResourceExtension::AFResourceExtension(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::AFResourceExtension)
 {
     ui->setupUi(this);
+
     setAttribute(Qt::WA_DeleteOnClose);
 }
 
 AFResourceExtension::~AFResourceExtension()
 {
-    disconnect(ui->pushButton_Stat, &QPushButton::clicked,
-        this, &AFResourceExtension::qsignalStatWindowTriggered);
-
-    disconnect(App()->GetMainView(), &AFMainFrame::qsignalRefreshTimerTick,
-        this, &AFResourceExtension::qslotResourceUpdateTimerTick);
-
-    m_Statistics = nullptr;
+    disconnect(ui->pushButton_Stat, &QPushButton::clicked, this, &AFResourceExtension::qsignalStatWindowTriggered);
+    disconnect(MAINFRAME, &AFMainFrame::qsignalRefreshTimerTick, this, &AFResourceExtension::qslotResourceUpdateTimerTick);
     //
     delete ui;
 }
@@ -29,6 +29,9 @@ void AFResourceExtension::qslotResourceUpdateTimerTick()
     _RefreshCPUText();
     _RefreshDiskText();
     _RefreshMemoryText();
+    //_RefreshNetworkText();
+
+    _RefreshFPSText();
 }
 
 void AFResourceExtension::qslotCPUState(PCStatState state) {
@@ -54,50 +57,52 @@ void AFResourceExtension::qslotNetworkState(PCStatState state) {
         ui->label_NetworkValue->setText("Bad");
 }
 
+void AFResourceExtension::qslotFPSState(PCStatState state)
+{
+    AFMainFrame::SetPCStateIconStyle(ui->label_FPSIcon, state);
+}
+
 void AFResourceExtension::ResourceExtensionInit()
 {
-    m_Statistics = App()->GetStatistics();
-
-    connect(ui->pushButton_Stat, &QPushButton::clicked,
-        this, &AFResourceExtension::qsignalStatWindowTriggered);
-    connect(App()->GetMainView(), &AFMainFrame::qsignalRefreshTimerTick,
-        this, &AFResourceExtension::qslotResourceUpdateTimerTick);
-    connect(m_Statistics, &AFStatistics::qsignalCPUState, 
-        this, &AFResourceExtension::qslotCPUState);
-    connect(m_Statistics, &AFStatistics::qsignalDiskState, 
-        this, &AFResourceExtension::qslotDiskState);
-    connect(m_Statistics, &AFStatistics::qsignalMemoryState, 
-        this, &AFResourceExtension::qslotMemoryState);
-    connect(m_Statistics, &AFStatistics::qsignalNetworkState, 
-        this, &AFResourceExtension::qslotNetworkState);
+    auto& statistics = STATISTICS;
+    connect(ui->pushButton_Stat, &QPushButton::clicked, this, &AFResourceExtension::qsignalStatWindowTriggered);
+    connect(MAINFRAME, &AFMainFrame::qsignalRefreshTimerTick, this, &AFResourceExtension::qslotResourceUpdateTimerTick);
+    connect(&statistics, &AFStatistics::qsignalCPUState, this, &AFResourceExtension::qslotCPUState);
+    connect(&statistics, &AFStatistics::qsignalDiskState, this, &AFResourceExtension::qslotDiskState);
+    connect(&statistics, &AFStatistics::qsignalMemoryState, this, &AFResourceExtension::qslotMemoryState);
+    connect(&statistics, &AFStatistics::qsignalNetworkState, this, &AFResourceExtension::qslotNetworkState);
 
     // Set State Icon
-    PCStatState stateState = m_Statistics->GetCPUIconState();
+    PCStatState stateState = statistics.GetCPUIconState();
     qslotCPUState(stateState);
-    stateState = m_Statistics->GetDiskIconState();
+    stateState = statistics.GetDiskIconState();
     qslotDiskState(stateState);
-    stateState = m_Statistics->GetMemoryIconState();
+    stateState = statistics.GetMemoryIconState();
     qslotMemoryState(stateState);
-    stateState = m_Statistics->GetNetworkIconState();
+    stateState = statistics.GetNetworkIconState();
     qslotNetworkState(stateState);
 
     // Set State
     _RefreshCPUText();
     _RefreshDiskText();
     _RefreshMemoryText();
+    connect(&statistics, &AFStatistics::qsignalFPSState, this, &AFResourceExtension::qslotFPSState);
+    _RefreshFPSText();
+    stateState = statistics.GetNetworkIconState();
+    qslotFPSState(stateState);
 }
 
 void AFResourceExtension::_RefreshCPUText()
 {
     QString text;
-    text += QString::number(m_Statistics->GetCPUUsage(), 'f', 1) + QString("%");
+    text += QString::number(STATISTICS.GetCPUUsage(), 'f', 1) + QString("%");
 
     ui->label_CpuValue->setText(text);
 }
 
 void AFResourceExtension::_RefreshDiskText()
 {
-    uint64_t num_bytes = m_Statistics->GetDiskSize();
+    uint64_t num_bytes = STATISTICS.GetDiskSize();
     double gigBytes = (double)num_bytes / (1024 * 1024 * 1024);
     QString text;
     text += QString::number(gigBytes, 'f', 1) + QString("GB");
@@ -107,7 +112,7 @@ void AFResourceExtension::_RefreshDiskText()
 
 void AFResourceExtension::_RefreshMemoryText()
 {
-    long double num = (long double)m_Statistics->GetMemorySize();
+    long double num = (long double)STATISTICS.GetMemorySize();
 
     QString str = QString::number(num, 'f', 1) + QStringLiteral("MB");
     ui->label_MemoryValue->setText(str);
@@ -115,7 +120,19 @@ void AFResourceExtension::_RefreshMemoryText()
 
 void AFResourceExtension::_RefreshNetworkText()
 {
-    int network = m_Statistics->GetNetworkState();
+    int network = STATISTICS.GetNetworkState();
     QString str = QString::number(network) + QStringLiteral("%");
     ui->label_NetworkValue->setText(str);
+}
+
+void AFResourceExtension::_RefreshFPSText()
+{
+    struct obs_video_info ovi = {};
+    obs_get_video_info(&ovi);
+    double obsFPS = (double)ovi.fps_num / (double)ovi.fps_den;
+
+    double fps = STATISTICS.GetCurFPS();
+    QString str = QString("%1 / %2").arg(QString::number(fps, 'f', 2)).arg(QString::number(obsFPS, 'f', 2));
+    ui->label_FPSValue->setText(str);
+    //ui->label_F
 }

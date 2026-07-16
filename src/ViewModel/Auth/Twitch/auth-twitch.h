@@ -3,17 +3,17 @@
 #include <qtimer.h>
 #include <json11.hpp>
 
+#include "Common/StudioDefine.h"
+
+#include "CoreModel/Auth/SBaseAuth.h"
+#include "CoreModel/Auth/CAuthManager.h"
+
 #include "ViewModel/Auth/COAuthLogin.hpp"
 
 class AFAddStreamWidget;
 
-static AFAuth::Def twitchDef = {"Twitch", AFAuth::Type::OAuth_StreamKey};
+static AFAuth::Def twitchDef = { PLATFORM_TWITCH, AFAuth::Type::OAuth_StreamKey};
 
-#define TWITCH_AUTH_URL				"https://id.twitch.tv/oauth2/authorize"
-#define TWITCH_REDIRECT_URL			""
-#define TWITCH_TOKEN_URL			"https://id.twitch.tv/oauth2/token"
-
-#define TWITCH_DASHBOARD_URL	"https://dashboard.twitch.tv/u/" // ex) https://dashboard.twitch.tv/u/twitchid/home
 
 class TwitchAuth : public AFOAuthStreamKey {
 	Q_OBJECT
@@ -26,6 +26,7 @@ public:
 	virtual void DeleteCookies() override;
 
     std::string GetUrlProfileImg();
+	bool SendChatMessage(std::string message);
     
 public slots:
 	void qslotUrlChanged(const QString& url);
@@ -47,7 +48,7 @@ private:
 	QString GetParseKey(const QString& data, const std::string& token);
 
 private:
-	AFAddStreamWidget* m_widget = nullptr;
+	AFAddStreamWidget* m_pWidget = nullptr;
 	QTimer m_uiLoadTimer;
 
 	bool m_uiLoaded = false;

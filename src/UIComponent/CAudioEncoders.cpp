@@ -1,7 +1,4 @@
-﻿// [copy-obs]
-
-
-#include <algorithm>
+﻿#include <algorithm>
 #include <iomanip>
 #include <map>
 #include <memory>
@@ -11,7 +8,8 @@
 #include <vector>
 
 #include "CAudioEncoders.h"
-#include "CoreModel/Config/CConfigManager.h"
+
+#include "Application/CApplication.h"
 
 using namespace std;
 
@@ -82,8 +80,7 @@ static void HandleSampleRate(obs_property_t *prop, const char *id)
 	//	return;
 	//}
 
-	uint32_t sampleRate =
-		config_get_uint(AFConfigManager::GetSingletonInstance().GetBasic(), "Audio", "SampleRate");
+	uint32_t sampleRate = config_get_uint(ACTIVECONFIG, "Audio", "SampleRate");
 
 	obs_data_set_int(data.get(), "samplerate", sampleRate);
 
@@ -180,8 +177,8 @@ static void PopulateBitrateLists()
 				     "Could not enumerate %s encoder "
 				     "bitrates",
 				     id);
-
-			ostringstream ss;
+			//
+			ss.clear();
 			for (auto &bitrate : encoderBitrates[encoder])
 				ss << "\n	" << setw(3) << bitrate
 				   << " kbit/s";

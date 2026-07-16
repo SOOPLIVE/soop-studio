@@ -6,14 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>720</width>
-    <height>720</height>
+    <width>620</width>
+    <height>680</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>620</width>
-    <height>720</height>
+    <height>680</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -35,65 +35,6 @@
    <property name="bottomMargin">
     <number>0</number>
    </property>
-   <item>
-    <widget class="QWidget" name="widget_Top" native="true">
-     <property name="minimumSize">
-      <size>
-       <width>0</width>
-       <height>36</height>
-      </size>
-     </property>
-     <property name="maximumSize">
-      <size>
-       <width>16777215</width>
-       <height>36</height>
-      </size>
-     </property>
-     <layout class="QHBoxLayout" name="horizontalLayout_4">
-      <property name="spacing">
-       <number>0</number>
-      </property>
-      <property name="leftMargin">
-       <number>16</number>
-      </property>
-      <property name="topMargin">
-       <number>6</number>
-      </property>
-      <property name="rightMargin">
-       <number>8</number>
-      </property>
-      <property name="bottomMargin">
-       <number>6</number>
-      </property>
-      <item>
-       <widget class="QLabel" name="label_Title">
-        <property name="text">
-         <string>Basic.MainMenu.Addon.CustomBrowserDocks</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="pushButton_Close">
-        <property name="minimumSize">
-         <size>
-          <width>24</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>24</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
    <item>
     <widget class="QWidget" name="widget_Middle" native="true">
      <property name="minimumSize">
@@ -134,8 +75,8 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>720</width>
-           <height>604</height>
+           <width>620</width>
+           <height>600</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -161,13 +102,13 @@
               <number>10</number>
              </property>
              <property name="leftMargin">
-              <number>30</number>
+              <number>20</number>
              </property>
              <property name="topMargin">
               <number>23</number>
              </property>
              <property name="rightMargin">
-              <number>30</number>
+              <number>20</number>
              </property>
              <property name="bottomMargin">
               <number>0</number>
@@ -203,16 +144,38 @@
                  <number>0</number>
                 </property>
                 <item>
-                 <widget class="QLabel" name="label_Name">
+                 <widget class="QLabel" name="label_AutoOpen">
                   <property name="minimumSize">
                    <size>
-                    <width>200</width>
+                    <width>52</width>
                     <height>0</height>
                    </size>
                   </property>
                   <property name="maximumSize">
                    <size>
-                    <width>200</width>
+                    <width>52</width>
+                    <height>16777215</height>
+                   </size>
+                  </property>
+                  <property name="text">
+                   <string>CustomBrowser.OpenBrowser</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="label_Name">
+                  <property name="minimumSize">
+                   <size>
+                    <width>148</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="maximumSize">
+                   <size>
+                    <width>148</width>
                     <height>16777215</height>
                    </size>
                   </property>
@@ -298,25 +261,6 @@
        </spacer>
       </item>
       <item>
-       <widget class="QPushButton" name="pushButton_Apply">
-        <property name="minimumSize">
-         <size>
-          <width>128</width>
-          <height>40</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>128</width>
-          <height>40</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>Apply</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="pushButton_Cancel">
         <property name="minimumSize">
          <size>
@@ -332,6 +276,25 @@
         </property>
         <property name="text">
          <string>Cancel</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_Apply">
+        <property name="minimumSize">
+         <size>
+          <width>128</width>
+          <height>40</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>128</width>
+          <height>40</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Apply</string>
         </property>
        </widget>
       </item>

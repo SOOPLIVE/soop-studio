@@ -1,0 +1,5 @@
+
+if(CMAKE_HOST_SYSTEM_NAME MATCHES "(Darwin)")
+  set(PLATFORM_DIR "${CMAKE_SOURCE_DIR}/platform/mac")
+  set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
+endif()

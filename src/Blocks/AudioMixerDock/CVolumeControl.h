@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+// {obs-studio path}\UI\volume-control.hpp
+
 #include <obs.hpp>
 #include <QWidget>
 #include <QPaintEvent>
@@ -9,29 +11,14 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QCheckBox>
+#include <QPointer>
+
+#include "mute-checkbox.hpp"
 
 #include "UIComponent/CCustomMenu.h"
 
 class AFQVolumeMeterTimer;
 
-class AFQMuteCheckBox : public QCheckBox {
-	Q_OBJECT
-public:
-	AFQMuteCheckBox(QWidget* parent = nullptr) : QCheckBox(parent)
-	{
-		setTristate(true);
-	}
-protected:
-	/* While we need it to be tristate internally, we don't want a user being
-	 * able to manually get into the partial state. */
-	void nextCheckState() override
-	{
-		if (checkState() != Qt::Checked)
-			setCheckState(Qt::Checked);
-		else
-			setCheckState(Qt::Unchecked);
-	}
-};
 
 class AFQVolumeMeter : public QWidget {
 	Q_OBJECT
@@ -64,9 +51,9 @@ private:
 	QMutex dataMutex;
 
 	bool recalculateLayout = true;
-
+    
 	uint64_t currentLastUpdateTime = 0;
-	float m_currentMaxPeak = -M_INFINITE;
+	float currentMaxPeak = -M_INFINITE;			// obs 31.0.2 remove
 	float currentMagnitude[MAX_AUDIO_CHANNELS];
 	float currentPeak[MAX_AUDIO_CHANNELS];
 	float currentInputPeak[MAX_AUDIO_CHANNELS];
@@ -122,9 +109,9 @@ private:
 	uint64_t lastRedrawTime = 0;
 	int channels = 0;
 	bool clipping = false;
-	bool vertical;
+	bool vertical = false;
 	bool muted = false;
-	bool m_bMeterTickEnabled = false;
+	bool meterTickEnabled = false;	// obs 31.0.2 remove
 
 public:
 	explicit AFQVolumeMeter(QWidget* parent = nullptr,
@@ -197,8 +184,8 @@ public:
 	void setPeakMeterType(enum obs_peak_meter_type peakMeterType);
 	virtual void mousePressEvent(QMouseEvent* event) override;
 	virtual void wheelEvent(QWheelEvent* event) override;
-	void SetMeterTickEnabled(bool enable) { m_bMeterTickEnabled = enable; }
-	float GetCurrentMaxPeak() { return m_currentMaxPeak; }
+	void SetMeterTickEnabled(bool enable) { meterTickEnabled = enable; }
+	float GetCurrentMaxPeak();
 
 protected:
 	void paintEvent(QPaintEvent* event) override;
@@ -224,24 +211,23 @@ class AFQVolControl : public QWidget {
 
 private:
 	OBSSource source;
-	QLabel* nameLabel;
-	QLabel* volLabel;
+	std::vector<OBSSignal> sigs;
+	QLabel* nameLabel = nullptr;
+	QLabel* volLabel = nullptr;
+	AFQVolumeMeter* volMeter = nullptr;
 	QPointer<QCheckBox> lockIcon;
 
-	QSlider* slider;
-	AFQMuteCheckBox* mute;
+	QSlider* slider = nullptr;
+	MuteCheckBox* mute = nullptr;
 	QPushButton* config = nullptr;
 	OBSFader obs_fader;
 	OBSVolMeter obs_volmeter;
+	bool vertical = false;
+	AFQCustomMenu* contextMenu = nullptr;
 
-	AFQCustomMenu* contextMenu;
-	AFQVolumeMeter* volMeter;
-
-	QPointer<QTimer> m_UpdatePeakTextTimer;
-
-	QString m_strSourceName = "";
-
-	bool m_bValueChangedByUser = true;
+	QPointer<QTimer> updatePeakTextTimer;
+	QString sourceName = "";
+	int leftOverDelta = 0;
 
 	static void OBSVolumeChanged(void* param, float db);
 	static void OBSVolumeLevel(void* data,
@@ -260,7 +246,7 @@ private slots:
 
 	void SliderChanged(int vol);
 	void updateText();
-	void qslotUpdateCurrentDbText();
+	void UpdateCurrentDbText();
 
 	void SetConfigButtonReleased();
 	void SetConfigButtonPressed();
@@ -272,8 +258,7 @@ signals:
 	void ConfigClicked();
 
 public:
-	explicit AFQVolControl(QWidget* parent, OBSSource source, bool showConfig = false,
-		bool vertical = false);
+	explicit AFQVolControl(QWidget* parent, OBSSource source, bool showConfig = false, bool vertical = false);
 	~AFQVolControl();
 
 	inline obs_source_t* GetSource() const { return source; }
@@ -289,14 +274,11 @@ public:
 
 	void refreshColors();
 
-	void ChangeVolume(int volume);
-	void ChangeMuteState();
+	void MoveVolumeBy(int delta);
 
 	bool IsMuted();
 	int GetVolume();
 	float GetCurrentPeak();
-
-	void ValueChangedByUser(bool byUser) { m_bValueChangedByUser = byUser; }
 
 protected:
 	virtual void showEvent(QShowEvent* event) override;

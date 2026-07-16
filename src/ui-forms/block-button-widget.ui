@@ -131,13 +131,13 @@
         <property name="minimumSize">
          <size>
           <width>46</width>
-          <height>46</height>
+          <height>45</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
           <width>46</width>
-          <height>46</height>
+          <height>45</height>
          </size>
         </property>
         <property name="styleSheet">
@@ -145,10 +145,6 @@
         </property>
         <property name="text">
          <string/>
-        </property>
-        <property name="icon">
-         <iconset>
-          <normaloff>:/image/resource/block-icon/scenesource.png</normaloff>:/image/resource/block-icon/scenesource.png</iconset>
         </property>
         <property name="iconSize">
          <size>
@@ -202,14 +198,14 @@
        <widget class="QLabel" name="label_Toggle">
         <property name="minimumSize">
          <size>
-          <width>3</width>
-          <height>3</height>
+          <width>4</width>
+          <height>4</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
-          <width>3</width>
-          <height>3</height>
+          <width>4</width>
+          <height>4</height>
          </size>
         </property>
         <property name="styleSheet">

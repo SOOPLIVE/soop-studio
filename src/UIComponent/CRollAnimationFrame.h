@@ -36,15 +36,15 @@ private:
 
 #pragma region private member var
 private:
-    int m_iFrontFrameCount = 0;
+    int m_frontFrameCount = 0;
 
-    bool m_bAnimatingLock = false;
+    bool m_animatingLock = false;
 
-    QList<AFQLoginToggleFrame*> m_FramesList = QList<AFQLoginToggleFrame*>();
+    QList<AFQLoginToggleFrame*> m_framesList = QList<AFQLoginToggleFrame*>();
 
-    const QRect m_TopRect = QRect(15, 0, 128, 28);
-    const QRect m_FrontRect = QRect(10, 15, 138, 38);
-    const QRect m_BottomRect = QRect(15, 40, 128, 28);
+    const QRect m_topRect = QRect(15, 0, 128, 28);
+    const QRect m_frontRect = QRect(10, 15, 138, 38);
+    const QRect m_bottomRect = QRect(15, 40, 128, 28);
 #pragma region private member var
 };
 

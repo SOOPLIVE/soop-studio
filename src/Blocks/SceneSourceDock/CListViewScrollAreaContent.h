@@ -4,11 +4,11 @@
 #include <QTimer>
 #include <QScrollArea>
 
-enum class DragDirection { Top, Bottom, None };
+enum class DragDirection;
 
 class AFQListScrollAreaContent : public QWidget
 {
-	Q_OBJECT;
+	Q_OBJECT
 
 public:
 	AFQListScrollAreaContent(QWidget* parent = nullptr);
@@ -45,7 +45,7 @@ private:
 	QPoint	m_posLineStart;
 	QPoint	m_posLineEnd;
 
-	QScrollArea* m_scrollArea = nullptr;
-	QTimer* m_timerScroll = nullptr;
+	QScrollArea* m_pScrollArea = nullptr;
+	QTimer* m_pTimerScroll = nullptr;
 
 };

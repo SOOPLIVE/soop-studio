@@ -7,13 +7,10 @@
 //
 class AFSimpleOutput : public AFBasicOutputHandler
 {
-#pragma region QT Field, CTOR/DTOR
 public:
     AFSimpleOutput(AFMainFrame* main);
-	~AFSimpleOutput();
-#pragma endregion QT Field, CTOR/DTOR
+    ~AFSimpleOutput() {}
 
-#pragma region public func
 public:
     int CalcCRF(int crf);
 
@@ -25,7 +22,7 @@ public:
     void UpdateRecordingSettings_apple(int quality);
 #ifdef ENABLE_HEVC
     void UpdateRecordingSettings_apple_hevc(int quality);
-#endif
+#endif // ENABLE_HEVC
     void UpdateRecordingSettings();
     void UpdateRecordingAudioSettings();
     virtual void Update() override;
@@ -42,6 +39,7 @@ public:
     void UpdateRecording();
     bool ConfigureRecording(bool useReplayBuffer);
 
+    bool IsVodTrackEnabled(obs_service_t* service);
     void SetupVodTrack(obs_service_t* service);
 
     virtual bool SetupStreaming(obs_service_t* service) override;
@@ -54,31 +52,22 @@ public:
     virtual bool StreamingActive() const override;
     virtual bool RecordingActive() const override;
     virtual bool ReplayBufferActive() const override;
-#pragma endregion public func
 
-#pragma region private func
 private:
     bool icq_available(obs_encoder_t* encoder);
-#pragma endregion private func
 
-#pragma region public member var
-#pragma endregion public member var
+private:
+	OBSEncoder m_audioStreaming;
+	OBSEncoder m_videoStreaming;
+	OBSEncoder m_audioRecording;
+	OBSEncoder m_audioArchive;
+	OBSEncoder m_videoRecording;
+	OBSEncoder m_audioTrack[MAX_AUDIO_MIXES];
 
-#pragma region private member var
-	OBSEncoder audioStreaming;
-	OBSEncoder videoStreaming;
-	OBSEncoder audioRecording;
-	OBSEncoder audioArchive;
-	OBSEncoder videoRecording;
-	OBSEncoder audioTrack[MAX_AUDIO_MIXES];
-
-	std::string	videoEncoder;
-	std::string videoQuality;
-	bool usingRecordingPreset = false;
-	bool recordingConfigured = false;
-	bool ffmpegOutput = false;
-	bool lowCPUx264 = false;
-#pragma endregion private member var
+	std::string	m_videoEncoder;
+	std::string m_videoQuality;
+	bool m_usingRecordingPreset = false;
+	bool m_recordingConfigured = false;
+	bool m_ffmpegOutput = false;
+	bool m_lowCPUx264 = false;
 };
-
-#include "COutput.inl"

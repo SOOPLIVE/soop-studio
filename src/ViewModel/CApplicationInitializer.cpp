@@ -7,6 +7,12 @@
 
 #ifdef _WIN32
 #include <filesystem>
+#include <wincrypt.h>
+#include <Wintrust.h>
+#include <Softpub.h>
+
+#pragma comment(lib, "Wintrust.lib")
+#pragma comment(lib, "Crypt32.lib")
 #else
 #include <signal.h>
 #include <pthread.h>
@@ -14,30 +20,27 @@
 
 
 #include <curl/curl.h>
-
-
 #include <obs.hpp>
 #include <util/platform.h>
-
+#include <util/windows/win-version.h>
 
 #include "platform/platform.hpp"
-
 #include "Common/StringMiscUtils.h"
+#include "Common/StudioDefine.h"
 #include "CoreModel/Config/CArgOption.h"
 #include "CoreModel/Config/CConfigManager.h"
 #include "CoreModel/Config/CMakeDirectory.h"
 #include "CoreModel/Locale/CLocaleTextManager.h"
 #include "CoreModel/Log/CLogManager.h"
 
-
-#ifndef _WIN32
-    #include "Application/CApplication.h"
-#endif
-
+#include "Application/CApplication.h"
 
 #define MAX_CRASH_REPORT_SIZE (150 * 1024)
 
-
+AFApplicationInitializer::AFApplicationInitializer()
+	:m_logManager(std::make_unique<AFLogManager>()),
+	m_argOption(std::make_unique<AFArgOption>())
+{}
 AFApplicationInitializer::~AFApplicationInitializer()
 {
 #ifdef _WIN32
@@ -48,8 +51,6 @@ AFApplicationInitializer::~AFApplicationInitializer()
 #ifdef _WIN32
 void AFApplicationInitializer::LoadDebugPrivilege()
 {
-	auto& logManger = AFLogManager::GetSingletonInstance();
-
 	const DWORD flags = TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY;
 	TOKEN_PRIVILEGES tp;
 	HANDLE token;
@@ -78,12 +79,34 @@ void AFApplicationInitializer::LoadDebugPrivilege()
 
 		if (!AdjustTokenPrivileges(token, false, &tp, sizeof(tp), NULL, NULL))
 		{
-			logManger.OBSBaseLog(LOG_INFO, "Could not set privilege to "
-								 "increase GPU priority");
+			blog(LOG_INFO, "Could not set privilege to increase GPU priority");
 		}
 	}
 
 	CloseHandle(token);
+}
+
+static constexpr char vcRunErrorTitle[] = "Outdated Visual C++ Runtime";
+static constexpr char vcRunErrorMsg[] = "SOOP Studio requires a newer version of the Microsoft Visual C++ "
+										"Redistributables.\n\nYou will now be directed to the download page.";
+static constexpr char vcRunInstallerUrl[] = "https://obsproject.com/visual-studio-2022-runtimes";
+
+static bool vc_runtime_outdated()
+{
+	win_version_info ver;
+	if(!get_dll_ver(L"msvcp140.dll", &ver))
+		return true;
+	/* Major is always 14 (hence 140.dll), so we only care about minor. */
+	if(ver.minor >= 40)
+		return false;
+
+	int choice = MessageBoxA(NULL, vcRunErrorMsg, vcRunErrorTitle, MB_OKCANCEL | MB_ICONERROR | MB_TASKMODAL);
+	if(choice == IDOK) {
+		/* Open the URL in the default browser. */
+		ShellExecuteA(NULL, "open", vcRunInstallerUrl, NULL, NULL, SW_SHOWNORMAL);
+	}
+
+	return true;
 }
 #endif
 
@@ -113,6 +136,10 @@ void AFApplicationInitializer::AppEntrySetting(int argc, char* argv[])
 #endif
 
 #ifdef _WIN32
+	// Abort as early as possible if MSVC runtime is outdated
+	/*if(vc_runtime_outdated())
+		return;*/
+
 	// Try to keep this as early as possible
 	install_dll_blocklist_hook();
 
@@ -129,17 +156,21 @@ void AFApplicationInitializer::AppEntrySetting(int argc, char* argv[])
 	}
 #endif
 
-	base_get_log_handler(AFLogManager::GetSingletonInstance().GetDefLogHandler(), nullptr);
+#if defined(__APPLE__) && !defined(_DEBUG)
+    InitPLCrashReporter(_MainCrashHandler);
+#endif
+    
+	base_get_log_handler(LOGMANAGER.GetDefLogHandler(), nullptr);
+	base_get_api_log_handler(LOGMANAGER.GetDefAPILogHandler(), nullptr);
 
-
-	AFArgOption* pTmpArgOption = AFConfigManager::GetSingletonInstance().GetArgOption();
-
-	pTmpArgOption->LoadArgProgram(argc, argv);
+	auto& argOption = ARGOPTION;
+	//
+	argOption.LoadArgProgram(argc, argv);
 
 #if ALLOW_PORTABLE_MODE
-	if (pTmpArgOption && pTmpArgOption->GetPortableMode() == false) 
+	if (argOption.GetPortableMode() == false) 
 	{
-		pTmpArgOption->SetPortableMode(
+		argOption.SetPortableMode(
 			os_file_exists(BASE_PATH "/portable_mode") ||
 			os_file_exists(BASE_PATH "/obs_portable_mode") ||
 			os_file_exists(BASE_PATH "/portable_mode.txt") ||
@@ -153,97 +184,58 @@ void AFApplicationInitializer::AppEntrySetting(int argc, char* argv[])
 	//		os_file_exists(BASE_PATH "/disable_updater.txt");
 	//}
 
-	if (pTmpArgOption && pTmpArgOption->GetDisableMissingFilesCheck() == false)
+	if (argOption.GetDisableMissingFilesCheck() == false)
 	{
-		pTmpArgOption->SetDisableMissingFilesCheck(
-			os_file_exists(BASE_PATH
-				"/disable_missing_files_check") ||
-			os_file_exists(BASE_PATH
-				"/disable_missing_files_check.txt")
+		argOption.SetDisableMissingFilesCheck(
+			os_file_exists(BASE_PATH "/disable_missing_files_check") ||
+			os_file_exists(BASE_PATH "/disable_missing_files_check.txt")
 		);
 	}
 #endif
 
-
-	_CheckSafeModeSentinel();
-
-	//upgrade_settings();
+	//_CheckSafeModeSentinel();
 
 	curl_global_init(CURL_GLOBAL_ALL);
 }
 
 void AFApplicationInitializer::AppEntryRelease()
 {
-	auto& logManger = AFLogManager::GetSingletonInstance();
-
 #ifdef _WIN32
 	_ReleaseRTWorkQ();
 	log_blocked_dlls();
 #endif
 
-	_DeleteSafeModeSentinel();
-	logManger.OBSBaseLog(LOG_INFO, "Number of memory leaks: %ld", bnum_allocs());
+	//_DeleteSafeModeSentinel();
+	//blog(LOG_INFO, "Number of memory leaks: %ld", bnum_allocs());
 	base_set_log_handler(nullptr, nullptr);
 }
 
-void AFApplicationInitializer::AppSetGlobalConfig(AFMakeDirectory* pDirMaker, bool bStateAppActive)
+void AFApplicationInitializer::AppSetGlobalConfig(bool bStateAppActive)
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-	auto& localeTextManager = AFLocaleTextManager::GetSingletonInstance();
-
-	config_set_default_string(confManager.GetGlobal(), "Basic", "Profile",
-							  localeTextManager.Str("Untitled"));
-	config_set_default_string(confManager.GetGlobal(), "Basic", "ProfileDir",
-							  localeTextManager.Str("Untitled"));
-	config_set_default_string(confManager.GetGlobal(), "Basic", "SceneCollection",
-							  localeTextManager.Str("Untitled"));
-	config_set_default_string(confManager.GetGlobal(), "Basic", "SceneCollectionFile",
-							  localeTextManager.Str("Untitled"));
-	config_set_default_bool(confManager.GetGlobal(), "Basic", "ConfigOnNewProfile", true);
-
-	if (!config_has_user_value(confManager.GetGlobal(), "Basic", "Profile"))
-	{
-		config_set_string(confManager.GetGlobal(), "Basic", "Profile",
-						  localeTextManager.Str("Untitled"));
-		config_set_string(confManager.GetGlobal(), "Basic", "ProfileDir",
-					      localeTextManager.Str("Untitled"));
-	}
-
-	if (!config_has_user_value(confManager.GetGlobal(), "Basic", "SceneCollection"))
-	{
-		config_set_string(confManager.GetGlobal(), "Basic", "SceneCollection",
-					      localeTextManager.Str("Untitled"));
-		config_set_string(confManager.GetGlobal(), "Basic", "SceneCollectionFile",
-						  localeTextManager.Str("Untitled"));
-	}
-
 #ifdef _WIN32
-	bool disableAudioDucking =
-		config_get_bool(confManager.GetGlobal(), "Audio", "DisableAudioDucking");
+	bool disableAudioDucking = config_get_bool(APPCONFIG, "Audio", "DisableAudioDucking");
 	if (disableAudioDucking)
 		DisableAudioDucking(true);
 #endif
 
 #ifdef __APPLE__
-	if (config_get_bool(confManager.GetGlobal(), "Video", "DisableOSXVSync"))
+	if (config_get_bool(APPCONFIG, "Video", "DisableOSXVSync"))
 		EnableOSXVSync(false);
 #endif
 
-
-    confManager.UpdateHotkeyFocusSetting(false, bStateAppActive);
+    App()->UpdateHotkeyFocusSetting(false);
 
 	_MoveBasicToProfiles();
 	_MoveBasicToSceneCollections();
 
-    if (pDirMaker && pDirMaker->MakeUserProfileDirs() == false)
+    if (AFMakeDirectoryUtil::MakeUserProfileDirs() == false)
 		throw "Failed to create profile directories";
 }
 
 #ifdef _WIN32
-
-#define		CRASH_MESSAGE																\
-			"Woops, SOOPStudio has crashed!\n\nWould you like to copy the crash log "	\
-			"to the clipboard? The crash log will still be saved to:\n\n%s"				
+#define		CRASH_MESSAGE																	\
+			"Woops, Freecshot Plus has crashed!\n\nWould you like to copy the crash log "	\
+			"to the clipboard? The crash log will still be saved to:\n\n%s"
 
 void AFApplicationInitializer::_MainCrashHandler(const char* format, va_list args, void*)
 {
@@ -252,14 +244,14 @@ void AFApplicationInitializer::_MainCrashHandler(const char* format, va_list arg
 	vsnprintf(text, MAX_CRASH_REPORT_SIZE, format, args);
 	text[MAX_CRASH_REPORT_SIZE - 1] = 0;
 
-	std::string crashFilePath = "SOOPStudio/crashes";
+	std::string crashFilePath = LOCAL_FOLDER_NAME + "/crashes";
 
-	AFLogManager::GetSingletonInstance().DeleteOldestFile(true, crashFilePath.c_str());
+	LOGMANAGER.DeleteOldestFile(true, crashFilePath.c_str());
 
 	std::string name = crashFilePath + "/";
 	name += "Crash " + GenerateTimeDateFilename("txt");
 
-	BPtr<char> path(AFConfigManager::GetSingletonInstance().GetConfigPathPtr(name.c_str()));
+	BPtr<char> path(GetAppConfigPathPtr(name.c_str()));
 
 	std::fstream file;
 
@@ -294,7 +286,7 @@ void AFApplicationInitializer::_MainCrashHandler(const char* format, va_list arg
 	std::string finalMessage =
 		std::string(message_buffer.get(), message_buffer.get() + size);
 
-	int ret = MessageBoxA(NULL, finalMessage.c_str(), "SOOPStudio has crashed!",
+	int ret = MessageBoxA(NULL, finalMessage.c_str(), "Freecshot Plus has crashed!",
 		MB_YESNO | MB_ICONERROR | MB_TASKMODAL);
 
 	if (ret == IDYES) {
@@ -317,7 +309,14 @@ void AFApplicationInitializer::_MainCrashHandler(const char* format, va_list arg
 		CloseClipboard();
 	}
 
-	exit(-1);
+	_exit(-1);
+}
+#endif
+
+#ifdef __APPLE__
+void AFApplicationInitializer::_MainCrashHandler(siginfo_t* info, ucontext_t* uap, void* context)
+{
+    std::string out = PrintLogCrash(context);
 }
 #endif
 
@@ -328,14 +327,12 @@ void AFApplicationInitializer::_CheckSafeModeSentinel()
 	 * somewhat sane. */
 	return;
 #else
-	AFArgOption* pTmpArgOption = AFConfigManager::GetSingletonInstance().GetArgOption();
-
-	if (pTmpArgOption->GetDisableShutdownCheck())
+	if (ARGOPTION.GetDisableShutdownCheck())
 		return;
 
-	BPtr sentinelPath = AFConfigManager::GetSingletonInstance().GetConfigPathPtr("SOOPStudio/safe_mode");
+	BPtr sentinelPath = GetAppConfigPathPtr("SOOPStudio/safe_mode");
 	if (os_file_exists(sentinelPath)) {
-		//unclean_shutdown = true; 
+		ARGOPTION.SetUncleanShutdown(true);
 		return;
 	}
 
@@ -345,96 +342,118 @@ void AFApplicationInitializer::_CheckSafeModeSentinel()
 
 void AFApplicationInitializer::_DeleteSafeModeSentinel()
 {
-	BPtr sentinelPath = AFConfigManager::GetSingletonInstance().GetConfigPathPtr("SOOPStudio/safe_mode");
+#ifndef NDEBUG
+	return;
+#else
+	BPtr sentinelPath = GetAppConfigPathPtr("SOOPStudio/safe_mode");
 	os_unlink(sentinelPath);
+#endif
 }
 
 void AFApplicationInitializer::_MoveBasicToProfiles()
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-	auto& localeTextManager = AFLocaleTextManager::GetSingletonInstance();
-
 	char path[512];
-	char new_path[512];
-	os_glob_t* glob;
 
-	/* if not first time use */
-	if (confManager.GetConfigPath(path, 512, "SOOPStudio/basic") <= 0)
+	if(GetAppConfigPath(path, 512, (LOCAL_FOLDER_NAME + "/basic").c_str()) <= 0) {
 		return;
-	if (!os_file_exists(path))
-		return;
-
-	/* if the profiles directory doesn't already exist */
-	if (confManager.GetConfigPath(new_path, 512, "SOOPStudio/basic/profiles") <= 0)
-		return;
-	if (os_file_exists(new_path))
-		return;
-
-	if (os_mkdir(new_path) == MKDIR_ERROR)
-		return;
-
-	strcat(new_path, "/");
-	strcat(new_path, localeTextManager.Str("Untitled"));
-	if (os_mkdir(new_path) == MKDIR_ERROR)
-		return;
-
-	strcat(path, "/*.*");
-	if (os_glob(path, 0, &glob) != 0)
-		return;
-
-	strcpy(path, new_path);
-
-	for (size_t i = 0; i < glob->gl_pathc; i++)
-	{
-		struct os_globent ent = glob->gl_pathv[i];
-		char* file;
-
-		if (ent.directory)
-			continue;
-
-		file = strrchr(ent.path, '/');
-		if (!file++)
-			continue;
-
-		if (astrcmpi(file, "scenes.json") == 0)
-			continue;
-
-		strcpy(new_path, path);
-		strcat(new_path, "/");
-		strcat(new_path, file);
-		os_rename(ent.path, new_path);
 	}
 
-	os_globfree(glob);
+	const std::filesystem::path basicPath = std::filesystem::u8path(path);
+
+	if(!std::filesystem::exists(basicPath)) {
+		return;
+	}
+
+	const std::filesystem::path profilesPath =
+		CONFIG_CONTEXT.GetUserProfilePath() / std::filesystem::u8path((LOCAL_FOLDER_NAME + "/basic/profiles").c_str());
+
+	if(std::filesystem::exists(profilesPath)) {
+		return;
+	}
+
+	try {
+		std::filesystem::create_directories(profilesPath);
+	} catch(const std::filesystem::filesystem_error& error) {
+		blog(LOG_ERROR, "Failed to create profiles directory for migration from basic profile\n%s",
+			 error.what());
+		return;
+	}
+
+	const std::filesystem::path newProfilePath = profilesPath / std::filesystem::u8path(Str("Untitled"));
+
+	for(auto& entry : std::filesystem::directory_iterator(basicPath)) {
+		if(entry.is_directory()) {
+			continue;
+		}
+
+		if(entry.path().filename().u8string() == "scenes.json") {
+			continue;
+		}
+
+		if(!std::filesystem::exists(newProfilePath)) {
+			try {
+				std::filesystem::create_directory(newProfilePath);
+			} catch(const std::filesystem::filesystem_error& error) {
+				blog(LOG_ERROR, "Failed to create profile directory for 'Untitled'\n%s", error.what());
+				return;
+			}
+		}
+
+		const std::filesystem::path destinationFile = newProfilePath / entry.path().filename();
+
+		const auto copyOptions = std::filesystem::copy_options::overwrite_existing;
+
+		try {
+			std::filesystem::copy(entry.path(), destinationFile, copyOptions);
+		} catch(const std::filesystem::filesystem_error& error) {
+			blog(LOG_ERROR, "Failed to copy basic profile file '%s' to new profile 'Untitled'\n%s",
+				 entry.path().filename().u8string().c_str(), error.what());
+
+			return;
+		}
+	}
 }
 
 void AFApplicationInitializer::_MoveBasicToSceneCollections()
 {
-	auto& confManager = AFConfigManager::GetSingletonInstance();
-	auto& localeTextManager = AFLocaleTextManager::GetSingletonInstance();
-
 	char path[512];
-	char new_path[512];
 
-	if (confManager.GetConfigPath(path, 512, "SOOPStudio/basic") <= 0)
+	if(GetAppConfigPath(path, 512, (LOCAL_FOLDER_NAME + "/basic").c_str()) <= 0) {
 		return;
-	if (!os_file_exists(path))
-		return;
+	}
 
-	if (confManager.GetConfigPath(new_path, 512, "SOOPStudio/basic/scenes") <= 0)
-		return;
-	if (os_file_exists(new_path))
-		return;
+	const std::filesystem::path basicPath = std::filesystem::u8path(path);
 
-	if (os_mkdir(new_path) == MKDIR_ERROR)
+	if(!std::filesystem::exists(basicPath)) {
 		return;
+	}
 
-	strcat(path, "/scenes.json");
-	strcat(new_path, "/");
-	strcat(new_path, localeTextManager.Str("Untitled"));
-	strcat(new_path, ".json");
+	const std::filesystem::path sceneCollectionPath =
+		CONFIG_CONTEXT.GetUserScenesPath() / std::filesystem::u8path((LOCAL_FOLDER_NAME + "/basic/scenes").c_str());
 
-	os_rename(path, new_path);
+	if(std::filesystem::exists(sceneCollectionPath)) {
+		return;
+	}
+
+	try {
+		std::filesystem::create_directories(sceneCollectionPath);
+	} catch(const std::filesystem::filesystem_error& error) {
+		blog(LOG_ERROR,
+			 "Failed to create scene collection directory for migration from basic scene collection\n%s",
+			 error.what());
+		return;
+	}
+
+	const std::filesystem::path sourceFile = basicPath / std::filesystem::u8path("scenes.json");
+	const std::filesystem::path destinationFile =
+		(sceneCollectionPath / std::filesystem::u8path(Str("Untitled"))).replace_extension(".json");
+
+	try {
+		std::filesystem::rename(sourceFile, destinationFile);
+	} catch(const std::filesystem::filesystem_error& error) {
+		blog(LOG_ERROR, "Failed to rename basic scene collection file:\n%s", error.what());
+		return;
+	}
 }
 
 #ifdef _WIN32
@@ -443,8 +462,7 @@ void AFApplicationInitializer::_ReleaseRTWorkQ()
 	if (m_hRtwq)
 	{
 		typedef HRESULT(STDAPICALLTYPE* PFN_RtwqShutdown)();
-		PFN_RtwqShutdown func =
-			(PFN_RtwqShutdown)GetProcAddress(m_hRtwq, "RtwqShutdown");
+		PFN_RtwqShutdown func = (PFN_RtwqShutdown)GetProcAddress(m_hRtwq, "RtwqShutdown");
 		func();
 		FreeLibrary(m_hRtwq);
 

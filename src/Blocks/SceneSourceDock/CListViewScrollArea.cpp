@@ -7,10 +7,10 @@ AFQListViewScrollArea::AFQListViewScrollArea(QWidget* parent)
 {
 	setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-	m_timerScrollVisible = new QTimer(this);
-	m_timerScrollVisible->setInterval(200);
-	m_timerScrollVisible->setSingleShot(true);
-	connect(m_timerScrollVisible, &QTimer::timeout,
+	m_pTimerScrollVisible = new QTimer(this);
+	m_pTimerScrollVisible->setInterval(200);
+	m_pTimerScrollVisible->setSingleShot(true);
+	connect(m_pTimerScrollVisible, &QTimer::timeout,
 			this, &AFQListViewScrollArea::qSlotHideScrollBar);
 }
 
@@ -24,16 +24,16 @@ void AFQListViewScrollArea::ShowScrollBar()
 {
 	setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
-	if(m_timerScrollVisible)
-		m_timerScrollVisible->start();
+	if(m_pTimerScrollVisible)
+		m_pTimerScrollVisible->start();
 }
 
 void AFQListViewScrollArea::qSlotHideScrollBar()
 {
 	setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-	if (m_timerScrollVisible)
-		m_timerScrollVisible->stop();
+	if (m_pTimerScrollVisible)
+		m_pTimerScrollVisible->stop();
 }
 
 void AFQListViewScrollArea::resizeEvent(QResizeEvent * event)

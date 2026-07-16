@@ -10,32 +10,43 @@ AFQCustomPushbutton::AFQCustomPushbutton(QWidget *parent)
 	this->installEventFilter(this);
 }
 
-void AFQCustomPushbutton::qslotDelayTimeout()
-{
-	emit qsignalMouseStop();
-	m_iDelayTime->stop();
-}
-
 bool AFQCustomPushbutton::event(QEvent* event)
 {
 	switch (event->type())
 	{
 	case QEvent::HoverEnter:
 		emit qsignalButtonEnter();
-		return true;
+		break;
+	case QEvent::MouseButtonPress:
+		emit qsignalMousePressed();
+		break;
+	case QEvent::MouseButtonRelease:
+		emit qsignalMouseReleased();
+		break;
 	case QEvent::HoverMove:
 		emit qsignalMouseMove();
 		break;
 	case QEvent::HoverLeave:
 		emit qsignalButtonLeave();
-		return true;
+		break;
 	case QEvent::MouseButtonDblClick:
 		emit qsignalButtonDoubleClicked();
-		return true;
+		break;
 	};
 	return QPushButton::event(event);
 }
 
-void AFQCustomPushbutton::_ChangeOpacity()
+AFQHoverOnlyPushButton::AFQHoverOnlyPushButton(QWidget* parent) 
+	: QPushButton(parent)
 {
+	this->installEventFilter(this);
+}
+
+bool AFQHoverOnlyPushButton::eventFilter(QObject* obj, QEvent* event)
+{
+	if (event->type() == QEvent::MouseButtonPress)
+		return true;
+	if (event->type() == QEvent::MouseButtonDblClick)
+		return true;
+	return QObject::eventFilter(obj, event);
 }

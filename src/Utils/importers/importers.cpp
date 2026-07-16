@@ -30,7 +30,8 @@ void ImportersInit()
 	importers.push_back(make_unique<StudioImporter>());
 	importers.push_back(make_unique<ClassicImporter>());
 	importers.push_back(make_unique<SLImporter>());
-	//importers.push_back(make_unique<XSplitImporter>());
+	importers.push_back(make_unique<FreecShotImporter>());
+	importers.push_back(make_unique<XSplitImporter>());
 }
 
 int ImportSCFromProg(const string &path, string &name, const string &program,

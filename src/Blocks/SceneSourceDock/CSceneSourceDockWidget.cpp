@@ -5,115 +5,147 @@
 #include <QListWidget>
 #include <QScrollBar>
 
+#include "CoreModel/Auth/CAuthManager.h"
 #include "CoreModel/Source/CSource.h"
 #include "CoreModel/Scene/CSceneContext.h"
 #include "CoreModel/OBSData/CLoadSaveManager.h"
+#include "CoreModel/OBSOutput/COutput.h"
 
 #include "Application/CApplication.h"
+
+#include "MainFrame/CMainFrame.h"
 #include "MainFrame/DynamicCompose/CMainDynamicComposit.h"
 
-#define AF_SCENE_ITEM_WIDTH         (192)
+#pragma region _SOOP_BREAKTIME
+#include "Utils/BreakTimeManager.h"  
+#pragma endregion
+
+
+//#define AF_SCENE_ITEM_WIDTH         (192)
+#define AF_SCENE_ITEM_WIDTH         (196)
 #define AF_SCENE_SELECT_ITEM_WIDTH  (201)
 #define AF_SCENE_ITEM_HEIGHT        (44)
 #define AF_SCENE_ITEM_HOVER_HEIGHT  (140)
 #define AF_SCENE_ITEM_SPACE_YPOS    (4)
 #define AF_SCENE_ITEM_SPACE_XPOS    (4)
 
-void AFSceneSourceDockWidget::qSlotClickedSceneItem()
+void AFSceneSourceWidget::qslotClickedSceneItem()
 {
-    AFSceneContext&   sceneContext = AFSceneContext::GetSingletonInstance();
-    AFQSceneListItem* clickedItem  = sceneContext.GetCurSelectedSceneItem();
+    AFQSceneListItem* clickedItem  = SCENE_CONTEXT.GetCurSelectedSceneItem();
 
     obs_source_t* source = obs_scene_get_source(clickedItem->GetScene());
+    
+    MAINFRAME->SetCurrentScene(source);
 
-    // Temp
-    App()->GetMainView()->GetMainWindow()->SetCurrentScene(source);
+    int nPrevCnt = config_get_int(USERCONFIG, "SARSA", "UseMinsimCheckCnt");
+    config_set_int(USERCONFIG, "SARSA", "UseMinsimCheckCnt", 0);
+
+    SceneItemVector& sceneItemVector = SCENE_CONTEXT.GetSceneItemVector();
+
+    struct FindMinsimChk { bool found = false; int nCnt = 0; } findMinsimChk;
+    FindMinsimChk info;
+
+    obs_scene_enum_items(clickedItem->GetScene(), [](obs_scene_t*, obs_sceneitem_t* item, void* param)->bool {
+        auto* f = static_cast<FindMinsimChk*>(param);
+        auto src = obs_sceneitem_get_source(item);
+        const char* id = obs_source_get_id(src);
+        if (0 == strcmp(id, "soop_chat_source_mood_check")) {
+            bool bVisible = obs_source_showing(src);
+            if (bVisible) {
+                f->found = true;
+                f->nCnt += 1;
+            }
+        }
+        return true;
+    }, &info);
+
+    auto broadInfo = AUTH_CONTEXT.GetSoopBroadInfo();
+
+    config_set_int(USERCONFIG, "SARSA", "UseMinsimCheckCnt", info.nCnt);
+
+    if (AFOutputUtil::IsStreamActive()) {
+        if (nPrevCnt > 0 && info.nCnt == 0) {
+            auto endTime = std::chrono::steady_clock::now();
+            auto startTime = AUTH_CONTEXT.GetMinsimCheckStartTime();
+            if (startTime != std::chrono::steady_clock::time_point{}) {
+                AUTH_CONTEXT.InitMinsimCheckStartTime();
+            }            
+        }
+        else if (nPrevCnt == 0 && info.nCnt > 0) {
+            auto startTime = std::chrono::steady_clock::now();
+            AUTH_CONTEXT.SetMinsimCheckStartTime(startTime);
+        }
+    }
 }
 
-void AFSceneSourceDockWidget::qSlotRenameSceneItem()
+void AFSceneSourceWidget::qslotDoubleClickedSceneItem()
 {
-    App()->GetMainView()->RefreshSceneUI();
+
 }
 
-void AFSceneSourceDockWidget::qSlotDeleteSceneItem()
+void AFSceneSourceWidget::qslotRenameSceneItem()
+{
+    MAINFRAME->RefreshSceneUI();
+}
+
+void AFSceneSourceWidget::qslotDeleteSceneItem()
 {
 
 }
 
-void AFSceneSourceDockWidget::qSlotHoverSceneItem(OBSScene scene)
+void AFSceneSourceWidget::qslotHoverSceneItem(OBSScene scene)
 {
     RefreshSceneItem();
 }
 
-void AFSceneSourceDockWidget::qSlotSwapItem(int from, int dest)
+void AFSceneSourceWidget::qslotSwapItem(int from, int dest)
 {
     if (from == dest)
         return;
 
-    AFSceneContext& contextScene = AFSceneContext::GetSingletonInstance();
-    contextScene.SwapSceneItem(from, dest);
+    SCENE_CONTEXT.SwapSceneItem(from, dest);
 
     RefreshSceneItem();
 
-    App()->GetMainView()->RefreshSceneUI();
+    MAINFRAME->RefreshSceneUI();
 }
 
-void AFSceneSourceDockWidget::qSlotCheckSourceClicked(bool clicked)
+void AFSceneSourceWidget::qslotAddSceneButtonClicked()
 {
-    ui->removeButton->setEnabled(clicked);
-    ui->moveUpButton->setEnabled(clicked);
-    ui->moveDownButton->setEnabled(clicked);
-
-    bool config = false;
-    if (clicked) {
-        obs_source_t* source = obs_sceneitem_get_source(GetCurrentSceneItem());
-        if (source) {
-            config = obs_source_configurable(source);
-        }
-    } else {
-        config = false;
-    }
-    ui->propsButton->setEnabled(config);
+    emit qsignalAddScene();
 }
 
-void AFSceneSourceDockWidget::qSlotAddSceneButtonClicked()
+void AFSceneSourceWidget::qslotAddSourceTrigger()
 {
-    emit qSignalAddScene();
+    emit qsignalAddSource();
 }
 
-void AFSceneSourceDockWidget::qSlotAddSourceTrigger()
+void AFSceneSourceWidget::qslotRemoveSourceTrigger()
 {
-    emit qSignalAddSource();
+    AFSourceUtil::RemoveSourceItems(SCENE_CONTEXT.GetCurrentScene());
 }
 
-void AFSceneSourceDockWidget::qSlotRemoveSourceTrigger()
-{
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
-    AFSourceUtil::RemoveSourceItems(sceneContext.GetCurrOBSScene());
-}
-
-void AFSceneSourceDockWidget::qSlotMoveUpSourceTrigger()
+void AFSceneSourceWidget::qslotMoveUpSourceTrigger()
 {
     _MoveSceneItem(OBS_ORDER_MOVE_UP, QTStr("Undo.MoveUp"));
 }
 
-void AFSceneSourceDockWidget::qSlotMoveDownSourceTrigger()
+void AFSceneSourceWidget::qslotMoveDownSourceTrigger()
 {
     _MoveSceneItem(OBS_ORDER_MOVE_DOWN, QTStr("Undo.MoveDown"));
 }
 
-void AFSceneSourceDockWidget::qSlotMoveToTopSourceTrigger()
+void AFSceneSourceWidget::qslotMoveToTopSourceTrigger()
 {
     _MoveSceneItem(OBS_ORDER_MOVE_TOP, QTStr("Undo.MoveToTop"));
 }
 
-void AFSceneSourceDockWidget::qSlotMoveToBottomSourceTrigger()
+void AFSceneSourceWidget::qslotMoveToBottomSourceTrigger()
 {
     _MoveSceneItem(OBS_ORDER_MOVE_BOTTOM, QTStr("Undo.MoveToBottom"));
 }
 
-void AFSceneSourceDockWidget::qSlotShowPropsTrigger()
+void AFSceneSourceWidget::qslotShowPropsTrigger()
 {
     const auto item = GetCurrentSceneItem();
     if (!item)
@@ -121,22 +153,29 @@ void AFSceneSourceDockWidget::qSlotShowPropsTrigger()
 
     obs_source_t* source = obs_sceneitem_get_source(item);
     if (obs_source_configurable(source)) {
-        App()->GetMainView()->CreatePropertiesPopup(source);
+        MAINFRAME->CreateSourceProperties(source);
     }
 }
 
-void AFSceneSourceDockWidget::AddSceneItem(OBSSceneItem item)
+void AFSceneSourceWidget::qslotFitScreenSizeSourceTrigger()
+{
+    AFSourceUtil::FitSourceToScreenFromMenu(OBS_BOUNDS_SCALE_INNER);
+}
+
+void AFSceneSourceWidget::qslotRestoreSourceTrigger()
+{
+    AFSourceUtil::ResetTransform();
+}
+
+void AFSceneSourceWidget::AddSceneItem(OBSSceneItem item)
 {
     obs_scene_t* scene = obs_sceneitem_get_scene(item);
 
-    AFLoadSaveManager&  loaderSaver = AFLoadSaveManager::GetSingletonInstance();
-    AFSceneContext&     contextScene = AFSceneContext::GetSingletonInstance();
-
-    if(contextScene.GetCurrOBSScene() == scene) {
+    if(SCENE_CONTEXT.GetCurrentScene() == scene) {
         ui->sourceListView->Add(item);
     }
 
-    if (!loaderSaver.CheckDisableSaving()) {
+    if (!LOADSAVE_CONTEXT.CheckDisableSaving()) {
         obs_source_t* sceneSource = obs_scene_get_source(scene);
         obs_source_t* itemSource = obs_sceneitem_get_source(item);
         blog(LOG_INFO, "User added source '%s' (%s) to scene '%s'",
@@ -147,11 +186,9 @@ void AFSceneSourceDockWidget::AddSceneItem(OBSSceneItem item)
     }
 }
 
-void AFSceneSourceDockWidget::ReorderSources(OBSScene scene)
+void AFSceneSourceWidget::ReorderSources(OBSScene scene)
 {
-    AFSceneContext& contextScene = AFSceneContext::GetSingletonInstance();
-
-    if (scene != contextScene.GetCurrOBSScene() || ui->sourceListView->IgnoreReorder())
+    if (scene != SCENE_CONTEXT.GetCurrentScene() || ui->sourceListView->IgnoreReorder())
         return;
 
     ui->sourceListView->ReorderItems();
@@ -159,20 +196,52 @@ void AFSceneSourceDockWidget::ReorderSources(OBSScene scene)
 }
 
 
-void AFSceneSourceDockWidget::RefreshSources(OBSScene scene)
+void AFSceneSourceWidget::RefreshSources(OBSScene scene)
 {
-    AFSceneContext& contextScene = AFSceneContext::GetSingletonInstance();
-
-    if (scene != contextScene.GetCurrOBSScene() || ui->sourceListView->IgnoreReorder())
+    if (scene != SCENE_CONTEXT.GetCurrentScene() || ui->sourceListView->IgnoreReorder())
         return;
 
     ui->sourceListView->RefreshItems();
     //SaveProject();
 }
 
-AFSceneSourceDockWidget::AFSceneSourceDockWidget(QWidget *parent) :
-    AFQBaseDockWidget(parent),
-    ui(new Ui::AFSceneSourceDockWidget)
+
+void AFSceneSourceWidget::resizeEvent(QResizeEvent* event)
+{
+    int  wideDockMode = 0;
+    QSize newSize = event->size();
+    if (newSize.width() >= 450) {
+        wideDockMode = 0;
+    }
+    else if (newSize.width() >= 425 && newSize.width() < 450) {
+        wideDockMode = 1;
+    }
+    else if(newSize.width() >= 400 && newSize.width() < 425) {
+        wideDockMode = 2;
+    }
+    else if (newSize.width() >= 375 && newSize.width() < 400) {
+        wideDockMode = 3;
+    }
+    else if (newSize.width() >= 350 && newSize.width() < 375) {
+        wideDockMode = 4;
+    }
+    else {
+        wideDockMode = 5;
+    }
+
+    if (m_dockWideMode != wideDockMode) {
+        const int scrollAreaWidth = 205 - (20 * wideDockMode);
+        ui->scenListScrollArea->setFixedWidth(scrollAreaWidth);
+        m_dockWideMode = wideDockMode;
+
+        RefreshSceneItem();
+    }
+    QWidget::resizeEvent(event);
+}
+
+AFSceneSourceWidget::AFSceneSourceWidget(QWidget *parent) :
+    QWidget(parent),
+    ui(new Ui::AFSceneSourceWidget)
 {
     ui->setupUi(this);
 
@@ -182,27 +251,34 @@ AFSceneSourceDockWidget::AFSceneSourceDockWidget(QWidget *parent) :
 
     ui->sceneListScrollAreaContents->SetScrollAreaPtr(ui->scenListScrollArea);
 
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-    sceneContext.SetSourceListViewPtr(ui->sourceListView);
+    SCENE_CONTEXT.SetSourceListViewPtr(ui->sourceListView);
 
     if (!m_sceneAddButton) {
         m_sceneAddButton = new QPushButton(ui->sceneListScrollAreaContents);
         m_sceneAddButton->setObjectName("sceneListAddButton");
         m_sceneAddButton->setText(Str("Basic.SceneSourceDock.AddScene"));
         connect(m_sceneAddButton, &QPushButton::clicked,
-                this, &AFSceneSourceDockWidget::qSlotAddSceneButtonClicked);
+                this, &AFSceneSourceWidget::qslotAddSceneButtonClicked);
     }
 }
 
-AFSceneSourceDockWidget::~AFSceneSourceDockWidget()
+AFSceneSourceWidget::~AFSceneSourceWidget()
 {
     delete ui;
 }
 
-void AFSceneSourceDockWidget::AddScene(OBSSource source)
+QWidget* AFSceneSourceWidget::GetSceneListFrame()
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
+    return ui->sceneListFrame;
+}
 
+QWidget* AFSceneSourceWidget::GetSourceListView()
+{
+    return ui->sourceListView;
+}
+
+void AFSceneSourceWidget::AddScene(OBSSource source)
+{
     const char* name = obs_source_get_name(source);
     obs_scene_t* scene = obs_scene_from_source(source);
 
@@ -210,15 +286,15 @@ void AFSceneSourceDockWidget::AddScene(OBSSource source)
         source, "OBSBasic.SelectScene",
         Str("Basic.Hotkeys.SelectScene"),
         [](void* data, obs_hotkey_id, obs_hotkey_t*, bool pressed) {
-            AFMainFrame* main = reinterpret_cast<AFMainFrame*>(
-                        App()->GetMainView());
+#pragma region _SOOP_BREAKTIME
+            if (BREAKTIME_MANAGER.IsActive())
+                return;
+#pragma endregion
 
-            auto potential_source =
-                static_cast<obs_source_t*>(data);
-            OBSSourceAutoRelease source =
-                obs_source_get_ref(potential_source);
+            auto potential_source = static_cast<obs_source_t*>(data);
+            OBSSourceAutoRelease source = obs_source_get_ref(potential_source);
             if (source && pressed)
-                main->GetMainWindow()->SetCurrentScene(source.Get());
+                MAINFRAME->SetCurrentScene(source.Get());
         },
         static_cast<obs_source_t*>(source));
 
@@ -228,25 +304,25 @@ void AFSceneSourceDockWidget::AddScene(OBSSource source)
     container.ref = scene;
     container.handlers.assign({
                 std::make_shared<OBSSignal>(handler, "item_add",
-                                AFSceneSourceDockWidget::SceneItemAdded, this),
+                                AFSceneSourceWidget::SceneItemAdded, this),
                 std::make_shared<OBSSignal>(handler, "reorder",
-                                AFSceneSourceDockWidget::SceneReordered, this),
+                                AFSceneSourceWidget::SceneReordered, this),
                 std::make_shared<OBSSignal>(handler, "refresh",
-                                AFSceneSourceDockWidget::SceneRefreshed, this),
+                                AFSceneSourceWidget::SceneRefreshed, this),
         });
 
     AFQSceneListItem* sceneItem = new AFQSceneListItem(ui->sceneListScrollAreaContents, ui->sceneListFrame, scene, name, container);
 
-    connect(sceneItem, &AFQSceneListItem::qSignalClickedSceneItem, 
-            this, &AFSceneSourceDockWidget::qSlotClickedSceneItem);
-    connect(sceneItem, &AFQSceneListItem::qSignalDoubleClickedSceneItem,
-        this, &AFSceneSourceDockWidget::qSignalSceneDoubleClickedTriggered);
-    connect(sceneItem, &AFQSceneListItem::qSignalRenameSceneItem, 
-            this, &AFSceneSourceDockWidget::qSlotRenameSceneItem);
-    connect(sceneItem, &AFQSceneListItem::qSignalDeleteSceneItem, 
-            this, &AFSceneSourceDockWidget::qSlotDeleteSceneItem);
-    connect(sceneItem, &AFQSceneListItem::qSignalHoverSceneItem, 
-            this, &AFSceneSourceDockWidget::qSlotHoverSceneItem);
+    connect(sceneItem, &AFQSceneListItem::qsignalClickedSceneItem, 
+            this, &AFSceneSourceWidget::qslotClickedSceneItem);
+    connect(sceneItem, &AFQSceneListItem::qsignalDoubleClickedSceneItem,
+            this, &AFSceneSourceWidget::qslotDoubleClickedSceneItem);
+    connect(sceneItem, &AFQSceneListItem::qsignalRenameSceneItem, 
+            this, &AFSceneSourceWidget::qslotRenameSceneItem);
+    connect(sceneItem, &AFQSceneListItem::qsignalDeleteSceneItem, 
+            this, &AFSceneSourceWidget::qslotDeleteSceneItem);
+    connect(sceneItem, &AFQSceneListItem::qsignalHoverSceneItem, 
+            this, &AFSceneSourceWidget::qslotHoverSceneItem);
 
     /* if the scene already has items (a duplicated scene) add them */
     auto addSceneItem = [this](obs_sceneitem_t* item) {
@@ -265,16 +341,15 @@ void AFSceneSourceDockWidget::AddScene(OBSSource source)
         },
         &addSceneItem);
 
-    sceneContext.SetCurSelectedSceneItem(sceneItem);
-    sceneContext.AddSceneItem(sceneItem);
+    SCENE_CONTEXT.SetCurSelectedSceneItem(sceneItem);
+    SCENE_CONTEXT.AddSceneItem(sceneItem);
 
     RefreshSceneItem();
 }
 
-void AFSceneSourceDockWidget::RemoveScene(OBSSource source)
+void AFSceneSourceWidget::RemoveScene(OBSSource source)
 {
-    AFSceneContext& contextScene = AFSceneContext::GetSingletonInstance();
-    SceneItemVector& sceneItemVector = contextScene.GetSceneItemVector();
+    SceneItemVector& sceneItemVector = SCENE_CONTEXT.GetSceneItemVector();
 
     obs_scene_t* scene = obs_scene_from_source(source);
     AFQSceneListItem* delItem = nullptr;
@@ -316,33 +391,32 @@ void AFSceneSourceDockWidget::RemoveScene(OBSSource source)
         AFQSceneListItem* newSelectedSceneItem = (*iter);
         if (newSelectedSceneItem) {
             OBSSource sceneSource = obs_scene_get_source(newSelectedSceneItem->GetScene());
-            App()->GetMainView()->GetMainWindow()->SetCurrentScene(sceneSource);
+            DYNAMIC_COMPOSIT->SetCurrentScene(sceneSource);
         }
     }
 }
 
-void AFSceneSourceDockWidget::RefreshSceneItem()
+void AFSceneSourceWidget::RefreshSceneItem()
 {
-    AFSceneContext& contextScene = AFSceneContext::GetSingletonInstance();
-    SceneItemVector& sceneItemVector = contextScene.GetSceneItemVector();
+    int buttonWidth = AF_SCENE_ITEM_WIDTH - (m_dockWideMode * 20);
+    int buttonSelectedWidth = AF_SCENE_SELECT_ITEM_WIDTH - (m_dockWideMode * 20);
 
-    const AFQSceneListItem* selectedItem = contextScene.GetCurSelectedSceneItem();
+    SceneItemVector& sceneItemVector = SCENE_CONTEXT.GetSceneItemVector();
+    const AFQSceneListItem* selectedItem = SCENE_CONTEXT.GetCurSelectedSceneItem();
+
+    AFQSceneListItem* selectedWidget = nullptr;
 
     int index = 0;
-    int height = AF_SCENE_ITEM_SPACE_YPOS;
-    auto iter = sceneItemVector.begin();
+    int height = 1;
     int itemHeight = AF_SCENE_ITEM_HEIGHT;
-    for (; iter != sceneItemVector.end(); ++iter, index++) {
+
+    for (auto iter = sceneItemVector.begin(); iter != sceneItemVector.end(); ++iter, index++) {
         AFQSceneListItem* item = (*iter);
         if (nullptr == item)
             continue;
 
-        bool selectedScene = false;
-        int itemWidth = AF_SCENE_ITEM_WIDTH;
-        if (selectedItem == item) {
-            itemWidth = AF_SCENE_SELECT_ITEM_WIDTH;
-            selectedScene = true;
-        }
+        bool selectedScene = (selectedItem == item);
+        int itemWidth = selectedScene ? buttonSelectedWidth : buttonWidth;
 
         item->SetSceneIndexLabelNum(index);
         item->SelectScene(selectedScene);
@@ -350,22 +424,27 @@ void AFSceneSourceDockWidget::RefreshSceneItem()
         item->repaint();
         item->show();
 
+        if (selectedScene)
+            selectedWidget = item;
+
         height += (itemHeight + AF_SCENE_ITEM_SPACE_YPOS);
     }
 
-    m_sceneAddButton->setGeometry(AF_SCENE_ITEM_SPACE_XPOS, height, AF_SCENE_ITEM_WIDTH, AF_SCENE_ITEM_HEIGHT);
+    m_sceneAddButton->setGeometry(AF_SCENE_ITEM_SPACE_XPOS, height, buttonWidth, AF_SCENE_ITEM_HEIGHT);
     height += (AF_SCENE_ITEM_HEIGHT + AF_SCENE_ITEM_SPACE_YPOS);
 
     ui->sceneListScrollAreaContents->setMinimumHeight(height);
     ui->sceneListScrollAreaContents->SetTotalSceneCount(sceneItemVector.size());
+
+    AFQSceneListItem* target = selectedWidget;
+    QTimer::singleShot(0, this, [this, target]() {
+        ui->scenListScrollArea->ensureWidgetVisible(
+            target, 0, AF_SCENE_ITEM_SPACE_YPOS
+        );
+    });
 }
 
-void AFSceneSourceDockWidget::RegisterShortCut(QAction* removeSourceAction)
-{
-    ui->sourceListView->RegisterShortCut(removeSourceAction);
-}
-
-OBSSceneItem AFSceneSourceDockWidget::GetCurrentSceneItem(int idx_)
+OBSSceneItem AFSceneSourceWidget::GetCurrentSceneItem(int idx_)
 {
     int idx = idx_;
     if(idx_ == -1)
@@ -374,12 +453,59 @@ OBSSceneItem AFSceneSourceDockWidget::GetCurrentSceneItem(int idx_)
     return ui->sourceListView->Get(idx);
 }
 
-void AFSceneSourceDockWidget::SetCurrentScene(OBSSource scene, bool force)
+int AFSceneSourceWidget::GetCurrentTopSelectedSceneItemIdx()
 {
-    AFSceneContext& contextScene = AFSceneContext::GetSingletonInstance();
-    SceneItemVector& sceneItemVector = contextScene.GetSceneItemVector();
+    return ui->sourceListView->GetTopSelectedSourceItem();
+}
 
-    OBSScene curScene = contextScene.GetCurrOBSScene();
+void AFSceneSourceWidget::SourceToolBarButtonSetEnable()
+{
+    bool enable = false;
+    bool config = false;
+    OBSSceneItem item = GetCurrentSceneItem();
+    if (item) {
+        OBSSource source = obs_sceneitem_get_source(item);
+        config = AFSourceUtil::ShouldShowProperties(source);
+
+        enable = true;
+
+        if (AFSourceUtil::IsMustTopSource(source)) {
+            ui->moveUpButton->setEnabled(false);
+            ui->moveDownButton->setEnabled(false);
+        }
+
+    }
+
+    ui->removeButton->setEnabled(enable);
+    ui->fitScreenButton->setEnabled(enable);
+    ui->restoreButton->setEnabled(enable);
+    ui->moveUpButton->setEnabled(enable);
+    ui->moveDownButton->setEnabled(enable);
+
+    ui->propsButton->setEnabled(config);
+}
+
+#pragma region _SOOP_BREAKTIME
+void AFSceneSourceWidget::SetBreaktime(bool enable, QString name)
+{
+    if(enable)
+    {
+        ui->labelBreaktimeName->setText(name);
+        ui->labelBreaktimeInfo->setText(QTStr("breaktime.scene.info"));
+        ui->stackedWidget->setCurrentIndex(1);
+    } else
+    {
+        ui->stackedWidget->setCurrentIndex(0);
+        //ui->labelBreaktimeName->setText("");
+        //ui->labelBreaktimeInfo->setText("");
+    }
+}
+#pragma endregion
+void AFSceneSourceWidget::SetCurrentScene(OBSSource scene, bool force)
+{
+    SceneItemVector& sceneItemVector = SCENE_CONTEXT.GetSceneItemVector();
+
+    OBSScene curScene = SCENE_CONTEXT.GetCurrentScene();
 
     if (obs_scene_get_source(curScene) != scene || force) {
         auto iter = sceneItemVector.begin();
@@ -392,8 +518,16 @@ void AFSceneSourceDockWidget::SetCurrentScene(OBSSource scene, bool force)
             obs_source_t* source = obs_scene_get_source(itemScene);
 
             if (source == scene) {
-                contextScene.SetCurrOBSScene(itemScene.Get());
-                contextScene.SetCurSelectedSceneItem(item);
+                SCENE_CONTEXT.SetCurrentScene(itemScene.Get());
+                SCENE_CONTEXT.SetCurSelectedSceneItem(item);
+
+                VCamConfig& config = MAINFRAME->VirtualCamConfig();
+                if(MAINFRAME->VirtualCamEnabled() &&
+                   config.type == VCamOutputType::PreviewOutput) {
+                    MAINFRAME->SetVirtualCamOutputType(VCamOutputType::PreviewOutput);
+                }
+
+                MAINFRAME->OnEvent(OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED);
             }
         }
 
@@ -405,9 +539,9 @@ void AFSceneSourceDockWidget::SetCurrentScene(OBSSource scene, bool force)
 
 /* OBS Callbacks */
 
-void AFSceneSourceDockWidget::SceneReordered(void* data, calldata_t* params)
+void AFSceneSourceWidget::SceneReordered(void* data, calldata_t* params)
 {
-    AFSceneSourceDockWidget* sceneDock = static_cast<AFSceneSourceDockWidget*>(data);
+    AFSceneSourceWidget* sceneDock = static_cast<AFSceneSourceWidget*>(data);
 
     obs_scene_t* scene = (obs_scene_t*)calldata_ptr(params, "scene");
 
@@ -415,9 +549,9 @@ void AFSceneSourceDockWidget::SceneReordered(void* data, calldata_t* params)
                               Q_ARG(OBSScene, OBSScene(scene)));
 }
 
-void AFSceneSourceDockWidget::SceneRefreshed(void* data, calldata_t* params)
+void AFSceneSourceWidget::SceneRefreshed(void* data, calldata_t* params)
 {
-    AFSceneSourceDockWidget* sceneDock = static_cast<AFSceneSourceDockWidget*>(data);
+    AFSceneSourceWidget* sceneDock = static_cast<AFSceneSourceWidget*>(data);
 
     obs_scene_t* scene = (obs_scene_t*)calldata_ptr(params, "scene");
 
@@ -425,9 +559,9 @@ void AFSceneSourceDockWidget::SceneRefreshed(void* data, calldata_t* params)
                               Q_ARG(OBSScene, OBSScene(scene)));
 }
 
-void AFSceneSourceDockWidget::SceneItemAdded(void* data, calldata_t* params)
+void AFSceneSourceWidget::SceneItemAdded(void* data, calldata_t* params)
 {
-    AFSceneSourceDockWidget* sceneDock = static_cast<AFSceneSourceDockWidget*>(data);
+    AFSceneSourceWidget* sceneDock = static_cast<AFSceneSourceWidget*>(data);
 
     obs_sceneitem_t* item = (obs_sceneitem_t*)calldata_ptr(params, "item");
    
@@ -435,67 +569,91 @@ void AFSceneSourceDockWidget::SceneItemAdded(void* data, calldata_t* params)
                               Q_ARG(OBSSceneItem, OBSSceneItem(item)));
 }
 
-void AFSceneSourceDockWidget::_InitSceneSourceDockUI()
+void AFSceneSourceWidget::_InitSceneSourceDockUI()
 {
     ui->removeButton->setEnabled(false);
     ui->moveUpButton->setEnabled(false);
     ui->moveDownButton->setEnabled(false);
     ui->propsButton->setEnabled(false);
+    ui->fitScreenButton->setEnabled(false);
+    ui->restoreButton->setEnabled(false);
 }
 
-void AFSceneSourceDockWidget::_InitSceneSourceDockSignalSlot()
+void AFSceneSourceWidget::_InitSceneSourceDockSignalSlot()
 {
 
     connect(ui->sceneListScrollAreaContents, &AFQListScrollAreaContent::qsignalSwapItem,
-            this, &AFSceneSourceDockWidget::qSlotSwapItem);
+            this, &AFSceneSourceWidget::qslotSwapItem);
 
     connect(ui->sceneListFrame, &AFQSceneListView::qsignalSwapItem,
-            this, &AFSceneSourceDockWidget::qSlotSwapItem);
-
-    connect(ui->sourceListView, &AFQSourceListView::qSignalCheckSourceClicked,
-            this, &AFSceneSourceDockWidget::qSlotCheckSourceClicked);
+            this, &AFSceneSourceWidget::qslotSwapItem);
 
     connect(ui->addButton, &QPushButton::clicked,
-            this, &AFSceneSourceDockWidget::qSlotAddSourceTrigger);
+            this, &AFSceneSourceWidget::qslotAddSourceTrigger);
 
     connect(ui->removeButton, &QPushButton::clicked,
-            this, &AFSceneSourceDockWidget::qSlotRemoveSourceTrigger);
+            this, &AFSceneSourceWidget::qslotRemoveSourceTrigger);
 
     connect(ui->moveUpButton, &QPushButton::clicked,
-            this, &AFSceneSourceDockWidget::qSlotMoveUpSourceTrigger);
+            this, &AFSceneSourceWidget::qslotMoveUpSourceTrigger);
      
     connect(ui->moveDownButton, &QPushButton::clicked,
-            this, &AFSceneSourceDockWidget::qSlotMoveDownSourceTrigger);
+            this, &AFSceneSourceWidget::qslotMoveDownSourceTrigger);
 
     connect(ui->propsButton, &QPushButton::clicked,
-        this, &AFSceneSourceDockWidget::qSlotShowPropsTrigger);
+        this, &AFSceneSourceWidget::qslotShowPropsTrigger);
+
+    connect(ui->fitScreenButton, &QPushButton::clicked,
+        this, &AFSceneSourceWidget::qslotFitScreenSizeSourceTrigger);
+
+    connect(ui->restoreButton, &QPushButton::clicked,
+        this, &AFSceneSourceWidget::qslotRestoreSourceTrigger);
 
 }
 
-void AFSceneSourceDockWidget::_MoveSceneItem(enum obs_order_movement movement, const QString& action_name)
+void AFSceneSourceWidget::_MoveSceneItem(enum obs_order_movement movement, const QString& action_name)
 {
-    AFSceneContext& sceneContext = AFSceneContext::GetSingletonInstance();
-
     OBSSceneItem item = GetCurrentSceneItem();
     obs_source_t* source = obs_sceneitem_get_source(item);
 
     if (!source)
         return;
 
-    OBSScene scene = sceneContext.GetCurrOBSScene();
+    // soop vod move exception
+    if (movement == OBS_ORDER_MOVE_DOWN || movement == OBS_ORDER_MOVE_BOTTOM) {
+        if (AFSourceUtil::IsMustTopSource(source))
+            return;
+    }
+    else if (movement == OBS_ORDER_MOVE_UP) {
+        int selectedIdx = GetCurrentTopSelectedSceneItemIdx();
+        if (0 == selectedIdx)
+            return;
+
+        OBSSceneItem upperItem = GetCurrentSceneItem(selectedIdx - 1);
+        obs_source_t* upperSource = obs_sceneitem_get_source(upperItem);
+        if (AFSourceUtil::IsMustTopSource(upperSource))
+            return;
+    }
+    else if (movement == OBS_ORDER_MOVE_TOP) {
+        OBSSceneItem topItem = GetCurrentSceneItem(0);
+        obs_source_t* topSource = obs_sceneitem_get_source(topItem);
+        if (AFSourceUtil::IsMustTopSource(topSource))
+            return;
+    }
+
+    OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
     std::vector<obs_source_t*> sources;
     if (scene != obs_sceneitem_get_scene(item))
         sources.push_back(
             obs_scene_get_source(obs_sceneitem_get_scene(item)));
 
-    AFMainFrame* main = App()->GetMainView();
-    OBSData undo_data = main->BackupScene(scene, &sources);
+    OBSData undo_data = MAINFRAME->BackupScene(scene, &sources);
 
     obs_sceneitem_set_order(item, movement);
 
     const char* source_name = obs_source_get_name(source);
     const char* scene_name = obs_source_get_name(obs_scene_get_source(scene));
 
-    OBSData redo_data = main->BackupScene(scene, &sources);
-    main->CreateSceneUndoRedoAction(action_name.arg(source_name, scene_name), undo_data, redo_data);
+    OBSData redo_data = MAINFRAME->BackupScene(scene, &sources);
+    MAINFRAME->CreateSceneUndoRedoAction(action_name.arg(source_name, scene_name), undo_data, redo_data);
 }

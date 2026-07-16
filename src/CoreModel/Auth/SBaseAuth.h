@@ -2,6 +2,9 @@
 
 #include <string>
 
+// GetRemoteFile
+#include "Common/CommonUtils.h"
+
 enum class AuthType
 {
     None = 0,
@@ -13,55 +16,61 @@ enum class AuthType
 struct AFBasicAuth
 {
 public:
-    AuthType        eType;
-    std::string     strChannelID;
-    std::string     strChannelNick;
-    std::string     strAccessToken;
-    std::string     strRefreshToken;
-    std::string     strCustomID;
-    std::string     strCustomPassword;
-    uint64_t        uiExpireTime;
-    std::string     strUrlRTMP;
-    std::string     strKeyRTMP;
-    std::string     strPlatform;
-    std::string     strUuid;
-    bool            bCheckedRTMPKey;
-    int             iViewChannelIndx;
+    AuthType        type;
+    std::string     channelID;
+    std::string     channelNick;
+    std::string     accessToken;
+    std::string     refreshToken;
+    std::string     customID;
+    std::string     customPassword;
+    std::string     cookie; //SOOP 
+    uint64_t        expireTime;
+    std::string     urlRTMP;
+    std::string     keyRTMP;
+    std::string     platform;
+    std::string     uuid;
+    bool            checkedRTMPKey;
+    int             viewChannelIndx;
+    bool            loginRetain;
+    bool            saveId;
 
 
     
     AFBasicAuth()
-        :eType(AuthType::None),
-        strChannelID(""),
-        strChannelNick(""),
-        strAccessToken(""),
-        strRefreshToken(""),
-        strCustomID(""),
-        strCustomPassword(""),
-        uiExpireTime(0),
-        strUrlRTMP(""),
-        strKeyRTMP(""),
-        strPlatform(""),
-        strUuid(""),
-        bCheckedRTMPKey(false),
-        iViewChannelIndx(-1) {};
+        :type(AuthType::None),
+        channelID(""),
+        channelNick(""),
+        accessToken(""),
+        refreshToken(""),
+        customID(""),
+        customPassword(""),
+        cookie(""),
+        expireTime(0),
+        urlRTMP(""),
+        keyRTMP(""),
+        platform(""),
+        uuid(""),
+        checkedRTMPKey(false),
+        viewChannelIndx(-1),
+        loginRetain(false),
+        saveId(false) {};
 };
 
 struct AFChannelData
 {
 public:
     AFBasicAuth*    pAuthData;
-    std::string     strImgUrlUserThumb;
+    std::string     imgUrlUserThumb;
     void*           pObjQtPixmap;
-    bool            bIsStreaming;
-    void*           pObjOBSService;    
+    bool            isStreaming;
+    void*           pObjOBSService;
 
     
     AFChannelData()
     :pAuthData(nullptr),
-    strImgUrlUserThumb(""),
+    imgUrlUserThumb(""),
     pObjQtPixmap(nullptr),
-    bIsStreaming(false),
+    isStreaming(false),
     pObjOBSService(nullptr){};
 };
 

@@ -4,8 +4,8 @@
 #include <QStyleOption>
 #include <QPainter>
 
+#include "qt-wrappers.hpp"
 #include "platform/platform.hpp"
-
 
 AFQSettingTabButton::AFQSettingTabButton(QWidget *parent) :
     QPushButton(parent),
@@ -15,10 +15,15 @@ AFQSettingTabButton::AFQSettingTabButton(QWidget *parent) :
 
     ui->setupUi(this);
 
-    connect(ui->pushButton_Icon, &QPushButton::clicked, this, &AFQSettingTabButton::qslotButtonClicked);
-    connect(ui->pushButton_Title, &QPushButton::clicked, this, &AFQSettingTabButton::qslotButtonClicked);
-    connect(this, &QPushButton::clicked, this, &AFQSettingTabButton::qslotButtonClicked);
-    connect(this, &QPushButton::toggled, this, &AFQSettingTabButton::qslotButtonUnchecked);
+    connect(ui->iconButton, &QPushButton::clicked, 
+        this, &AFQSettingTabButton::OnButtonClicked);
+    connect(ui->titleButton, &QPushButton::clicked, 
+        this, &AFQSettingTabButton::OnButtonClicked);
+
+    connect(this, &QPushButton::clicked, 
+        this, &AFQSettingTabButton::OnButtonClicked);
+    connect(this, &QPushButton::toggled, 
+        this, &AFQSettingTabButton::OnButtonUnchecked);
 }
 
 AFQSettingTabButton::~AFQSettingTabButton()
@@ -28,55 +33,51 @@ AFQSettingTabButton::~AFQSettingTabButton()
 
 void AFQSettingTabButton::SetButton(const char* type, QString name)
 {
-    m_pTypeName = type;
-    ui->pushButton_Title->setText(name);
+    typeName = type;
+    ui->titleButton->setText(name);
     std::string absPath;
     GetDataFilePath("assets", absPath);
 
-    QString styleSheet = QString("QPushButton#pushButton_Icon{background: transparent; "\
+    QString styleSheet = QString("QPushButton#iconButton{background: transparent; "\
         "image: url(%1/setting-dialog/tabbutton/normal/%2.svg);}"\
-        "QPushButton#pushButton_Icon[hover=false]:checked,"\
-        "QPushButton#pushButton_Icon[hover=true]:checked{background: transparent; "\
+        "QPushButton#iconButton[hover=false]:checked,"\
+        "QPushButton#iconButton[hover=true]:checked{background: transparent; "\
         "image: url(%1/setting-dialog/tabbutton/clicked/%2.svg);}"\
-        "QPushButton#pushButton_Icon[hover=true]{background: transparent; "\
+        "QPushButton#iconButton[hover=true]{background: transparent; "\
         "image: url(%1/setting-dialog/tabbutton/hover/%2.svg);}")
             .arg(absPath.data(), type);
-    ui->pushButton_Icon->setStyleSheet(styleSheet);
+    ui->iconButton->setStyleSheet(styleSheet);
 }
 
 bool AFQSettingTabButton::eventFilter(QObject* obj, QEvent* event)
 {
     if (event->type() == QEvent::HoverEnter) {
-        ui->pushButton_Icon->setProperty("hover", true);
-        ui->pushButton_Title->setProperty("hover", true);
+        ui->iconButton->setProperty("hover", true);
+        ui->titleButton->setProperty("hover", true);
 
-        style()->unpolish(ui->pushButton_Icon);
-        style()->unpolish(ui->pushButton_Title);
-        style()->polish(ui->pushButton_Icon);
-        style()->polish(ui->pushButton_Title);
+        PolishStyleSheet(ui->iconButton);
+        PolishStyleSheet(ui->titleButton);
     }
     else if (event->type() == QEvent::HoverLeave) {
-        ui->pushButton_Icon->setProperty("hover", false);
-        ui->pushButton_Title->setProperty("hover", false);
+        ui->iconButton->setProperty("hover", false);
+        ui->titleButton->setProperty("hover", false);
         
-        style()->unpolish(ui->pushButton_Icon);
-        style()->unpolish(ui->pushButton_Title);
-        style()->polish(ui->pushButton_Icon);
-        style()->polish(ui->pushButton_Title);
+        PolishStyleSheet(ui->iconButton);
+        PolishStyleSheet(ui->titleButton);
     }
     return QPushButton::eventFilter(obj, event);
 }
 
-void AFQSettingTabButton::qslotButtonUnchecked()
+void AFQSettingTabButton::OnButtonUnchecked()
 {
-    ui->pushButton_Title->setChecked(false);
-    ui->pushButton_Icon->setChecked(false);
+    ui->titleButton->setChecked(false);
+    ui->iconButton->setChecked(false);
 }
 
-void AFQSettingTabButton::qslotButtonClicked()
+void AFQSettingTabButton::OnButtonClicked()
 {
     setChecked(true);
-    ui->pushButton_Title->setChecked(true);
-    ui->pushButton_Icon->setChecked(true);
-    emit qsignalButtonClicked();
+    ui->titleButton->setChecked(true);
+    ui->iconButton->setChecked(true);
+    emit ButtonClicked();
 }
