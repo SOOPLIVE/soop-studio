@@ -173,6 +173,8 @@ private:
     long double m_virtualMemory = 0;
     long double m_obsAvgFrameTime = 0;
 
+    int m_continuousHighCpuTicks = 0;
+
     // Stream, Rec
     bool m_disconnected = false;
     bool m_firstCongestionUpdate = false;

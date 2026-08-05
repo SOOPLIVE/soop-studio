@@ -4,7 +4,7 @@
 #include "./Spout2/SPOUTSDK/SpoutDirectX/SpoutDX/SpoutDX.h"
 #include "./Spout2/SPOUTSDK/SpoutLibrary/SpoutLibrary.h"
 
-constexpr int SENDER_NAME_LEN = 128;
+constexpr int SENDER_NAME_LEN = 256;
 constexpr int MAX_SENDER_COUNT = 30;
 
 struct SOOPSpout2Source {
@@ -15,7 +15,7 @@ struct SOOPSpout2Source {
 
 	unsigned int width = 800;
 	unsigned int height = 600;
-	char senderName[SENDER_NAME_LEN] = {};
+	std::string senderName;
 
 	HANDLE sharedHandle = NULL;
 	DWORD format = 0;
@@ -79,7 +79,12 @@ static bool makeSpoutSenderTexture(SOOPSpout2Source* spoutSource)
 	HANDLE sharedHandle;
 	unsigned int width, height;
 
-	bool bResult = g_pSpoutReceiver->GetSenderInfo(spoutSource->senderName, width, height, sharedHandle, format);
+	std::string senderName = spoutSource->senderName;
+	if (senderName.size() >= SENDER_NAME_LEN) {
+		return false;
+	}
+
+	bool bResult = g_pSpoutReceiver->GetSenderInfo(senderName.c_str(), width, height, sharedHandle, format);
 
 	if (bResult && (sharedHandle != spoutSource->sharedHandle)) 
 	{
@@ -121,8 +126,7 @@ static bool spout2_sender_modified(obs_properties_t* props,
 	if (!spoutSource)
 		return false;
 
-	const char* senderName = obs_data_get_string(settings, "spout2_sender");
-	strcpy(spoutSource->senderName, senderName);
+	spoutSource->senderName = obs_data_get_string(settings, "spout2_sender");
 
 	return true;
 }
@@ -182,9 +186,7 @@ static void update_soop_spout2(void* data, obs_data_t* settings)
 	if (!spoutSource)
 		return;
 
-	const char* senderName = obs_data_get_string(settings, "spout2_sender");
-	strcpy(spoutSource->senderName, senderName);
-
+	spoutSource->senderName = obs_data_get_string(settings, "spout2_sender");
 	spoutSource->transparent = obs_data_get_bool(settings, "transparent");
 }
 

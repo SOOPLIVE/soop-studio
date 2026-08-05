@@ -25,6 +25,9 @@ This application currently supports Windows 10, Windows 11.
 - [Github issues](https://github.com/SOOPLIVE/soop-studio/issues)
 - [Contact Us](https://sooplive.helpshift.com/hc/en/3-soop/contact-us/)
 
+## Download
+- [Download Installer](https://update.sooplive.com/FreecShotPlus_installer.exe)
+
 ## License
 
 Copyright SOOP CO., LTD.

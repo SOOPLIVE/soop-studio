@@ -4852,6 +4852,10 @@ AFQProgramInfoDialog QTextBrowser {
 	border : none;
 }
 
+AFQProgramInfoDialog QScrollBar::handle:vertical {
+    min-height : 40px;
+}
+
 QToolBarExtension {
     qproperty-icon: url(./Dark/dots-vert.svg);
     background: palette(base);

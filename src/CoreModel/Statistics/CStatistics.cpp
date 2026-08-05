@@ -693,21 +693,34 @@ void AFStatistics::qslotUpdateNetworkState()
 void AFStatistics::qslotUpdateCPUUsage()
 {
     m_cpuUsage = os_cpu_usage_info_query(m_pCpuUsageInfo);
-    
-    if (m_cpuUsage >= 40) {
-        _ChangeCPUIconState(PCStatState::Error);
-        emit qsignalCPUError();
-    }
-    //else if(m_cpuUsage >= 20)
-    //    emit qsignalCPUState(PCStatState::Warning);
-    else
-        _ChangeCPUIconState(PCStatState::Normal);
+    bool isCpuHigh = false;
 #ifdef _WIN32
     PDH_FMT_COUNTERVALUE counterVal = { 0, };
     PdhCollectQueryData(_cpuQuery);
     PdhGetFormattedCounterValue(_cpuTotal, PDH_FMT_DOUBLE, NULL, &counterVal);
     m_cpuTotal = counterVal.doubleValue;
-#endif // _WIN32
+    if (m_cpuTotal >= 85.0) {
+        isCpuHigh = true;
+    }
+#else
+    if (m_cpuUsage >= 80.0) {
+        isCpuHigh = true;
+    }
+#endif
+    if (isCpuHigh) {
+        m_continuousHighCpuTicks++;
+    }
+    else {
+        m_continuousHighCpuTicks = 0; 
+    }
+
+    if (m_continuousHighCpuTicks >= 5) {
+        _ChangeCPUIconState(PCStatState::Error);
+        emit qsignalCPUError();
+    }
+    else {
+        _ChangeCPUIconState(PCStatState::Normal);
+    }
 }
 
 #define GBYTE (1024ULL * 1024ULL * 1024ULL)

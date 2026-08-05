@@ -524,6 +524,9 @@ bool AFMainFrame::AFMainFrameInit(bool bShow, std::string userID, std::string so
         auto loginEnd = std::chrono::steady_clock::now();
         g_loginDuration = std::chrono::duration_cast<std::chrono::milliseconds>(loginEnd - loginStart);
     }
+    else {
+        RestoreSoopAccount("Temp Login SOOP", "");
+    }
 
     if (!m_normalInit)
         return false;

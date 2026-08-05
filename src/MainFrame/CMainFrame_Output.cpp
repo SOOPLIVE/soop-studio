@@ -304,10 +304,6 @@ void AFMainFrame::qslotStreamingStart(void* output)
                 pSoopBroadInfo->SetBroadStartTime(formattedTime);
                 pSoopBroadInfo->BroadNumTimerAfterStart();
             }
-
-            if (m_blockManager) {
-                m_blockManager->SendBroadState(true);
-            }
         }
 
 #ifdef YOUTUBE_ENABLED

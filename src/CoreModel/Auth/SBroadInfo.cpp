@@ -132,6 +132,8 @@ void AFQBroadInfo::qslotResponseBroadNumberDataAPI(const QByteArray& responseDat
     AUTH_CONTEXT.GetChannelID(PLATFORM_SOOP, channelId);
     SetBroadNumber(broadNum);
 
+    MAIN_BLOCKMANAGER->SendBroadState(true);
+
     char path[512] = { 0, };
     GetAppConfigPath(path, sizeof(path), "SOOPStudio");
     QString fileName = QString("%1\\broad_info").arg(path);

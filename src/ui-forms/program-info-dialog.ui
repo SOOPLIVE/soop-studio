@@ -195,7 +195,7 @@
            </size>
           </property>
           <property name="text">
-           <string>ProgramInfo.OpenSourceLisence</string>
+           <string>ProgramInfo.OpenSourceLicense</string>
           </property>
           <property name="checkable">
            <bool>true</bool>

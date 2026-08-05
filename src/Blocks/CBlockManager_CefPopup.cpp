@@ -203,7 +203,9 @@ void AFQBlockManager::qslotLoadEndCefBrowser(int type)
 		}
 		if (0 != MAIN_OUTPUT->GetStreamingOutputRef()) {
 			if (pSoopChannelData->isStreaming) {
-				SendBroadState(true);
+				QTimer::singleShot(500, this, [this]() {
+					SendBroadState(true);
+					});
 			}
 		}
 	}

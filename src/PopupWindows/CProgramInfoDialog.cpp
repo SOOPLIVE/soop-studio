@@ -21,44 +21,6 @@ AFQProgramInfoDialog::AFQProgramInfoDialog(QWidget* parent) :
     
 #endif
     
-    QString styleSheet = R"(
-
-    QScrollBar:vertical {
-        border:none;
-        border: 1px solid #999999;
-        background: #24272D;
-		border: 0px solid transparent;
-        width: 6px;
-    }
-
-    QScrollBar::handle:vertical {
-        background-color: rgba(255,255,255,30%);
-	    border-radius:3px;
-		min-height : 40px;
-    }
-
-    QScrollBar::add-line:vertical {
-        border:none;
-	    width: 0px;
-	    subcontrol-position: right;
-	    subcontrol-origin: margin;
-    }
-
-    QScrollBar::sub-line:vertical {
-        border:none;
-		width: 0px;
-		subcontrol-position: left;
-		subcontrol-origin: margin;
-    }
-
-    QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
-        background: none;
-    }
-
-    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-        background: none;
-    })";
-
 	std::string path;
 	if (GetDataFilePath("license/privacy-policy.html", path)) {
 		QString filePath = QString::fromStdString(path);
@@ -76,9 +38,10 @@ AFQProgramInfoDialog::AFQProgramInfoDialog(QWidget* parent) :
 		ui->textBrowser_2->setHtml(text);
 	}
 
-	if (GetDataFilePath("license/lisence.html", path)) {
+	if (GetDataFilePath("license/license.html", path)) {
 		QString filePath = QString::fromStdString(path);
 		QString text = _ReadHtmlFile(filePath);
+		ui->textBrowser_3->setOpenExternalLinks(true);
 		ui->textBrowser_3->setHtml(text);
 	}
 
