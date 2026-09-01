@@ -36,7 +36,7 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="AFTransparentMouseEvents" name="titleWidget" native="true">
+    <widget class="QFrame" name="titleFrame" native="true">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -198,12 +198,6 @@
    <class>AFQTDisplay</class>
    <extends>QWidget</extends>
    <header>UIComponent/CQtDisplay.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>AFTransparentMouseEvents</class>
-   <extends>QWidget</extends>
-   <header>MainFrame/CTransparentMouseEvents.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

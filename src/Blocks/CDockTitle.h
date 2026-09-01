@@ -5,8 +5,6 @@
 #include <QMouseEvent>
 #include <QAbstractButton>
 
-#include "MainFrame/CTransparentMouseEvents.h"
-
 #include "UIComponent/CCustomMenu.h"
 
 class AFQHoverWidget;
@@ -62,7 +60,7 @@ signals:
 
 public:
     void Initialize(bool onlyPopup, QString text, int BlockType, bool needQuestionMark, const QString& questionMarkToolTip);
-    void InitializeCustom(QString customName, QString customUuid, bool minmax, bool threeDots = false, bool closeButton = false);
+    void InitializeCustom(QString customName, QString customUuid, bool minmax, bool threeDots = false, bool closeButton = false, bool needQuestionMark = false, const QString& questionMarkToolTip = QString());
     void ShowRefreshButton();
     void AddButton(QAbstractButton* button);
     void AddButton(QList<QAbstractButton*> buttons);

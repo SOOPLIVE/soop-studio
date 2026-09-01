@@ -73,6 +73,10 @@
 #define EVENT_BANNER_WIDTH 458
 #define EVENT_BANNER_HEIGHT 463
 
+#define OPEN_EXTRA_BROWSER_POPUP_STUDIO_QUICKVIEW_GIFT_MODAL_LAYER "StudioQuickviewGiftModalLayer"
+#define OPEN_EXTRA_BROWSER_POPUP_STUDIO_RANDOM_GIFT_MODAL_LAYER "StudioRandomGiftModalLayer"
+#include <regex>
+
 std::string UnEscapeString(const std::string& input) {
 	std::string unescape;
 	unescape.reserve(input.size());
@@ -1437,9 +1441,27 @@ void AFQBlockManager::OpenExtraBrowserPopup(QString key, QString title, std::str
 		extraBrowser->SetIsHidePopup(allowedHide);
 		extraBrowser->setWindowTitle(title);
 
+		std::smatch match;
+		std::regex id_pattern(R"([?&]id=([^&?#]+))");
+		auto needQuestionMark = false;
+		QString questionMarkToolTip;
+		if (std::regex_search(url, match, id_pattern)) {
+			std::string id = match[1].str();
+			//if (id == OPEN_EXTRA_BROWSER_POPUP_STUDIO_SUBSCRIPTION_GIFT_MODAL_LAYER)
+			//    questionMarkToolTip = QTStr("Block.Tooltip.Subscription");
+			//else
+			if (id == OPEN_EXTRA_BROWSER_POPUP_STUDIO_QUICKVIEW_GIFT_MODAL_LAYER)
+				questionMarkToolTip = QTStr("Block.Tooltip.QuickView");
+			else if (id == OPEN_EXTRA_BROWSER_POPUP_STUDIO_RANDOM_GIFT_MODAL_LAYER)
+				questionMarkToolTip = QTStr("Block.Tooltip.Random");
+
+			if (questionMarkToolTip.length())
+				needQuestionMark = true;
+		}
+
 		QString uuid = QUuid::createUuid().toString();
 		AFDockTitle* dockTitle = new AFDockTitle(extraBrowser);
-		dockTitle->InitializeCustom(title, uuid, false, false);
+		dockTitle->InitializeCustom(title, uuid, false, false, false, needQuestionMark, questionMarkToolTip);
 		dockTitle->SetHidePopup(allowedHide);
 
 		QCefWidget* cefWidget = CEFMANAGER.createWidget(extraBrowser, url);

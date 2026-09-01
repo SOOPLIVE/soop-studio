@@ -8,11 +8,11 @@ AFQCustomColorDialog::AFQCustomColorDialog(const QColor& initial, const QString&
 {
     ui->setupUi(this);
 
-#ifdef _WIN32
-	ui->colorDialogtitleFrame->setProperty("MoveInAllArea", true);
+#ifdef _WIN32    
+	ui->titleFrame->setProperty("MoveInAllArea", true);
 #elif defined(__APPLE__)
     setWindowFlags(Qt::Window|Qt::WindowCloseButtonHint|Qt::CustomizeWindowHint);
-    ui->colorDialogtitleFrame->hide();
+	ui->titleFrame->hide();
 #endif
     
 

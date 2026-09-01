@@ -44,6 +44,7 @@
 #include <qtimer.h>
 #include <string>
 #include <obs-frontend-api.h>
+#include <util/windows/window-helpers.h>
 
 #include "Application/CApplication.h"
 
@@ -2646,22 +2647,84 @@ void OBSPropertiesView::setScrollPos(int h, int v, int old_hend, int old_vend)
 
 void OBSPropertiesView::createAreaCaptureProp(OBSSource source)
 {
-	obs_property_t* p = obs_properties_add_button2(properties.get(), "capture_button",
-												   QTStr("WindowAreaCapture.CaptureButton").toStdString().c_str(),
-		[](obs_properties_t* props, obs_property_t* property, void* private_data) -> bool {
-		obs_source_t* cb_source = reinterpret_cast<obs_source_t*>(private_data);
-		if(cb_source) {
-			MAINFRAME->ShowWindowCaptureArea(cb_source);
+	QString captureWindow;
+	bool is_desktop = obs_data_get_bool(settings, "desktop_monitor");
+	if (is_desktop)
+	{
+		const int monitorIdx = obs_data_get_int(settings, "monitor");
+		const QList<QScreen*> screens = QGuiApplication::screens();
+
+		if (monitorIdx >= 0 && monitorIdx < screens.size()) {
+			captureWindow =
+				QString("[Desktop]: %1")
+				.arg(screens[monitorIdx]->name());
 		}
-		return false;
-	},
-		static_cast<void*>(source.Get())
-	);
+		else {
+			captureWindow = "[Desktop]";
+		}
+	}
+	else
+	{
+		std::string window = obs_data_get_string(settings, "window");
+
+		char* className = nullptr;
+		char* title = nullptr;
+		char* executable = nullptr;
+		ms_build_window_strings(window.c_str(), &className, &title, &executable);
+
+		captureWindow = QString("[%1]: %2")
+			.arg(executable ? executable : "")
+			.arg(title ? title : "");
+
+		bfree(className);
+		bfree(title);
+		bfree(executable);
+	}
+
+	obs_property_t* p = obs_properties_get(properties.get(), "capture_window");
+	if (p) {
+
+		obs_property_set_long_description(p, captureWindow.toStdString().c_str());
+	}
+
+	p = obs_properties_add_button2(
+		properties.get(),
+		"capture_button",
+		QTStr("WindowAreaCapture.CaptureButton").toStdString().c_str(),
+		[](obs_properties_t* props,
+			obs_property_t* property,
+			void* private_data) -> bool {
+
+				OBSPropertiesView* view =
+					static_cast<OBSPropertiesView*>(private_data);
+
+				if (!view)
+					return false;
+
+				OBSSource source = view->getSourceObject();
+				if (!source)
+					return false;
+
+				QPointer<OBSPropertiesView> safeView(view);
+
+				MAINFRAME->ShowWindowCaptureArea(
+					source,
+					[safeView](const std::optional<WindowCaptureAreaResult>& captureResult) {
+						if (!safeView)
+							return;
+
+						if (captureResult) {
+							safeView->ReloadProperties();
+						}
+					});
+
+				return false;
+		}, this);
+
 	obs_property_set_label_text(p, QTStr("WindowAreaCapture.CaptureText").toStdString().c_str());
 
 	obs_properties_add_bool(properties.get(), "cursor", QTStr("WindowAreaCapture.CaptureCursor").toStdString().c_str());
 }
-
 // ===============================
 // Add Custom Props Widget 
 // ( Used SOOP Studio Source )

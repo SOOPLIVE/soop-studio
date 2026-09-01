@@ -218,6 +218,7 @@ void AFQInfoTooltipButton::_CreateExplanationWidget()
 
 	m_explanationLabel->setObjectName("label_toolTipItem");
 	m_explanationLabel->setText(m_explanationText);
+	m_explanationLabel->setOpenExternalLinks(true);
 
 	m_explanation->layout()->setContentsMargins(0, 0, 0, 0);
 	m_explanation->layout()->setSpacing(0);

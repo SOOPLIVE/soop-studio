@@ -481,12 +481,7 @@ void AFQSourceProperties::_DrawTransitionPreview(void* data, uint32_t cx, uint32
 
 void AFQSourceProperties::_Cleanup()
 {
-#ifdef _WIN32
-    const int titleFrameCY = 31;
-    config_set_int(APPCONFIG, "PropertiesWindow", "cy", height() - titleFrameCY);
-#elif defined(__APPLE__)
     config_set_int(APPCONFIG, "PropertiesWindow", "cy", height());
-#endif
 
     obs_display_remove_draw_callback(ui->preview->GetDisplay(), AFQSourceProperties::_DrawPreview, this);
     obs_display_remove_draw_callback(ui->preview->GetDisplay(), AFQSourceProperties::_DrawTransitionPreview, this);

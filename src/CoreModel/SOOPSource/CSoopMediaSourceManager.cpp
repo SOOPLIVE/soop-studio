@@ -17,6 +17,11 @@
 #include "MainFrame/Output/COutput.h"
 #include "Blocks/SceneSourceDock/CSourceListView.h"
 
+enum class TvLiveRequestType {
+	PlayUrl = 0,
+	BlindCheck = 1,
+};
+
 namespace {
 
 	int JsonValueToInt(const QJsonValue& value, int defaultValue = 0)
@@ -109,7 +114,11 @@ void SOOPMediaSourceManager::SetSoopMediaSource(OBSSource source, bool removeSou
 				RequestDirectBroadOneTimeUrl_2(m_currentIdx);
 		}
 		else if (0 == id.compare("soop_tv_cable_source")) {
+			m_signals.emplace_back(sh, "vlc_restart_requested", SOOPMediaSourceManager::OBSVlcRestartRequested, this);
 			bool requestTvLive = (m_currentCPNo != 0);
+
+			m_tvLiveRestartPending = false;
+			++m_tvLiveRefreshSequence;
 
 			if (requestTvLive && AFOutputUtil::IsStreamActive()) {
 				AFQBroadInfo* broadInfo = AUTH_CONTEXT.GetSoopBroadInfo();
@@ -295,7 +304,7 @@ void SOOPMediaSourceManager::RequestTvLiveOneTimeUrl(int cpNo)
 		const char* soop_id = pSoopChannel->pAuthData->channelID.c_str();
 
 		QList<QVariant> values = { };
-		QList<int>		additionalData = { cpNo };
+		QList<int> additionalData = { cpNo, (int)TvLiveRequestType::PlayUrl };
 		SOOP_API_HANDLER->postAPIfromId(GET_TVBROAD_ONETIME_URL, values,
 			this, "_qslotTvSourceOneTimeUrlAPIData", additionalData);
 	}
@@ -320,7 +329,7 @@ void SOOPMediaSourceManager::RequestTvLiveBlindCheck()
 		const char* soop_id = pSoopChannel->pAuthData->channelID.c_str();
 
 		QList<QVariant> values = { };
-		QList<int>		additionalData = { m_currentCPNo };
+		QList<int> additionalData = { m_currentCPNo, (int)TvLiveRequestType::BlindCheck };
 		SOOP_API_HANDLER->postAPIfromId(GET_TVBROAD_ONETIME_URL, values,
 			this, "_qslotTvSourceOneTimeUrlAPIData", additionalData);
 	}
@@ -857,12 +866,16 @@ void SOOPMediaSourceManager::_qslotTvLiveStartTimer()
 		m_tvLiveStartTimer.stop();
 
 	OBSSource source = GetSoopMediaSource();
-	if (!source)
+	if (!source) {
+		m_tvLiveRestartPending = false;
 		return;
+	}
 
 	QString id = obs_source_get_id(source);
-	if (0 != id.compare("soop_tv_cable_source"))
+	if (0 != id.compare("soop_tv_cable_source")) {
+		m_tvLiveRestartPending = false;
 		return;
+	}
 
 	OBSDataAutoRelease settings = obs_source_get_settings(source);
 
@@ -907,6 +920,9 @@ void SOOPMediaSourceManager::_qslotTvLiveStartTimer()
 			obs_source_update(source, settings);			
 		}
 	}
+
+	obs_data_set_int(settings, "cpNo", m_currentCPNo);
+	m_tvLiveRestartPending = false;
 	//
 	auto it = m_tvLists.begin();
 	for (; it != m_tvLists.end(); ++it) {
@@ -932,7 +948,7 @@ void SOOPMediaSourceManager::_qslotTvLiveStartTimer()
 	emit qsignalResponseTvLiveOneTimeUrl(m_currentCPNo);
 }
 
-void SOOPMediaSourceManager::_qslotTvSourceOneTimeUrlAPIData(const QByteArray& responseData, int requestcpNo)
+void SOOPMediaSourceManager::_qslotTvSourceOneTimeUrlAPIData(const QByteArray& responseData, int requestcpNo, int requestType)
 {
 	OBSSource source = GetSoopMediaSource();
 	if (!source)
@@ -941,6 +957,16 @@ void SOOPMediaSourceManager::_qslotTvSourceOneTimeUrlAPIData(const QByteArray& r
 	QString id = obs_source_get_id(source);
 	if (0 != id.compare("soop_tv_cable_source"))
 		return;
+
+	if (m_tvLiveRestartPending &&
+		requestType ==
+		(int)TvLiveRequestType::BlindCheck) {
+		blog(LOG_INFO,
+			"[SOOPMediaSourceManager] "
+			"Ignore blind-check response "
+			"while refreshing TV URL");
+		return;
+	}
 
 	QJsonDocument jsonResponse = QJsonDocument::fromJson(responseData);
 	if (!jsonResponse.isObject())
@@ -1585,4 +1611,123 @@ bool SOOPMediaSourceManager::IsEqualVodInfo(const VodInfo_s& a, const VodInfo_s&
 		(a.contentTitle == b.contentTitle) &&
 		(a.seasonTitle == b.seasonTitle) &&
 		(a.vodTitle == b.vodTitle);
+}
+
+void SOOPMediaSourceManager::OBSVlcRestartRequested(void* data, calldata_t* calldata)
+{
+	auto* manager = static_cast<SOOPMediaSourceManager*>(data);
+
+	if (!manager || !calldata)
+		return;
+
+	obs_source_t* signalSource = static_cast<obs_source_t*>(calldata_ptr(calldata, "source"));
+
+	if (!signalSource)
+		return;
+
+	const char* sourceId = obs_source_get_id(signalSource);
+	if (!sourceId || strcmp(sourceId, "soop_tv_cable_source") != 0) {
+		return;
+	}
+
+	const char* uuid = obs_source_get_uuid(signalSource);
+
+	QString sourceUuid = QString::fromUtf8(uuid ? uuid : "");
+
+	int abnormalCount = (int)calldata_int(calldata, "abnormal_count");
+	int videoAgeMs = (int)calldata_int(calldata, "video_age_ms");
+	int audioAgeMs = (int)calldata_int(calldata, "audio_age_ms");
+	int avDriftMs = (int)calldata_int(calldata, "av_drift_ms");
+
+	QMetaObject::invokeMethod(
+		manager,
+		"qslotVlcRestartRequested",
+		Qt::QueuedConnection,
+		Q_ARG(QString, sourceUuid),
+		Q_ARG(int, abnormalCount),
+		Q_ARG(int, videoAgeMs),
+		Q_ARG(int, audioAgeMs),
+		Q_ARG(int, avDriftMs));
+}
+
+void SOOPMediaSourceManager::qslotVlcRestartRequested(
+	QString sourceUuid,
+	int abnormalCount,
+	int videoAgeMs,
+	int audioAgeMs,
+	int avDriftMs)
+{
+	if (m_tvLiveRestartPending)
+		return;
+
+	OBSSource source = GetSoopMediaSource();
+	if (!source)
+		return;
+
+	const char* sourceId = obs_source_get_id(source);
+
+	if (!sourceId || strcmp(sourceId, "soop_tv_cable_source") != 0) {
+		return;
+	}
+
+	const char* currentUuid = obs_source_get_uuid(source);
+
+	if (!currentUuid || sourceUuid != QString::fromUtf8(currentUuid)) {
+		return;
+	}
+
+	OBSDataAutoRelease settings = obs_source_get_settings(source);
+
+	if (obs_data_get_bool(settings, "show_blind")) {
+		return;
+	}
+
+	const int cpNo = (int)obs_data_get_int(settings, "cpNo");
+	if (cpNo <= 0)
+		return;
+
+	m_tvLiveRestartPending = true;
+	const uint64_t refreshSequence = ++m_tvLiveRefreshSequence;
+
+	if (m_tvLiveBlindTimer.isActive())
+		m_tvLiveBlindTimer.stop();
+
+	blog(LOG_WARNING,
+		"[SOOPMediaSourceManager] "
+		"Request new TV live URL: "
+		"name=%s, cpNo=%d, "
+		"abnormal_count=%d, "
+		"video_age=%d ms, "
+		"audio_age=%d ms, "
+		"av_drift=%d ms",
+		obs_source_get_name(source),
+		cpNo,
+		abnormalCount,
+		videoAgeMs,
+		audioAgeMs,
+		avDriftMs);
+
+	RequestTvLiveOneTimeUrl(cpNo);
+
+	QTimer::singleShot(
+		30000,
+		this,
+		[this, refreshSequence]() {
+			if (refreshSequence !=
+				m_tvLiveRefreshSequence) {
+				return;
+			}
+
+			if (!m_tvLiveRestartPending)
+				return;
+
+			blog(LOG_WARNING,
+				"[SOOPMediaSourceManager] "
+				"TV live URL refresh timeout");
+
+			m_tvLiveRestartPending = false;
+
+			if (!m_tvLiveBlindTimer.isActive())
+				m_tvLiveBlindTimer.start();
+		});
 }

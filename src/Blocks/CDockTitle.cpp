@@ -262,8 +262,8 @@ void AFDockTitle::Initialize(bool onlyPopup, QString text, int BlockType, bool n
     setWindowTitle(text);
 }
 
-void AFDockTitle::InitializeCustom(QString customName, QString customUuid, bool minmax, bool threeDots, bool closeButton)
-{    
+void AFDockTitle::InitializeCustom(QString customName, QString customUuid, bool minmax, bool threeDots, bool closeButton, bool needQuestionMark, const QString& questionMarkToolTip) 
+{
     setProperty("customUuid", customUuid);
     m_blockType = -1;
 
@@ -277,8 +277,11 @@ void AFDockTitle::InitializeCustom(QString customName, QString customUuid, bool 
     
     if (closeButton)
         ui->pushButton_Close->show();
-    DeleteQuestionMarkButton();
-    DeleteTitleIcon();
+
+    if (!needQuestionMark)
+        DeleteQuestionMarkButton();
+    else
+        ui->pushButton_QuestionMark->SetExplanationText(questionMarkToolTip, AFQInfoTooltipButton::ToolTipPos::BottomLeft);
 
     setWindowTitle(customName);
     MinMaxButton(minmax);
@@ -332,7 +335,7 @@ void AFDockTitle::UpdateTitleLabel()
 
     int finalWidth = qMin(titleWidth, adjustTitleWidth);
 
-    if (finalWidth < 140)
+    if ((finalWidth < 140) && !ui->pushButton_QuestionMark)
         finalWidth = 140;
 
     if (ui->label->width() != finalWidth)

@@ -675,7 +675,7 @@ public:
     void ApplyMoveArea();
     bool CheckSplitVodByUI();
 
-	void ShowWindowCaptureArea(obs_source_t* source);
+    void ShowWindowCaptureArea(obs_source_t* source, WindowSelectedCallback callback = nullptr);
 	
     // [Source Control Toolbat]
 

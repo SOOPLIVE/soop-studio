@@ -10,13 +10,10 @@
 
 class AFLoadSaveManager final
 {
-#pragma region QT Field, CTOR/DTOR
 public:
     AFLoadSaveManager() = default;
     ~AFLoadSaveManager() = default;
-#pragma endregion QT Field, CTOR/DTOR
 
-#pragma region public func
 public:
     inline              void IncreaseCheckSaveCnt() {
                             long tmpValue = m_disableSaving;
@@ -42,9 +39,7 @@ public:
 
     void                MoveProfileToBackup(std::string remainID);
     void                MoveSceneCollectionToBackup(std::string remainID);
-#pragma endregion public func
 
-#pragma region private func
 private:
     void                _LoadTransitions(obs_data_array_t *transitions,
                                          obs_load_source_cb cb, void *private_data);
@@ -66,13 +61,11 @@ private:
     obs_data_array_t*   _SaveQuickTransitions();
     void                _Save(const char* file);
     void                _CheckBackupDir(std::string remainID);
-#pragma endregion private func
-#pragma region public member var
 
-#pragma endregion public member var
-#pragma region private member var
+    void sceneCollectionBackup(const char* file, obs_data_t* data);
+
 private:
     std::atomic<long>   m_disableSaving = 1;
     bool                m_projectChanged = false;
-#pragma endregion private member var
+
 };

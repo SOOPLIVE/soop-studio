@@ -458,7 +458,7 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		settings["input"] = in["STREAM"]["STREAM_PATH"].string_value();
 		settings["is_local_file"] = false;
 		out["settings"] = settings;
-		out["monitoring_type"] = OBS_MONITORING_TYPE_AUTO;
+		out["monitoring_type"] = OBS_MONITORING_TYPE_MONITOR_ONLY;
 		result = true;
 	}
 	break;
@@ -505,7 +505,7 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		settings["height"] = in["WEBURL"]["HEIGHT"].int_value();
 		settings["url"] = in["WEBURL"]["WEBURL_PATH"].string_value();
 		out["settings"] = settings;
-		out["monitoring_type"] = OBS_MONITORING_TYPE_AUTO;
+		out["monitoring_type"] = OBS_MONITORING_TYPE_MONITOR_ONLY;
 		result = true;
 	}
 	break;
@@ -519,7 +519,7 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		settings["restart_on_activate"] = in["VIDEO_FILE"]["REWIND"].int_value() == 1 ? true : false;
 		settings["clear_on_media_end"] = in["VIDEO_FILE"]["HIDE"].int_value() == 1 ? true : false;
 		out["settings"] = settings;
-		out["monitoring_type"] = OBS_MONITORING_TYPE_AUTO;
+		out["monitoring_type"] = OBS_MONITORING_TYPE_MONITOR_ONLY;
 		result = true;
 	}
 	break;
@@ -571,7 +571,7 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		settings["looping"] = in["VIDEO_LIST"]["REPEAT"].int_value() == 1 ? true : false;
 		settings["current_file_name"] = in["VIDEO_LIST"]["PATH"].string_value();
 		out["settings"] = settings;
-		out["monitoring_type"] = OBS_MONITORING_TYPE_AUTO;
+		out["monitoring_type"] = OBS_MONITORING_TYPE_MONITOR_ONLY;
 		result = true;
 	}
 	break;
@@ -772,7 +772,7 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		}
 
 		out["settings"] = settings;
-		out["monitoring_type"] = OBS_MONITORING_TYPE_AUTO;
+		out["monitoring_type"] = OBS_MONITORING_TYPE_MONITOR_ONLY;
 		result = true;
 	}
 	break;
@@ -785,7 +785,7 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		out["name"] = in["NAME"].string_value();
 
 		out["settings"] = settings;
-		out["monitoring_type"] = OBS_MONITORING_TYPE_AUTO;
+		out["monitoring_type"] = OBS_MONITORING_TYPE_MONITOR_ONLY;
 		result = true;
 	}
 	break;
@@ -808,7 +808,6 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		settings["height"] = BaseCY;
 
 		out["settings"] = settings;
-		out["monitoring_type"] = OBS_MONITORING_TYPE_AUTO;
 		result = true;
 	}
 	break;
@@ -888,7 +887,7 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		settings["width"] = in["LIVECOMMERCE_GOAL"]["WIDTH"].int_value();
 		settings["height"] = in["LIVECOMMERCE_GOAL"]["HEIGHT"].int_value();
 		out["settings"] = settings;
-		out["monitoring_type"] = OBS_MONITORING_TYPE_AUTO;
+		out["monitoring_type"] = OBS_MONITORING_TYPE_MONITOR_ONLY;
 		result = true;
 	}
 	break;
@@ -913,7 +912,7 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		settings["width"] = in["LIVECOMMERCE_RANK"]["WIDTH"].int_value();
 		settings["height"] = in["LIVECOMMERCE_RANK"]["HEIGHT"].int_value();
 		out["settings"] = settings;
-		out["monitoring_type"] = OBS_MONITORING_TYPE_AUTO;
+		out["monitoring_type"] = OBS_MONITORING_TYPE_MONITOR_ONLY;
 		result = true;
 	}
 	break;

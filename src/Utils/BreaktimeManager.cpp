@@ -6,6 +6,10 @@
 #include "MainFrame/SceneSource/CMainSceneSource.h"
 #include "Blocks/SceneSourceDock/CSceneSourceDockWidget.h"
 #include "Blocks/CDockTitle.h"
+#pragma region _SOOP_SOURCE_CHANNELS
+#define BREAKTIME_VIDEO_CHANNEL (MAX_CHANNELS - 1)
+#define BREAKTIME_AUDIO_CHANNEL (MAX_CHANNELS - 2)
+#pragma endregion
 
 inline bool IsInvalidAPI() {
     return (!AUTH_CONTEXT.GetSoopBroadInfo() || AUTH_CONTEXT.SoopCookie().empty() ? true : false);
@@ -235,7 +239,7 @@ void BreaktimeManager::SetSceneText(QString text)
 void BreaktimeManager::SetAudioMuted(bool muted)
 {
     media_muted = muted;
-    OBSSourceAutoRelease source = obs_get_output_source(7);
+    OBSSourceAutoRelease source = obs_get_output_source(BREAKTIME_AUDIO_CHANNEL);
     obs_source_set_muted(source, muted);
 }
 
@@ -365,13 +369,14 @@ void BreaktimeManager::_PlayBrowserSource()
     obs_source_inc_showing(source);
     if (timer.isActive())
         os_sleep_ms(1000);
-    obs_set_output_source(8, source);
+
+    obs_set_output_source(BREAKTIME_VIDEO_CHANNEL, source);
     obs_source_dec_showing(source);
 }
 
 void BreaktimeManager::_StopBrowserSource()
 {
-    obs_set_output_source(8, nullptr);
+    obs_set_output_source(BREAKTIME_VIDEO_CHANNEL, nullptr);
 }
 
 void BreaktimeManager::_PlayMediaSource(bool preview)
@@ -408,16 +413,16 @@ void BreaktimeManager::_PlayMediaSource(bool preview)
                                        obs_monitoring_type::OBS_MONITORING_TYPE_MONITOR_ONLY :
                                        obs_monitoring_type::OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
 
-        soop_set_output_source(7, source, preview ? false : true);
+        soop_set_output_source(BREAKTIME_AUDIO_CHANNEL, source, preview ? false : true);
     }
     else
-        soop_set_output_source(7, nullptr, true);
+        soop_set_output_source(BREAKTIME_AUDIO_CHANNEL, nullptr, true);
 }
 
 void BreaktimeManager::_StopMediaSource()
 {
-    OBSSourceAutoRelease source = obs_get_output_source(7);
-    soop_set_output_source(7, nullptr, false);
+    OBSSourceAutoRelease source = obs_get_output_source(BREAKTIME_AUDIO_CHANNEL);
+    soop_set_output_source(BREAKTIME_AUDIO_CHANNEL, nullptr, false);
 
     obs_fader_remove_callback(media_fader, _OBSVolumeChanged, this);
     media_fader = nullptr;

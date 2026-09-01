@@ -236,10 +236,10 @@ bool AFMainFrame::CheckSplitVodByUI()
     return ui->label_BroadTime->IsSplitVodAvailable();
 }
 
-
-void AFMainFrame::ShowWindowCaptureArea(obs_source_t* source)
+void AFMainFrame::ShowWindowCaptureArea(obs_source_t* source,
+                                        WindowSelectedCallback callback)
 {
-    WindowCaptureAreaWidget::launch(source, this);
+    WindowCaptureAreaWidget::launch(source, this, std::move(callback));
 }
 
 #ifdef __APPLE__

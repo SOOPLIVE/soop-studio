@@ -56,6 +56,16 @@ AFQBrowserInteraction::AFQBrowserInteraction(QWidget* parent, OBSSource source) 
 	//SetWidthResizeEnabled(false);
 
 #ifdef _WIN32
+	OBSDataAutoRelease settings =
+		obs_source_get_settings(m_obsSource);
+
+	obs_data_set_int(
+		settings,
+		"interaction_hwnd",
+		static_cast<long long>(winId()));
+#endif
+
+#ifdef _WIN32
 	m_pDummyInteraction = new CDummyInteraction(this, m_obsSource);
 	if(m_pDummyInteraction)
 		ui->verticalLayout->addWidget(m_pDummyInteraction->GetWidget());
@@ -64,6 +74,13 @@ AFQBrowserInteraction::AFQBrowserInteraction(QWidget* parent, OBSSource source) 
 
 AFQBrowserInteraction::~AFQBrowserInteraction()
 {
+#ifdef _WIN32
+	OBSDataAutoRelease settings =
+		obs_source_get_settings(m_obsSource);
+
+	obs_data_set_int(settings, "interaction_hwnd", 0);
+#endif
+
 	ui->preview->removeEventFilter(m_eventFilter.get());
 
 #ifdef _WIN32

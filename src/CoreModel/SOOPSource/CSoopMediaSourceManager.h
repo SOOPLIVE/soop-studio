@@ -159,7 +159,7 @@ private slots:
     // TV Broad Source
     void _qslotTvSourceBlindTimer();
     void _qslotTvLiveStartTimer();
-    void _qslotTvSourceOneTimeUrlAPIData(const QByteArray& responseData, int requestcpNo);
+    void _qslotTvSourceOneTimeUrlAPIData(const QByteArray& responseData, int requestcpNo, int requestType);
     void _qslotTvLiveGeoBlockCheckAPIResponse(const QByteArray& responseData, int cpNo, int categoryNo);
 
     // Anime / Sport VOD Source
@@ -185,6 +185,8 @@ private slots:
 
     void _qslotVodGeoBlockCheckAPIResponse(const QByteArray& responseData, int allowedCategory);
 
+    void qslotVlcRestartRequested(QString sourceUuid, int abnormalCount, int videoAgeMs, int audioAgeMs, int avDriftMs);
+
 protected:
     static void OBSMediaStarted(void* data, calldata_t* calldata);
     static void OBSMediaStopped(void* data, calldata_t* calldata);
@@ -192,6 +194,8 @@ protected:
     static void OBSMediaPlay(void* data, calldata_t* calldata);
     static void OBSMediaPause(void* data, calldata_t* calldata);
     static void FSMediaFileLoaded(void* data, calldata_t* calldata);
+
+    static void OBSVlcRestartRequested(void* data, calldata_t* calldata);
 
 public:
     static bool IsEqualVodInfo(const VodInfo_s& a, const VodInfo_s& b);
@@ -245,4 +249,7 @@ private:
     SOOP_VOD_TYPE m_pendingVodType = SOOP_VOD_TYPE::NONE;
     VodInfo_s m_pendingVodInfo = {};
     bool m_pendingSelectedItem = false;
+
+    bool m_tvLiveRestartPending = false;
+    uint64_t m_tvLiveRefreshSequence = 0;
 };

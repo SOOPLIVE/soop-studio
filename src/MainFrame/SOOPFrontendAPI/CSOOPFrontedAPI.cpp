@@ -805,9 +805,17 @@ bool SOOPStudioAPI::soop_frontend_add_imageprinter(const char* file, const char*
 
         const char* id = "image_source";
 
+        auto activeConfig = ACTIVECONFIG;
+
+        const uint64_t baseCX = config_get_uint(activeConfig, "Video", "BaseCX");
+        const uint64_t baseCY = config_get_uint(activeConfig, "Video", "BaseCY");
+
         obs_transform_info transInfo;
         vec2_set(&transInfo.pos, 0, 0);
-        vec2_set(&transInfo.scale, 0.615f, 0.615f);
+        if (baseCX == 2560 && baseCY == 1440)
+            vec2_set(&transInfo.scale, 0.82f, 0.82f);
+        else
+            vec2_set(&transInfo.scale, 0.615f, 0.615f);
         vec2_set(&transInfo.bounds, width, height);
 
         transInfo.alignment = OBS_ALIGN_LEFT | OBS_ALIGN_TOP;

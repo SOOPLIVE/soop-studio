@@ -99,6 +99,8 @@ bool AFLoadSaveManager::Load(const char* file, bool remigrate)
         return true;
     }
 
+    sceneCollectionBackup(file, data);
+
     _LoadData(data, file);
     return false;
 }
@@ -811,4 +813,48 @@ void AFLoadSaveManager::_CheckBackupDir(std::string remainID)
 
     if (!std::filesystem::exists(backupDir))
         std::filesystem::create_directory(backupDir);
+}
+
+constexpr int maxBackupFile = 30;
+void AFLoadSaveManager::sceneCollectionBackup(const char* file, obs_data_t* data)
+{
+    if (!file || 0 == strlen(file) || !data)
+        return;
+
+    QFileInfo fileInfo(QString::fromUtf8(file));
+    if (!fileInfo.exists())
+        return;
+
+    // backup directory
+    std::string backupPath = LOCAL_FOLDER_NAME + "/backup/scenes/";
+    // directory check & make
+    char backupDir[MAX_PATH] = { 0, };
+    int ret = GetAppConfigPath(backupDir, sizeof(backupDir), backupPath.c_str());
+    if (!os_file_exists(backupDir))
+        os_mkdirs(backupDir);
+
+    // backup file
+    const QString backupFile = QString("%1/%2_%3.json")
+        .arg(backupDir)
+        .arg(fileInfo.completeBaseName())
+        .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
+    // save
+    obs_data_save_json(data, backupFile.toUtf8().constData());
+
+    // check max file count
+    QDir dir(backupDir);
+    dir.setFilter(QDir::Files | QDir::NoDotAndDotDot); // set filter : file & remove parent folder 
+    dir.setSorting(QDir::Time | QDir::Reversed); // sort
+
+    if (dir.count() > maxBackupFile) {
+        int removeCount = dir.count() - maxBackupFile;
+        //
+        QFileInfoList list = dir.entryInfoList();
+        for (auto item : list) {
+            std::string removeFile = item.absoluteFilePath().toUtf8().constData();
+            os_unlink(removeFile.c_str());
+            if (--removeCount <= 0)
+                break;
+        }
+    }
 }

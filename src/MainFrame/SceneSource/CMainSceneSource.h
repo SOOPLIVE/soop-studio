@@ -15,7 +15,6 @@ public:
 	~CMainSceneSource();
 
 public slots:
-	void qslotAddSourceMenu();
 	void qslotShowSelectSourcePopup();
 	void qslotAddSource(QString sourceID);
 
@@ -72,6 +71,9 @@ signals:
 
 public:
 	void AddNewSource(QString sourceId, bool addOnProgramMode = false);
+	void AddNewSourceInternal(const QString& sourceId,
+							bool addOnProgramMode,
+							const std::optional<WindowCaptureAreaResult>& windowAreaResult);
 	void CreateSourcePopupMenu(int idx, bool preview = false);
 	void CreateDefaultScene(bool firstStart);
 
@@ -93,8 +95,6 @@ private:
 	AFQCustomMenu* _AddBlendingModeMenu(AFQCustomMenu* menu, obs_sceneitem_t* item);
 	AFQCustomMenu* _AddBlendingMethodMenu(AFQCustomMenu* menu, obs_sceneitem_t* item);
 	AFQCustomMenu* _AddDeinterlacingMenu(AFQCustomMenu* menu, obs_source_t* source);
-
-	void _AddSourceMenuButton(const char* id, QWidget* popup);
 
 	QColor _GetSourceListBackgroundColor(int preset);
 

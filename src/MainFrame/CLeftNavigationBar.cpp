@@ -461,43 +461,6 @@ void AFQLeftNavigationBar::InitMainFrameAfter()
         this, &AFQLeftNavigationBar::InitMainFrameAfter);
 
     RefreshFavoriteLnbMenuButtons();
-
-    //bool useTooltip = config_get_bool(USERCONFIG, "BasicWindow", "ShowVirtualCamToolip");
-    bool useTooltip = config_get_bool(USERCONFIG, "BasicWindow", "ShowLeftbarExtraMenuToolip");
-    if (!useTooltip && !balloonTooltip)
-    {
-        balloonTooltip = new BalloonTooltip(QTStr("LeftSideBar.ExtraMenu.Tooltip.Title"),
-                                            QTStr("LeftSideBar.ExtraMenu.Tooltip.Info"),
-                                            MAINFRAME);
-
-        balloonTooltip->SetTooltipPointPosY(30);
-
-        connect(MAINFRAME, &AFMainFrame::qsignalmovedOrResized, this, &AFQLeftNavigationBar::moveBalloonTooltip);
-        connect(MAINFRAME, &AFMainFrame::qsignalMainResized, this, &AFQLeftNavigationBar::moveBalloonTooltip);
-        connect(balloonTooltip, &BalloonTooltip::closeTooltipEvent, this, [this] {
-            disconnect(MAINFRAME, &AFMainFrame::qsignalmovedOrResized, 
-                this, &AFQLeftNavigationBar::moveBalloonTooltip);
-
-            disconnect(MAINFRAME, &AFMainFrame::qsignalMainResized, 
-                this, &AFQLeftNavigationBar::moveBalloonTooltip);
-            //
-            //config_set_bool(USERCONFIG, "BasicWindow", "ShowVirtualCamToolip", false);
-            config_set_bool(USERCONFIG, "BasicWindow", "ShowLeftbarExtraMenuToolip", true);
-            config_save_safe(USERCONFIG, "tmp", nullptr);
-        });
-
-        bool firstRun = MAINFRAME->property("IsFirstRun").toBool();
-        if(firstRun)
-            connect(MAINFRAME, &AFMainFrame::firstTutorialClosedEvent, this, [=] {
-                QTimer::singleShot(1000, this, [this]() {
-                    moveBalloonTooltip();
-                });
-            });
-        else
-            QTimer::singleShot(1000, this, [this]() {
-                moveBalloonTooltip();
-            });
-    }
 }
 void AFQLeftNavigationBar::moveBalloonTooltip()
 {

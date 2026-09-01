@@ -55,16 +55,6 @@ CMainSceneSource::~CMainSceneSource()
     if (m_menuDeinterlace) delete m_menuDeinterlace;
 }
 
-void CMainSceneSource::qslotAddSourceMenu()
-{
-    AFQAddSourceMenuButton* button = qobject_cast<AFQAddSourceMenuButton*>(sender());
-
-    QString id = button->GetSourceId();
-
-    AddNewSource(id);
-}
-
-
 void CMainSceneSource::qslotShowSelectSourcePopup()
 {
     AFQSelectSourceDialog sourceSelect(nullptr);
@@ -963,6 +953,33 @@ void CMainSceneSource::qslotSceneButtonDotClicked()
 
 void CMainSceneSource::AddNewSource(QString sourceId, bool addOnProgramMode)
 {
+    if (sourceId == "window_area_capture") {
+        QTimer::singleShot(200, this,
+            [this, sourceId, addOnProgramMode]() {
+                MAINFRAME->ShowWindowCaptureArea(
+                    nullptr,
+                    [this, sourceId, addOnProgramMode](const std::optional<WindowCaptureAreaResult>& captureResult) {
+
+                        if (!captureResult)
+                            return;
+
+                        AddNewSourceInternal(
+                            sourceId,
+                            addOnProgramMode,
+                            captureResult);
+                    });
+            });
+
+        return;
+    }
+
+    AddNewSourceInternal(sourceId, addOnProgramMode, std::nullopt);
+}
+
+void CMainSceneSource::AddNewSourceInternal(const QString & sourceId,
+                                        bool addOnProgramMode,
+                                        const std::optional<WindowCaptureAreaResult>&windowAreaResult)
+{
     if (0 == sourceId.compare("scene")) {
         MAINFRAME->ShowSceneSourceSelectList();
         return;
@@ -994,10 +1011,10 @@ void CMainSceneSource::AddNewSource(QString sourceId, bool addOnProgramMode)
         }
     }
 
+    obs_transform_info itemInfo;
     obs_transform_info* pInfo = nullptr;
     if (AFSourceUtil::IsBrowserSizeStretch(sourceId.toStdString().c_str()))
     {
-        obs_transform_info itemInfo;
         vec2_set(&itemInfo.pos, 0, 0);
         vec2_set(&itemInfo.scale, 1.0f, 1.0f);
         vec2_set(&itemInfo.bounds, 800, 600);
@@ -1015,7 +1032,6 @@ void CMainSceneSource::AddNewSource(QString sourceId, bool addOnProgramMode)
         obs_video_info ovi;
         obs_get_video_info(&ovi);
 
-        obs_transform_info itemInfo;
         vec2_set(&itemInfo.pos, 0, 0);
         vec2_set(&itemInfo.scale, 1.0f, 1.0f);
         vec2_set(&itemInfo.bounds, ovi.base_width, ovi.base_height);
@@ -1035,7 +1051,6 @@ void CMainSceneSource::AddNewSource(QString sourceId, bool addOnProgramMode)
         // NOTE: Scale must be set in the "media_file_load" callback.
         // Scale should be applied after the file is successfully loaded.
         // recv callback SourceToolbar "image_source" => AFQImageSourceToolbar, "ffmpeg_source" => AFQMediaSourceToolbar
-        obs_transform_info itemInfo;
         vec2_set(&itemInfo.pos, 0, 0);
         vec2_set(&itemInfo.scale, 0.0f, 0.0f);
         vec2_set(&itemInfo.bounds, 0.0f, 0.0f);
@@ -1049,25 +1064,50 @@ void CMainSceneSource::AddNewSource(QString sourceId, bool addOnProgramMode)
     }
 
     OBSSource newSource;
-    QString displayText = AFSourceUtil::GetPlaceHodlerText(sourceId.toStdString().c_str());
-    if (!AFSourceUtil::AddNewSource(MAINFRAME, sourceId.toStdString().c_str(), displayText.toStdString().c_str(), true, newSource, pInfo, nullptr, addOnProgramMode))
-        return;
+    QString displayText = AFSourceUtil::GetPlaceHodlerText(
+        sourceId.toStdString().c_str());
 
+    if (!AFSourceUtil::AddNewSource(MAINFRAME,
+                                    sourceId.toStdString().c_str(),
+                                    displayText.toStdString().c_str(),
+                                    true,
+                                    newSource,
+                                    pInfo,
+                                    nullptr,
+                                    addOnProgramMode)) {
+        return;
+    }
 
     OBSDataAutoRelease settings = obs_source_get_settings(newSource);
+    if (sourceId == "window_area_capture") {
+        if (windowAreaResult) {
+            WindowCaptureAreaWidget::ApplyResult(
+                settings,
+                *windowAreaResult);
+
+            obs_source_update(newSource, settings);
+        }
+
+        AFSourceUtil::SetUndoRedoAddSource(sourceId.toStdString().c_str(), displayText.toStdString().c_str(), true);
+        return;
+    }
+
     if (0 == sourceId.compare("browser_source")) {
         obs_data_set_string(settings, "url", SOOPLIVE_KR_URL);
         obs_source_update(newSource, settings);
     }
 
     if (0 == sourceId.compare("soop_aimanager_source")) {
-
-        bool isAvailable = AUTH_CONTEXT.GetSoopBroadInfo()->UsePassword();
-        std::string boolStr = isAvailable ? "true" : "false";
-
         std::string url = AFSourceUtil::GetAIManagerURL();
 
+        obs_video_info ovi;
+        obs_get_video_info(&ovi);
+
         obs_data_set_string(settings, "url", url.c_str());
+        obs_data_set_int(settings, "width", ovi.base_width);
+        obs_data_set_int(settings, "height", ovi.base_height);
+
+        obs_source_set_monitoring_type(newSource, OBS_MONITORING_TYPE_NONE);
         obs_source_update(newSource, settings);
     }
     
@@ -1114,22 +1154,6 @@ void CMainSceneSource::AddNewSource(QString sourceId, bool addOnProgramMode)
 
         obs_source_update(newSource, settings);
     }
-
-    else if (0 == sourceId.compare("soop_kbo_graphic_source_score")) {
-
-        obs_data_set_int(settings, "width", 930);
-        obs_data_set_int(settings, "height", 186);
-
-        obs_source_update(newSource, settings);
-    }
-
-    else if (0 == sourceId.compare("soop_football_graphic_source_score")) {
-
-        obs_data_set_int(settings, "width", 706);
-        obs_data_set_int(settings, "height", 146);
-
-        obs_source_update(newSource, settings);
-    }
     else if(0 == sourceId.compare("soop_chat_source_mood_check")) {
 
 
@@ -1154,21 +1178,7 @@ void CMainSceneSource::AddNewSource(QString sourceId, bool addOnProgramMode)
         obs_sceneitem_defer_update_end(item);
     }
 
-    if (0 == sourceId.compare("painter_source") || 0 == sourceId.compare("soop_aimanager_source")) {
-
-        obs_video_info ovi;
-        obs_get_video_info(&ovi);
-
-        obs_data_set_int(settings, "width", ovi.base_width);
-        obs_data_set_int(settings, "height", ovi.base_height);
-
-        obs_source_update(newSource, settings);
-    }
-
-    if (0 == sourceId.compare("soop_aimanager_source"))
-    {
-        obs_source_set_monitoring_type(newSource, OBS_MONITORING_TYPE_NONE);
-
+   if (0 == sourceId.compare("painter_source")) {
         obs_video_info ovi;
         obs_get_video_info(&ovi);
 
@@ -1920,23 +1930,6 @@ AFQCustomMenu* CMainSceneSource::_AddDeinterlacingMenu(AFQCustomMenu* menu, obs_
 #undef ADD_ORDER
 
     return menu;
-}
-
-void CMainSceneSource::_AddSourceMenuButton(const char* id, QWidget* popup)
-{
-    const char* name = obs_source_get_display_name(id);
-    AFQAddSourceMenuButton* button = new AFQAddSourceMenuButton(id, popup);
-    button->setIconSize(QSize(24, 24));
-    button->setText(QT_UTF8(name));
-    button->setObjectName("addSourceMenuButton");
-    button->setIcon(ICON_CONTEXT.GetSourceIcon(id));
-
-    connect(button, &QPushButton::clicked,
-            this, &CMainSceneSource::qslotAddSourceMenu);
-
-    QWidgetAction* popupItem = new QWidgetAction(popup);
-    popupItem->setDefaultWidget(button);
-    popup->addAction(popupItem);
 }
 
 QColor CMainSceneSource::_GetSourceListBackgroundColor(int preset)
