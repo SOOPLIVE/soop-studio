@@ -109,16 +109,12 @@ public:
 	std::string Name(const std::string&) { return "FreecShot Import"; };
 	OBSImporterFiles FindFiles();
 
-	bool setDeviceUUID(std::string id);
-	std::string getDeviceUUID(std::string id) { return deviceMap[id]; }
-
 	bool setBrowserUUID(int browser_key);
 	std::string getBrowserUUID(int browser_key) { return browserMap[browser_key]; }
 
 	bool existSourceName(std::string name);
 
 private:
-	std::unordered_map<std::string, std::string> deviceMap; // <id, uuid>
 	std::unordered_map<int, std::string> browserMap; // <browser_key, uuid>
 	std::unordered_set<std::string> source_name_set;
 };

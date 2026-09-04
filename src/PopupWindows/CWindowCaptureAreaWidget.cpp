@@ -533,22 +533,32 @@ void WindowCaptureAreaWidget::UpdateDimOverlay()
         return;
     }
 
-    if (!dimOverlay->isVisible())
-        dimOverlay->show();
-
     const QRect localScreenRect(QPoint(0, 0), screenRect.size());
 
+    QRegion dimRegion;
+
     if (clearRect.isEmpty()) {
-        dimOverlay->setMask(QRegion(localScreenRect));
+        dimRegion = QRegion(localScreenRect);
     }
     else {
         const QRect localClearRect = clearRect.translated(-screenRect.topLeft());
 
-        QRegion dimRegion(localScreenRect);
+        dimRegion = QRegion(localScreenRect);
         dimRegion -= QRegion(localClearRect);
-
-        dimOverlay->setMask(dimRegion);
     }
+
+    if (dimRegion.isEmpty()) {
+        if (dimOverlay->isVisible())
+            dimOverlay->hide();
+
+        RaiseSelectionWindow();
+        return;
+    }
+
+    dimOverlay->setMask(dimRegion);
+
+    if (!dimOverlay->isVisible())
+        dimOverlay->show();
 
     RaiseSelectionWindow();
 }

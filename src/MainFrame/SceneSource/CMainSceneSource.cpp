@@ -117,7 +117,7 @@ void CMainSceneSource::qslotActionCopySource()
         copyInfo.visible = obs_sceneitem_visible(item);
         copyInfo.can_duplicate = !(obs_source_get_output_flags(source) & OBS_SOURCE_DO_NOT_DUPLICATE);
         
-        if (AFSourceUtil::IsForceDulicateSource(id.c_str()))
+        if (AFSourceUtil::IsForceDuplicateSource(id.c_str()))
             copyInfo.can_duplicate = true;
 
         m_clipboard.push_back(copyInfo);

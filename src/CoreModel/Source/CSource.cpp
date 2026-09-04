@@ -756,23 +756,31 @@ namespace AFSourceUtil
         OBSScene scene = SCENE_CONTEXT.GetCurrentScene();
         if(!scene)
             return;
-
+        
+        OBSSourceAutoRelease duplicatedSource;
         if(duplicate) {
             OBSSource from = source;
-            char* new_name = get_new_source_name_temp(obs_source_get_name(source), "%s %d");
+            char* new_name = get_new_source_name_temp(obs_source_get_name(from), "%s %d");
             const char* source_id = obs_source_get_id(from);
-            if (IsForceDulicateSource(source_id)) {
-                OBSData settings = obs_source_get_settings(from);
-                source = obs_source_create(source_id, new_name, settings, nullptr);
+            if (IsForceDuplicateSource(source_id)) {
+                OBSDataAutoRelease fromSettings = obs_source_get_settings(from);
+                OBSDataAutoRelease newSettings = obs_data_create();
+                obs_data_apply(newSettings, fromSettings);
+
+                duplicatedSource = obs_source_create(source_id, new_name, newSettings, nullptr);
+
+                if (duplicatedSource)
+                    obs_source_copy_filters(duplicatedSource, from);
             }
             else {
-                source = obs_source_duplicate(from, new_name, false);
+                duplicatedSource = obs_source_duplicate(from, new_name, false);
             }
-            obs_source_release(source);
             bfree(new_name);
 
-            if(!source)
+            if (!duplicatedSource)
                 return;
+
+            source = duplicatedSource;
         }
 
         AddSourceData data;
@@ -1443,14 +1451,18 @@ namespace AFSourceUtil
         return false;
     }
 
-    bool IsForceDulicateSource(const char* id)
+    bool IsForceDuplicateSource(const char* id)
     {
         if (!id)
             return false;
 
+        /* Recreate these sources instead of obs_source_duplicate().
+        * dshow_input uses a shared DShowInstance internally, but duplicated OBS
+        * sources must remain independent for source-local settings and filters. */
         return	strcmp(id, "ffmpeg_source") == 0 ||
-            strcmp(id, "ffmpeg_list_source") == 0 ||
-            strcmp(id, "monitor_capture") == 0;
+                strcmp(id, "ffmpeg_list_source") == 0 ||
+                strcmp(id, "monitor_capture") == 0 ||
+                strcmp(id, "dshow_input") == 0;
     }
 
     const char* GetNameSoopVodSourceFromId(const char* id)

@@ -115,8 +115,8 @@ private:
 	bool FontChanged(const char* setting);
 	void GroupChanged(const char* setting);
 	void EditableListChanged();
-	void ButtonClicked();
-	void ImageButtonGroupItemClicked();
+	void ButtonClicked();    
+	void ButtonGroupItemClicked();
 	void TogglePasswordText(bool checked);
 
 public:
@@ -311,9 +311,10 @@ private:
 	// Add Custom Props Widget 
 	// ( Used SOOP Studio Source )
 	// ===============================
-	void	AddImageButtonGroupItem(obs_property_t* prop, QGridLayout* layout,
-									QButtonGroup* buttonGroup, int r, int c, bool checked);
-	void	AddImageButtonGroup(obs_property_t* prop, QFormLayout* layout, QLabel*& label);
+	void    AddButtonGroupItem(obs_property_t* prop, QGridLayout* layout,
+								QButtonGroup* buttonGroup, int r, int c,
+								bool exclusive, bool checked);
+	void    AddButtonGroup(obs_property_t* prop, QFormLayout* layout, QLabel*& label);
 
 
 	QWidget* addEncorderBitrateList(obs_property_t* prop);

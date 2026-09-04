@@ -147,7 +147,7 @@ namespace AFSourceUtil
     
     bool            IsBrowserSizeStretch(const char* id);
 
-	bool					IsForceDulicateSource(const char* id);
+    bool            IsForceDuplicateSource(const char* id);
 
 	const char*			GetNameSoopVodSourceFromId(const char* id);
 	int					CheckAddSoopVodSource(const char* id);

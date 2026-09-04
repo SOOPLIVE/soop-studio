@@ -1714,8 +1714,8 @@ void OBSPropertiesView::AddProperty(obs_property_t* property, QFormLayout* layou
 				break;
 
 				// freecshot plus prop
-			case OBS_PROPERTY_IMAGE_BUTTON_GROUP:
-				AddImageButtonGroup(property, layout, label);
+			case OBS_PROPERTY_BUTTON_GROUP:
+				AddButtonGroup(property, layout, label);
 				break;
 		}
 	} else
@@ -2131,11 +2131,11 @@ void WidgetInfo::ButtonClicked()
 	}
 }
 
-void WidgetInfo::ImageButtonGroupItemClicked()
+void WidgetInfo::ButtonGroupItemClicked()
 {
 	OBSObject strongObj = view->GetOBSObject();
 	void* obj = strongObj ? strongObj.Get() : view->rawObj;
-	if(fs_property_image_button_group_item_clicked(property, obj)) {
+	if (fs_property_button_group_item_clicked(property, obj)) {
 		QMetaObject::invokeMethod(view, "RefreshProperties", Qt::QueuedConnection);
 	}
 }
@@ -2199,9 +2199,18 @@ void WidgetInfo::ControlChanged()
 			GroupChanged(setting);
 			break;
 
-		case OBS_PROPERTY_IMAGE_BUTTON_GROUP_ITEM:
-			ImageButtonGroupItemClicked();
+		case OBS_PROPERTY_BUTTON_GROUP_ITEM:
+		{
+			ButtonGroupItemClicked();
+
+			bool exclusive =
+				fs_property_button_group_item_exclusive(property);
+
+			if (!exclusive)
+				return;
+
 			break;
+		}
 
 		case OBS_PROPERTY_COLOR_ALPHA:
 			if(!ColorAlphaChanged(setting))
@@ -2802,7 +2811,9 @@ QWidget* OBSPropertiesView::addEncorderBitrateList(obs_property_t* prop)
 	return combo;
 }
 
-void OBSPropertiesView::AddImageButtonGroupItem(obs_property_t* prop, QGridLayout* layout, QButtonGroup* buttonGroup, int r, int c, bool checked)
+void OBSPropertiesView::AddButtonGroupItem(obs_property_t* prop, QGridLayout* layout,
+										QButtonGroup* buttonGroup, int r, int c,
+										bool exclusive, bool checked) 
 {
 	static const char* temp_qss = R"(QPushButton {
 										background-color:#36383E;
@@ -2819,18 +2830,34 @@ void OBSPropertiesView::AddImageButtonGroupItem(obs_property_t* prop, QGridLayou
 	const char* name = obs_property_name(prop);
 	const char* desc = obs_property_description(prop);
 
-	const char* image_path = fs_property_image_button_group_item_path(prop);
-	int width = fs_property_image_button_group_item_width(prop);
-	int height = fs_property_image_button_group_item_height(prop);
+	const char* image_path = fs_property_button_group_item_path(prop);
+	int width = fs_property_button_group_item_width(prop);
+	int height = fs_property_button_group_item_height(prop);
 
 	QPushButton* button = new QPushButton();
-	QIcon icon(image_path);
-	button->setCheckable(true);
-	button->setIcon(icon);
-	button->setIconSize(QSize(width-4, height-4));
-	button->setFixedSize(width, height);
-	button->setStyleSheet(temp_qss);
-	button->setChecked(checked);
+	button->setFixedHeight(38);
+
+	if (0 != strcmp("", image_path)) {
+		QIcon icon(image_path);
+		button->setIcon(icon);
+		button->setIconSize(QSize(width - 4, height - 4));
+	}
+	else {
+		button->setText(desc);
+	}
+
+	if (exclusive) {
+		button->setStyleSheet(temp_qss);
+		button->setCheckable(true);
+		button->setChecked(checked);
+	}
+
+	if (width != 0 || height != 0) {
+		button->setFixedSize(width, height);
+	}
+	else {
+		button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	}
 
 	buttonGroup->addButton(button);
 
@@ -2841,7 +2868,7 @@ void OBSPropertiesView::AddImageButtonGroupItem(obs_property_t* prop, QGridLayou
 	children.emplace_back(info);
 }
 
-void OBSPropertiesView::AddImageButtonGroup(obs_property_t* prop, QFormLayout* layout, QLabel*& label)
+void OBSPropertiesView::AddButtonGroup(obs_property_t* prop, QFormLayout* layout, QLabel*& label)
 {
 	label = new QLabel(obs_property_description(prop));
 
@@ -2857,13 +2884,14 @@ void OBSPropertiesView::AddImageButtonGroup(obs_property_t* prop, QFormLayout* l
 	QGridLayout* gridLayout = new QGridLayout(gridWidget);
 	gridLayout->setContentsMargins(0, 0, 0, 0);
 
-	int colums = fs_property_image_button_group_columns(prop);
-	if(colums <= 0)
-		colums = 1;
+	int columns = fs_property_button_group_columns(prop);
+	if (columns <= 0)
+		columns = 1;
 
+	bool isExclusive = fs_property_button_group_exclusive(prop);
 	gridLayout->setHorizontalSpacing(10);
 
-	obs_properties_t* content = fs_property_image_button_group_content(prop);
+	obs_properties_t* content = fs_property_button_group_content(prop); 
 	obs_property_t* el = obs_properties_first(content);
 
 	QButtonGroup* buttonGroup = new QButtonGroup(container);
@@ -2871,17 +2899,18 @@ void OBSPropertiesView::AddImageButtonGroup(obs_property_t* prop, QFormLayout* l
 
 	int idx = 0;
 	while(el != nullptr) {
-		const int r = idx / colums;
-		const int c = idx % colums;
+		const int r = idx / columns;
+		const int c = idx % columns;
 		bool checked = (val == idx);
 
-		AddImageButtonGroupItem(el, gridLayout, buttonGroup, r, c, checked);
+		AddButtonGroupItem(el, gridLayout, buttonGroup, r, c, isExclusive, checked); 
 		obs_property_next(&el);
 		idx++;
 	}
 
 	outer->addWidget(gridWidget);
-	outer->addStretch(1);
+	for (int i = 0; i < columns; ++i)
+		gridLayout->setColumnStretch(i, 1);
 
 	layout->addRow(label, container);
 
@@ -3060,6 +3089,7 @@ void OBSPropertiesView::setWindowAreaCaptureProps(bool showProp)
 }
 void OBSPropertiesView::setDshowInputProps(bool showProp)
 {
+	set_visible_prop("video_group", showProp);
 	set_visible_prop("activate", showProp);
 	set_visible_prop("video_config", showProp);
 	set_visible_prop("xbar_config", showProp);

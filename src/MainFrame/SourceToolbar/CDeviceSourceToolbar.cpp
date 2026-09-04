@@ -51,13 +51,11 @@ void AFQDeviceSourceToolbar::_qslotVideoConfigClicked()
 		return;
 	}
 
-	if(!props)
-		props = properties_t(obs_source_properties(source), obs_properties_destroy);
-
-	obs_property_t* prop = obs_properties_get(props.get(), "video_config");
-	obs_property_button_clicked(prop, source.Get());
+	calldata_t cd = {};
+	proc_handler_t* ph = obs_source_get_proc_handler(source);
+	proc_handler_call(ph, "video_config", &cd);
+	calldata_free(&cd);
 }
-
 
 void AFQDeviceSourceToolbar::_qslotVideoDeviceActivateClicked()
 {

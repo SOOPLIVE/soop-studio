@@ -14,6 +14,9 @@
 #endif
 #include <regex>
 
+#include <initguid.h>
+#include <uuids.h>
+
 using namespace std;
 using namespace json11;
 
@@ -283,6 +286,23 @@ auto alpha255_to_trans_percent = [](int a) -> int {
 	return 100 - opacity;
 };
 
+static std::string EncodeDShowIdPart(const std::string& value)
+{
+	std::string encoded;
+	encoded.reserve(value.size());
+
+	for (char ch : value) {
+		if (ch == '#')
+			encoded += "#22";
+		else if (ch == ':')
+			encoded += "#3A";
+		else
+			encoded += ch;
+	}
+
+	return encoded;
+}
+
 static bool parse_source(Json::object& out, const Json& in, void* parent, std::string& uuid)
 {
 	bool result = false;
@@ -343,36 +363,91 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 		if (importer == nullptr)
 			break;
 
-		std::string device_id = in["DEVICE"]["VIDEO_FRIENDLY_NAME"].string_value() + ":" + in["DEVICE"]["VIDEO_DEVICE_PATH"].string_value();
-		result = importer->setDeviceUUID(device_id);
-		uuid = importer->getDeviceUUID(device_id);
-		if (result == false)
-		{
-			result = true;
-			break;
-		}
+		std::string videoName =
+			in["DEVICE"]["VIDEO_FRIENDLY_NAME"].string_value();
+		std::string videoPath =
+			in["DEVICE"]["VIDEO_DEVICE_PATH"].string_value();
+
+		std::string device_id =
+			EncodeDShowIdPart(videoName) + ":" +
+			EncodeDShowIdPart(videoPath);
 			
 		out["name"] = in["NAME"].string_value();
-		out["uuid"] = uuid;
 		out["id"] = "dshow_input";
 
 		settings["video_device_id"] = device_id; // name + ":" + ID
+		settings["last_video_device_id"] = device_id;
 
 		int width = in["DEVICE"]["WIDTH"].int_value();
 		int height = in["DEVICE"]["HEIGHT"].int_value(); 
 		std::string resolution = std::to_string(width) + "x" + std::to_string(height);
 		settings["resolution"] = resolution;
+		settings["last_resolution"] = resolution;
 
-		settings["res_type"] = 1;
+		auto fps = in["DEVICE"]["FPS"].number_value();
+		if (fps > 0) {
+			int frame_intreval = static_cast<int>(static_cast<double>(10000000) / fps); // hns
+			settings["frame_interval"] = frame_intreval;
+		}
+
+		auto media_type = in["DEVICE"]["MEDIA_TYPE"].string_value();
+		std::wstring wstr(media_type.begin(), media_type.end());
+		GUID guid;
+		HRESULT hr = CLSIDFromString(wstr.c_str(), &guid);
+		if (SUCCEEDED(hr)) {
+			int format = 0; // VideoFormat::Any
+
+			if (IsEqualGUID(guid, MEDIASUBTYPE_ARGB32))
+				format = 100; // VideoFormat::ARGB
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_RGB32))
+				format = 101; // VideoFormat::XRGB
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_RGB24))
+				format = 102; // VideoFormat::RGB24
+			else if (IsEqualGUID(guid, { 0x30323449, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71} })) // MEDIASUBTYPE_I420
+				format = 200; // VideoFormat::I420
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_NV12))
+				format = 201; // VideoFormat::NV12
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_YV12))
+				format = 202; // VideoFormat::YV12
+			else if (IsEqualGUID(guid, { 0x30303859, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71} })) // MEDIASUBTYPE_Y800
+				format = 203; // VideoFormat::Y800
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_P010))
+				format = 204; // VideoFormat::P010
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_YVYU))
+				format = 300; // VideoFormat::YVYU
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_YUY2))
+				format = 301; // VideoFormat::YUY2
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_UYVY))
+				format = 302; // VideoFormat::UYVY
+			else if (IsEqualGUID(guid, { 0x43594448, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71} })) // MEDIASUBTYPE_HDYC
+				format = 303; // VideoFormat::HDYC
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_MJPG))
+				format = 400; // VideoFormat::MJPEG
+			else if (IsEqualGUID(guid, MEDIASUBTYPE_H264))
+				format = 401; // VideoFormat::H264
+			else if (IsEqualGUID(guid, { 0x43564548, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71} })) // MEDIASUBTYPE_HEVC
+				format = 402; // VideoFormat::HEVC
+
+			settings["video_format"] = format;
+		}
 
 		device_id = in["DEVICE"]["AUDIO_CAPTURE_FRIENDLY_NAME"].string_value();
 		if (device_id.compare("N") != 0)
 		{
 			settings["use_custom_audio_device"] = true;
-			settings["audio_device_id"] = device_id + ":";
+			settings["audio_device_id"] = EncodeDShowIdPart(device_id) + ":";
 		}
+		settings["res_type"] = 1;
 
 		out["settings"] = settings;
+
+		auto audio_render_display_name = in["DEVICE"]["AUDIO_RENDER_DISPLAY_NAME"].string_value();
+		int monitoring_type = 0;
+		if (!audio_render_display_name.compare("D"))
+			monitoring_type = 1;
+
+		out["monitoring_type"] = monitoring_type;
+
 		result = true;
 	}
 	break;
@@ -947,26 +1022,20 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 				if (dev.is_object()) {
 					const std::string friendly = dev["VIDEO_FRIENDLY_NAME"].string_value();
 					const std::string path = dev["VIDEO_DEVICE_PATH"].string_value();
-					
+
 					auto importer = static_cast<FreecShotImporter*>(parent);
 					if (importer == nullptr)
 						break;
 
-					std::string device_id = friendly + ":" + path;
-					result = importer->setDeviceUUID(device_id);
-					uuid = importer->getDeviceUUID(device_id);
-					if (result == false)
-					{
-						result = true;
-						break;
-					}
+					std::string device_id =
+						EncodeDShowIdPart(friendly) + ":" +
+						EncodeDShowIdPart(path);
 
 					out["name"] = in["NAME"].string_value();
-					out["uuid"] = uuid;
 					out["id"] = "dshow_input";
 
 					srcSettings["video_device_id"] = device_id;
-					
+					srcSettings["last_video_device_id"] = device_id;
 
 					const int w = dev["WIDTH"].int_value();
 					const int h = dev["HEIGHT"].int_value();
@@ -976,14 +1045,67 @@ static bool parse_source(Json::object& out, const Json& in, void* parent, std::s
 						srcSettings["last_resolution"] = res;
 					}
 
-					srcSettings["res_type"] = 1;
+					auto fps = dev["FPS"].number_value();
+					if (fps > 0) {
+						int frame_intreval = static_cast<int>(static_cast<double>(10000000) / fps); // hns
+						srcSettings["frame_interval"] = frame_intreval;
+					}
 
+					auto media_type = dev["MEDIA_TYPE"].string_value();
+					std::wstring wstr(media_type.begin(), media_type.end());
+					GUID guid;
+					HRESULT hr = CLSIDFromString(wstr.c_str(), &guid);
+					if (SUCCEEDED(hr)) {
+						int format = 0; // VideoFormat::Any
+
+						if (IsEqualGUID(guid, MEDIASUBTYPE_ARGB32))
+							format = 100; // VideoFormat::ARGB
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_RGB32))
+							format = 101; // VideoFormat::XRGB
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_RGB24))
+							format = 102; // VideoFormat::RGB24
+						else if (IsEqualGUID(guid, { 0x30323449, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71} })) // MEDIASUBTYPE_I420
+							format = 200; // VideoFormat::I420
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_NV12))
+							format = 201; // VideoFormat::NV12
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_YV12))
+							format = 202; // VideoFormat::YV12
+						else if (IsEqualGUID(guid, { 0x30303859, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71} })) // MEDIASUBTYPE_Y800
+							format = 203; // VideoFormat::Y800
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_P010))
+							format = 204; // VideoFormat::P010
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_YVYU))
+							format = 300; // VideoFormat::YVYU
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_YUY2))
+							format = 301; // VideoFormat::YUY2
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_UYVY))
+							format = 302; // VideoFormat::UYVY
+						else if (IsEqualGUID(guid, { 0x43594448, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71} })) // MEDIASUBTYPE_HDYC
+							format = 303; // VideoFormat::HDYC
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_MJPG))
+							format = 400; // VideoFormat::MJPEG
+						else if (IsEqualGUID(guid, MEDIASUBTYPE_H264))
+							format = 401; // VideoFormat::H264
+						else if (IsEqualGUID(guid, { 0x43564548, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71} })) // MEDIASUBTYPE_HEVC
+							format = 402; // VideoFormat::HEVC
+
+						srcSettings["video_format"] = format;
+					}
 					device_id = dev["AUDIO_CAPTURE_FRIENDLY_NAME"].string_value();
 					if (device_id.compare("N") != 0)
 					{
 						srcSettings["use_custom_audio_device"] = true;
-						srcSettings["audio_device_id"] = device_id + ":";
+						srcSettings["audio_device_id"] = EncodeDShowIdPart(device_id) + ":";
 					}
+
+					srcSettings["res_type"] = 1;
+
+					auto audio_render_display_name = dev["AUDIO_RENDER_DISPLAY_NAME"].string_value();
+					int monitoring_type = 0;
+					if (!audio_render_display_name.compare("D"))
+						monitoring_type = 1;
+
+					out["monitoring_type"] = monitoring_type;
 				}
 			}
 
@@ -1294,18 +1416,6 @@ OBSImporterFiles FreecShotImporter::FindFiles()
 	res.push_back(romaingpath);
 #endif
 	return res;
-}
-
-bool FreecShotImporter::setDeviceUUID(std::string id) {
-	std::string uuid;
-	auto it = deviceMap.find(id);
-	if (it == deviceMap.end())
-	{
-		uuid = os_generate_uuid();
-		deviceMap[id] = uuid;
-	}
-
-	return uuid.length() != 0 ? true : false;
 }
 
 bool FreecShotImporter::setBrowserUUID(int browser_key) {
